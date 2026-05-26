@@ -1,8 +1,10 @@
 import { sql } from "drizzle-orm";
 import {
   boolean,
+  check,
   geometry,
   index,
+  integer,
   jsonb,
   pgEnum,
   pgTable,
@@ -20,6 +22,13 @@ export const submissionStatus = pgEnum("status", [
   "ai_review",
   "human_review",
   "published",
+]);
+
+export const editionStatus = pgEnum("edition_status", [
+  "planning", // editors curating, contents open
+  "scheduled", // contents locked, awaiting publish_at
+  "published", // live to readers
+  "archived", // historical issue (still readable)
 ]);
 
 // Phase-1 launch languages. Adding a value later is a single
@@ -129,38 +138,102 @@ export interface FlaggedEntity {
 
 // ─── Tables ─────────────────────────────────────────────────────────────────
 
-export const submissions = pgTable("submissions", {
-  id: uuid("id").primaryKey().defaultRandom(),
-  authorId: text("author_id").notNull(),
-  title: text("title"),
-  abstract: text("abstract"),
-  sourceLanguage: supportedLanguage("source_language").notNull().default("en"),
-  status: submissionStatus("status").notNull().default("draft"),
-
-  // Moderation hints surfaced by the author at submission time.
-  contentFlags: jsonb("content_flags")
-    .$type<ContentFlags>()
-    .notNull()
-    .default(
-      sql`'{"realPlaces":[],"realPersons":[],"realOrgs":[],"conflictZone":false}'::jsonb`,
+// An issue of the magazine. New Yorker model: every published piece belongs
+// to one numbered issue with a cover, an editor's letter, and a release date.
+// Pieces with `editionId = NULL` are "evergreen" / long-tail content not
+// bound to a particular issue.
+export const editions = pgTable(
+  "editions",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    number: serial("number").notNull(),
+    slug: text("slug").notNull(),
+    title: text("title").notNull(),
+    theme: text("theme"),
+    // Nullable so editors can draft an edition before these are ready, but
+    // the CHECK constraint below forbids transitioning past 'planning'
+    // until all three are filled in.
+    editorsLetter: text("editors_letter"),
+    coverImageUrl: text("cover_image_url"),
+    publishAt: timestamp("publish_at", { withTimezone: true }),
+    status: editionStatus("status").notNull().default("planning"),
+    createdAt: timestamp("created_at", { withTimezone: true })
+      .notNull()
+      .default(sql`now()`),
+  },
+  (t) => ({
+    slugIdx: uniqueIndex("editions_slug_idx").on(t.slug),
+    numberIdx: uniqueIndex("editions_number_idx").on(t.number),
+    publishAtIdx: index("editions_publish_at_idx").on(t.publishAt),
+    statusIdx: index("editions_status_idx").on(t.status),
+    publishReadyCheck: check(
+      "editions_publish_ready",
+      sql`${t.status} IN ('planning', 'archived')
+        OR (
+          ${t.editorsLetter} IS NOT NULL
+          AND ${t.coverImageUrl} IS NOT NULL
+          AND ${t.publishAt} IS NOT NULL
+        )`,
     ),
-  // Author's claimed relationship to the places in the piece
-  // (e.g. "born:Zhengzhou", "lived:Tokyo:2015-2019", "research:Seoul").
-  // Used by the "Zhengren-mai-lv three-condition" review heuristic.
-  authorAffiliations: text("author_affiliations")
-    .array()
-    .notNull()
-    .default(sql`ARRAY[]::text[]`),
-  satireDisclosure: boolean("satire_disclosure").notNull().default(false),
-  sensitivityWarnings: text("sensitivity_warnings")
-    .array()
-    .notNull()
-    .default(sql`ARRAY[]::text[]`),
+  }),
+);
 
-  createdAt: timestamp("created_at", { withTimezone: true })
-    .notNull()
-    .default(sql`now()`),
-});
+export const submissions = pgTable(
+  "submissions",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    authorId: text("author_id").notNull(),
+    title: text("title"),
+    abstract: text("abstract"),
+    sourceLanguage: supportedLanguage("source_language")
+      .notNull()
+      .default("en"),
+    status: submissionStatus("status").notNull().default("draft"),
+
+    // Issue assignment. NULL = evergreen / not bound to an issue.
+    editionId: uuid("edition_id").references(() => editions.id, {
+      onDelete: "set null",
+    }),
+    positionInEdition: integer("position_in_edition"),
+
+    // Moderation hints surfaced by the author at submission time.
+    contentFlags: jsonb("content_flags")
+      .$type<ContentFlags>()
+      .notNull()
+      .default(
+        sql`'{"realPlaces":[],"realPersons":[],"realOrgs":[],"conflictZone":false}'::jsonb`,
+      ),
+    // Author's claimed relationship to the places in the piece
+    // (e.g. "born:Zhengzhou", "lived:Tokyo:2015-2019", "research:Seoul").
+    // Used by the "Zhengren-mai-lv three-condition" review heuristic.
+    authorAffiliations: text("author_affiliations")
+      .array()
+      .notNull()
+      .default(sql`ARRAY[]::text[]`),
+    satireDisclosure: boolean("satire_disclosure").notNull().default(false),
+    sensitivityWarnings: text("sensitivity_warnings")
+      .array()
+      .notNull()
+      .default(sql`ARRAY[]::text[]`),
+
+    createdAt: timestamp("created_at", { withTimezone: true })
+      .notNull()
+      .default(sql`now()`),
+  },
+  (t) => ({
+    editionIdx: index("submissions_edition_id_idx").on(t.editionId),
+    // Position only makes sense when the submission is actually in an issue.
+    positionRequiresEdition: check(
+      "submissions_position_requires_edition",
+      sql`${t.editionId} IS NULL OR ${t.positionInEdition} IS NOT NULL`,
+    ),
+    // Within an issue, positions must be unique. (Partial unique index so
+    // evergreen submissions with NULL/NULL aren't constrained.)
+    uniqPositionInEdition: uniqueIndex("submissions_edition_position_idx")
+      .on(t.editionId, t.positionInEdition)
+      .where(sql`${t.editionId} IS NOT NULL`),
+  }),
+);
 
 export const narrativeBlocks = pgTable(
   "narrative_blocks",
@@ -284,6 +357,8 @@ export const reports = pgTable(
 
 // ─── Inferred types ─────────────────────────────────────────────────────────
 
+export type Edition = typeof editions.$inferSelect;
+export type NewEdition = typeof editions.$inferInsert;
 export type Submission = typeof submissions.$inferSelect;
 export type NewSubmission = typeof submissions.$inferInsert;
 export type NarrativeBlock = typeof narrativeBlocks.$inferSelect;
@@ -296,6 +371,7 @@ export type Report = typeof reports.$inferSelect;
 export type NewReport = typeof reports.$inferInsert;
 
 export type SubmissionStatus = (typeof submissionStatus.enumValues)[number];
+export type EditionStatus = (typeof editionStatus.enumValues)[number];
 export type SupportedLanguage = (typeof supportedLanguage.enumValues)[number];
 export type TranslationMethod = (typeof translationMethod.enumValues)[number];
 export type TranslationStatus = (typeof translationStatus.enumValues)[number];
