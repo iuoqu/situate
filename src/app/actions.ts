@@ -677,6 +677,169 @@ export async function getPrincipleVersion(
   return row ?? null;
 }
 
-// Note: the pure-function `renderTranslation` helper lives at
-// `@/lib/rendering` so it can be imported from client components without
-// pulling the server-action bundle. Re-import from there.
+// ─── Single-submission read for permalink pages ─────────────────────────────
+
+export interface SubmissionDetail {
+  submission: Submission;
+  edition: Edition | null;
+  blocks: ViewportBlock[];
+}
+
+/**
+ * Fetch one submission's full story, with its blocks resolved to the best
+ * available translation for the reader. Used by `/stories/[id]` and the
+ * back-end of `/editions/[slug]`. Returns null if the submission doesn't
+ * exist or isn't visible at the reader's access level (so 404 logic is
+ * handled in the page).
+ */
+export async function getSubmissionForReader(
+  submissionId: string,
+  options: {
+    readerLanguage: SupportedLanguage;
+    accessLevel?: ReaderAccessLevel;
+  },
+): Promise<SubmissionDetail | null> {
+  const { readerLanguage, accessLevel = "free" } = options;
+
+  const [row] = await db
+    .select()
+    .from(submissions)
+    .where(eq(submissions.id, submissionId))
+    .limit(1);
+  if (!row) return null;
+  if (row.status !== "published") return null;
+
+  let edition: Edition | null = null;
+  if (row.editionId) {
+    const [e] = await db
+      .select()
+      .from(editions)
+      .where(eq(editions.id, row.editionId))
+      .limit(1);
+    if (!e || e.status !== "published") return null;
+    edition = e;
+  }
+
+  const priority = sql`
+    CASE
+      WHEN ${blockTranslations.language} = ${readerLanguage}
+           AND ${blockTranslations.method} = 'human'          THEN 1
+      WHEN ${blockTranslations.language} = ${readerLanguage}
+           AND ${blockTranslations.method} = 'ai_post_edited' THEN 2
+      WHEN ${blockTranslations.language} = ${readerLanguage}
+           AND ${blockTranslations.method} = 'ai'             THEN 3
+      WHEN ${blockTranslations.method} = 'original'           THEN 4
+      ELSE 5
+    END
+  `;
+  const accessFilter = sql`
+    CASE ${blockTranslations.accessTier}
+      WHEN 'free' THEN 0 WHEN 'metered' THEN 1 WHEN 'premium' THEN 2
+    END <= ${ACCESS_LEVEL_ORDER[accessLevel]}
+  `;
+
+  const blockRows = await db.execute<{
+    block_id: string;
+    sequence_number: number;
+    event_date: Date | null;
+    longitude: number;
+    latitude: number;
+    language: SupportedLanguage;
+    method: TranslationMethod;
+    content: string;
+    annotations: CulturalAnnotation[] | null;
+    access_tier: TranslationAccessTier;
+  }>(sql`
+    SELECT DISTINCT ON (${narrativeBlocks.id})
+      ${narrativeBlocks.id}             AS block_id,
+      ${narrativeBlocks.sequenceNumber} AS sequence_number,
+      ${narrativeBlocks.eventDate}      AS event_date,
+      ST_X(${narrativeBlocks.location}) AS longitude,
+      ST_Y(${narrativeBlocks.location}) AS latitude,
+      ${blockTranslations.language}     AS language,
+      ${blockTranslations.method}       AS method,
+      ${blockTranslations.content}      AS content,
+      ${blockTranslations.annotations}  AS annotations,
+      ${blockTranslations.accessTier}   AS access_tier
+    FROM ${narrativeBlocks}
+    INNER JOIN ${blockTranslations}
+      ON ${blockTranslations.blockId} = ${narrativeBlocks.id}
+    WHERE
+      ${narrativeBlocks.submissionId} = ${submissionId}
+      AND ${blockTranslations.status} = 'published'
+      AND (
+        ${blockTranslations.language} = ${readerLanguage}
+        OR ${blockTranslations.method} = 'original'
+      )
+      AND ${accessFilter}
+    ORDER BY
+      ${narrativeBlocks.id},
+      ${priority}
+  `);
+
+  // Re-sort the rows we got by the block's sequence_number — DISTINCT ON gave
+  // us one row per block but in block-id order, not narrative order.
+  const blocks: ViewportBlock[] = blockRows
+    .map((r) => ({
+      blockId: r.block_id,
+      submissionId,
+      editionId: row.editionId,
+      sequenceNumber: r.sequence_number,
+      eventDate: r.event_date,
+      longitude: Number(r.longitude),
+      latitude: Number(r.latitude),
+      language: r.language,
+      method: r.method,
+      content: r.content,
+      annotations: r.annotations ?? [],
+      accessTier: r.access_tier,
+    }))
+    .sort((a, b) => a.sequenceNumber - b.sequenceNumber);
+
+  return { submission: row, edition, blocks };
+}
+
+// ─── Edition read (for /editions/[slug]) ────────────────────────────────────
+
+export interface EditionWithPieces {
+  edition: Edition;
+  pieces: { submission: Submission; firstBlock: ViewportBlock | null }[];
+}
+
+export async function getEditionBySlug(
+  slug: string,
+  options: {
+    readerLanguage: SupportedLanguage;
+    accessLevel?: ReaderAccessLevel;
+  },
+): Promise<EditionWithPieces | null> {
+  const [edition] = await db
+    .select()
+    .from(editions)
+    .where(eq(editions.slug, slug))
+    .limit(1);
+  if (!edition || edition.status !== "published") return null;
+
+  const pieceSubmissions = await db
+    .select()
+    .from(submissions)
+    .where(
+      and(
+        eq(submissions.editionId, edition.id),
+        eq(submissions.status, "published"),
+      ),
+    )
+    .orderBy(submissions.positionInEdition);
+
+  const pieces = await Promise.all(
+    pieceSubmissions.map(async (s) => {
+      const detail = await getSubmissionForReader(s.id, options);
+      return {
+        submission: s,
+        firstBlock: detail?.blocks[0] ?? null,
+      };
+    }),
+  );
+
+  return { edition, pieces };
+}

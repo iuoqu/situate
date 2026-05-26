@@ -1,6 +1,7 @@
 "use client";
 
 import mapboxgl from "mapbox-gl";
+import Link from "next/link";
 import { useCallback, useEffect, useRef, useState } from "react";
 
 import {
@@ -354,6 +355,23 @@ export function ExploreClient() {
               <div>evergreen</div>
             )}
           </div>
+          <Link
+            href={`/stories/${selected.submissionId}?lang=${language}`}
+            style={{
+              display: "inline-block",
+              marginTop: 24,
+              padding: "9px 14px",
+              background: "#1a1a1a",
+              color: "white",
+              textDecoration: "none",
+              borderRadius: 3,
+              fontFamily: "system-ui",
+              fontSize: 12,
+              letterSpacing: 0.4,
+            }}
+          >
+            Read full piece →
+          </Link>
         </aside>
       )}
     </div>

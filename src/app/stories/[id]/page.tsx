@@ -1,0 +1,247 @@
+import Link from "next/link";
+import { notFound } from "next/navigation";
+
+import { getSubmissionForReader } from "@/app/actions";
+import type { SupportedLanguage } from "@/db/schema";
+import { renderTranslation } from "@/lib/rendering";
+
+export const dynamic = "force-dynamic";
+
+const METHOD_LABEL: Record<string, string> = {
+  original: "Original",
+  ai: "AI translation",
+  ai_post_edited: "AI translation, edited",
+  human: "Human translation",
+};
+
+const TIER_COLOR: Record<string, string> = {
+  free: "#16a34a",
+  metered: "#ca8a04",
+  premium: "#9333ea",
+};
+
+function pickLanguage(raw: string | undefined): SupportedLanguage {
+  const allowed: SupportedLanguage[] = ["en", "zh_CN", "zh_TW", "ja", "ko"];
+  return allowed.includes(raw as SupportedLanguage)
+    ? (raw as SupportedLanguage)
+    : "en";
+}
+
+type Params = Promise<{ id: string }>;
+type Search = Promise<{ lang?: string }>;
+
+export default async function StoryPage({
+  params,
+  searchParams,
+}: {
+  params: Params;
+  searchParams: Search;
+}) {
+  const { id } = await params;
+  const { lang } = await searchParams;
+  const readerLanguage = pickLanguage(lang);
+
+  // TODO: once auth lands, derive accessLevel from the reader's subscription.
+  const detail = await getSubmissionForReader(id, {
+    readerLanguage,
+    accessLevel: "free",
+  });
+  if (!detail) notFound();
+
+  const { submission, edition, blocks } = detail;
+
+  return (
+    <main
+      style={{
+        maxWidth: 720,
+        margin: "0 auto",
+        padding: "72px 28px 120px",
+        fontFamily: 'Georgia, "Times New Roman", serif',
+        color: "#1a1a1a",
+        lineHeight: 1.7,
+      }}
+    >
+      <Link
+        href="/explore"
+        style={{
+          fontFamily: "system-ui, sans-serif",
+          fontSize: 11,
+          textTransform: "uppercase",
+          letterSpacing: 2,
+          color: "#999",
+          textDecoration: "none",
+        }}
+      >
+        ← back to the map
+      </Link>
+
+      {edition ? (
+        <div style={{ marginTop: 28 }}>
+          <Link
+            href={`/editions/${edition.slug}`}
+            style={{
+              fontFamily: "system-ui, sans-serif",
+              fontSize: 11,
+              textTransform: "uppercase",
+              letterSpacing: 2,
+              color: "#9b8a6b",
+              textDecoration: "none",
+            }}
+          >
+            Issue #{edition.number} · {edition.title}
+          </Link>
+        </div>
+      ) : null}
+
+      <h1
+        style={{
+          fontWeight: 400,
+          fontSize: 38,
+          letterSpacing: -0.5,
+          marginTop: edition ? 8 : 32,
+          marginBottom: 10,
+        }}
+      >
+        {submission.title ?? "(untitled)"}
+      </h1>
+
+      {submission.abstract ? (
+        <p
+          style={{
+            fontSize: 17,
+            color: "#555",
+            fontStyle: "italic",
+            marginTop: 0,
+            marginBottom: 18,
+          }}
+        >
+          {submission.abstract}
+        </p>
+      ) : null}
+
+      <div
+        style={{
+          fontFamily: "system-ui, sans-serif",
+          fontSize: 12,
+          color: "#888",
+          letterSpacing: 0.3,
+          marginTop: 8,
+        }}
+      >
+        by{" "}
+        <strong style={{ color: "#333", fontWeight: 600 }}>
+          {submission.authorId}
+        </strong>
+        {submission.authorAffiliations.length > 0 ? (
+          <> · {submission.authorAffiliations.join(", ")}</>
+        ) : null}
+        {" · "}source: {submission.sourceLanguage}
+      </div>
+
+      <hr
+        style={{
+          border: "none",
+          borderTop: "1px solid #e8e3d8",
+          margin: "40px 0",
+        }}
+      />
+
+      {blocks.length === 0 ? (
+        <p style={{ color: "#888", fontStyle: "italic" }}>
+          This piece has no readable blocks at your access level. Try a higher
+          access tier, or come back when more translations are published.
+        </p>
+      ) : null}
+
+      {blocks.map((block, idx) => (
+        <article
+          key={block.blockId}
+          style={{
+            marginBottom: 56,
+            scrollMarginTop: 60,
+          }}
+          id={`block-${idx + 1}`}
+        >
+          <header style={{ marginBottom: 16 }}>
+            <div
+              style={{
+                fontFamily: "system-ui, sans-serif",
+                fontSize: 10,
+                textTransform: "uppercase",
+                letterSpacing: 1.8,
+                color: "#999",
+              }}
+            >
+              {String(idx + 1).padStart(2, "0")}
+              {block.eventDate ? (
+                <>
+                  {" · "}
+                  {new Date(block.eventDate).toLocaleString(undefined, {
+                    dateStyle: "long",
+                    timeStyle: "short",
+                  })}
+                </>
+              ) : null}
+              {" · "}
+              <span style={{ color: TIER_COLOR[block.accessTier] ?? "#999" }}>
+                {METHOD_LABEL[block.method] ?? block.method} ({block.language})
+              </span>
+            </div>
+            <div
+              style={{
+                fontFamily: "system-ui, sans-serif",
+                fontSize: 11,
+                color: "#bbb",
+                marginTop: 4,
+              }}
+            >
+              ({block.longitude.toFixed(4)}, {block.latitude.toFixed(4)})
+            </div>
+          </header>
+          <div style={{ fontSize: 19, whiteSpace: "pre-wrap" }}>
+            {renderTranslation(block.content, block.annotations)}
+          </div>
+        </article>
+      ))}
+
+      <hr
+        style={{
+          border: "none",
+          borderTop: "1px solid #e8e3d8",
+          margin: "60px 0 28px",
+        }}
+      />
+
+      <footer
+        style={{
+          fontFamily: "system-ui, sans-serif",
+          fontSize: 12,
+          color: "#999",
+          display: "flex",
+          justifyContent: "space-between",
+          gap: 16,
+          flexWrap: "wrap",
+        }}
+      >
+        <span>
+          Translation policy:{" "}
+          <Link
+            href="/about/constitution#P7"
+            style={{ color: "#666", textDecoration: "none" }}
+          >
+            P7
+          </Link>
+          {" · "}
+          AI disclosure:{" "}
+          <Link
+            href="/about/constitution#P8"
+            style={{ color: "#666", textDecoration: "none" }}
+          >
+            P8
+          </Link>
+        </span>
+        <span>Report this story (coming soon)</span>
+      </footer>
+    </main>
+  );
+}

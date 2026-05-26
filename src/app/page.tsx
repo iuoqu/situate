@@ -29,21 +29,37 @@ export default function HomePage() {
         World flash fiction, anchored to place. Each story lives at the
         coordinates where it could only have happened.
       </p>
-      <Link
-        href="/explore"
-        style={{
-          marginTop: 12,
-          padding: "10px 18px",
-          background: "#1a1a1a",
-          color: "white",
-          textDecoration: "none",
-          borderRadius: 4,
-          fontSize: 14,
-          letterSpacing: 0.5,
-        }}
-      >
-        Explore the map →
-      </Link>
+      <div style={{ display: "flex", gap: 12, marginTop: 12 }}>
+        <Link
+          href="/explore"
+          style={{
+            padding: "10px 18px",
+            background: "#1a1a1a",
+            color: "white",
+            textDecoration: "none",
+            borderRadius: 4,
+            fontSize: 14,
+            letterSpacing: 0.5,
+          }}
+        >
+          Explore the map →
+        </Link>
+        <Link
+          href="/editions/issue-1-after-midnight"
+          style={{
+            padding: "10px 18px",
+            background: "white",
+            color: "#1a1a1a",
+            textDecoration: "none",
+            borderRadius: 4,
+            fontSize: 14,
+            letterSpacing: 0.5,
+            border: "1px solid #ccc",
+          }}
+        >
+          Read Issue #1
+        </Link>
+      </div>
       <Link
         href="/about/constitution"
         style={{

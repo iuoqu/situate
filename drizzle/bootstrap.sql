@@ -221,13 +221,16 @@ INSERT INTO "block_translations" ("block_id", "language", "method", "status", "a
    'At two in the morning the Shibuya Crossing felt as empty as a theater everyone had forgotten. The driver killed the engine and waited for his last passenger.', '[]'::jsonb),
   ('44444444-0000-0000-0000-000000000001', 'ko', 'human', 'published', 'premium', 'translator_park_jihye',
    '새벽 두 시의 시부야 횡단보도는 모두가 잊어버린 극장처럼 텅 비어 있었다. 운전사는 엔진을 끄고 마지막 손님을 기다렸다.', '[]'::jsonb),
--- block 2 (Shinjuku): zh_CN original (free) + en AI (free) — annotated on the "明天" wordplay
+-- block 2 (Shinjuku): zh_CN original (free) + en AI (free) — annotated on the "明天" wordplay.
+-- Span positions are *per-language* character offsets pointing at the substring
+-- that will be substituted: 明天 sits at 14-16 in the zh_CN string, "tomorrow"
+-- (quotes included) at 63-73 in the English string.
   ('44444444-0000-0000-0000-000000000002', 'zh_CN', 'original', 'published', 'free', NULL,
    '乘客上车时只说一句:请送我去明天。司机看了他一眼,默默打了表。',
-   '[{"spanStart":22,"spanEnd":32,"kind":"wordplay","source":"明天","defaultRendering":"literal","renderings":{"literal":"\"tomorrow\"","transposed":"the next life","explained":"\"tomorrow\" (a colloquial euphemism for the next life)"},"note":"The passenger''s destination is a Chinese euphemism; literal rendering preserves the ambiguity, transposed clarifies."}]'::jsonb),
+   '[{"spanStart":14,"spanEnd":16,"kind":"wordplay","source":"明天","defaultRendering":"literal","renderings":{"literal":"明天","transposed":"另一个明天","explained":"明天(此处暗指来世)"},"note":"乘客的目的地是一种委婉说法;直译保留歧义,本土化将之明示。"}]'::jsonb),
   ('44444444-0000-0000-0000-000000000002', 'en', 'ai', 'published', 'free', NULL,
    'When the passenger got in he said only this: please take me to "tomorrow". The driver glanced at him and quietly started the meter.',
-   '[{"spanStart":22,"spanEnd":32,"kind":"wordplay","source":"明天","defaultRendering":"literal","renderings":{"literal":"\"tomorrow\"","transposed":"the next life","explained":"\"tomorrow\" (a colloquial euphemism for the next life)"},"note":"The passenger''s destination is a Chinese euphemism; literal rendering preserves the ambiguity, transposed clarifies."}]'::jsonb)
+   $$[{"spanStart":63,"spanEnd":73,"kind":"wordplay","source":"明天","defaultRendering":"literal","renderings":{"literal":"\"tomorrow\"","transposed":"the next life","explained":"\"tomorrow\" (a colloquial Chinese euphemism for the next life)"},"note":"The passenger's destination is a Chinese euphemism; literal rendering preserves the ambiguity, transposed clarifies."}]$$::jsonb)
 ON CONFLICT ("block_id", "language", "method") DO NOTHING;
 
 -- ─── 9. Verification: viewport probe (Tokyo bbox, free 'en' reader) ─────────
