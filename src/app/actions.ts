@@ -880,6 +880,11 @@ export interface SubmitFormPayload {
   relationship: AuthorRelationship;
   relationshipDuration: string | null;
   authorAffiliations: string[];
+  // P4 confidentiality carveout (constitution v0.2). When true, the
+  // affinity disclosure is held in confidence and a redacted note is
+  // published in its place.
+  affinityConfidential: boolean;
+  affinityConfidentialReason: string | null;
 
   // F3
   storyType: StoryType;
@@ -958,6 +963,8 @@ export async function submitFromForm(
         storyType: input.storyType,
         authorRelationship: input.relationship,
         relationshipDuration: input.relationshipDuration,
+        affinityConfidential: input.affinityConfidential,
+        affinityConfidentialReason: input.affinityConfidentialReason,
         consentStatus: input.hasRealPeople ? input.consentStatus : "not_applicable",
         consentExplanation: input.consentExplanation,
         aiUsageLabel: input.aiUsageLabel,

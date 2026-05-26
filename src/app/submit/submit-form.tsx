@@ -111,6 +111,8 @@ export function SubmitForm({
   // F2
   const [relationship, setRelationship] = useState<AuthorRelationship>("lived_there");
   const [relationshipDuration, setRelationshipDuration] = useState("");
+  const [affinityConfidential, setAffinityConfidential] = useState(false);
+  const [affinityConfidentialReason, setAffinityConfidentialReason] = useState("");
 
   // F3
   const [storyType, setStoryType] = useState<StoryType>("fiction");
@@ -258,6 +260,10 @@ export function SubmitForm({
       authorAffiliations: relationshipDuration.trim()
         ? [`${relationship}:${relationshipDuration.trim()}`]
         : [relationship],
+      affinityConfidential,
+      affinityConfidentialReason: affinityConfidential
+        ? affinityConfidentialReason.trim() || null
+        : null,
       storyType,
       hasRealPeople: storyType === "based_on_reality" && hasRealPeople,
       consentStatus: storyType === "based_on_reality" && hasRealPeople
@@ -446,6 +452,28 @@ export function SubmitForm({
               />
             </Field>
           )}
+          <Field
+            hint="If disclosing your relationship to this place could endanger you — exile, dissident writing, ongoing safety concerns — tick the box and we will hold the affinity in confidence and publish a redacted note in its place. (Constitution v0.2 / P4)"
+          >
+            <label style={checkboxRowStyle}>
+              <input
+                type="checkbox"
+                checked={affinityConfidential}
+                onChange={(e) => setAffinityConfidential(e.target.checked)}
+              />
+              <span>I request confidentiality for safety reasons.</span>
+            </label>
+            {affinityConfidential && (
+              <input
+                value={affinityConfidentialReason}
+                onChange={(e) =>
+                  setAffinityConfidentialReason(e.target.value)
+                }
+                style={{ ...inputStyle, marginTop: 8 }}
+                placeholder="Brief reason (kept private to editors)"
+              />
+            )}
+          </Field>
         </Section>
 
         {/* ─── F3: story type ─── */}

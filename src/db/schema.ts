@@ -272,6 +272,13 @@ export const submissions = pgTable(
     // F2 — author's relationship to the place(s).
     authorRelationship: authorRelationship("author_relationship"),
     relationshipDuration: text("relationship_duration"),
+    // F2 — P4 confidentiality carveout. When affinityConfidential is true,
+    // we display a redacted note in place of the relationship/duration and
+    // hold the disclosure in confidence.
+    affinityConfidential: boolean("affinity_confidential")
+      .notNull()
+      .default(false),
+    affinityConfidentialReason: text("affinity_confidential_reason"),
     // F4 — real-person consent (only meaningful when storyType='based_on_reality').
     consentStatus: consentStatus("consent_status"),
     consentExplanation: text("consent_explanation"),

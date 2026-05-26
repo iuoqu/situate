@@ -32,6 +32,48 @@ const CHECKERS: Checker[] = [
 
 const HIGH_CONFIDENCE_THRESHOLD = 0.85;
 
+// ─── Per-principle routing overrides (constitution v0.2) ────────────────────
+//
+// The default routing rules (any high-confidence FAIL → AUTO_REJECT;
+// any UNCERTAIN or human_review_needed → HUMAN_REVIEW) work for most
+// principles, but v0.2 calls out a few special cases that must override
+// the default. These are the principles whose nature makes machine
+// auto-rejection inappropriate.
+type PrincipleRoutingPolicy = {
+  // If true, a FAIL on this principle never triggers AUTO_REJECT. The
+  // judgment is instead routed to a human editor.
+  neverAutoReject: boolean;
+  // If true, ANY judgment on this principle (including PASS) forces
+  // HUMAN_REVIEW. Used for P7 where gaze cannot be machine-judged.
+  alwaysHumanReview: boolean;
+};
+
+const PRINCIPLE_ROUTING: Record<string, PrincipleRoutingPolicy> = {
+  // P1 (Place as Inhabited Space) — v0.2 demotes machine-driven rejection.
+  // Stories with zero on-page humans can still inhabit a place
+  // (post-apocalyptic, nature-meditative); only a human can read the gaze.
+  P1: { neverAutoReject: true, alwaysHumanReview: false },
+
+  // P7 (The Gaze, Not the Topic) — pure literary judgment. AI can flag
+  // surface density of explicit content, but cannot judge gaze.
+  P7: { neverAutoReject: true, alwaysHumanReview: true },
+
+  // P10 (AI Disclosure) — v0.2 explicitly forbids auto-decline on
+  // statistical AI-detection alone. Classifiers carry documented bias
+  // against non-native English writing (Stanford, 2023) and minoritised
+  // registers. A human always reads before any decline is issued.
+  P10: { neverAutoReject: true, alwaysHumanReview: false },
+};
+
+function policyFor(principleCode: string): PrincipleRoutingPolicy {
+  return (
+    PRINCIPLE_ROUTING[principleCode] ?? {
+      neverAutoReject: false,
+      alwaysHumanReview: false,
+    }
+  );
+}
+
 export async function evaluateSubmission(
   submission: JudgmentSubmission,
 ): Promise<SubmissionReport> {
@@ -98,8 +140,26 @@ function decideRouting(judgments: PrincipleJudgment[]): {
     };
   }
 
+  // Per v0.2: principles in `alwaysHumanReview` (currently P7) take
+  // precedence over the AUTO_REJECT path. Any judgment on these
+  // principles — pass, fail, or uncertain — routes to a human editor.
+  const alwaysHuman = judgments.filter(
+    (j) => policyFor(j.principle).alwaysHumanReview,
+  );
+  if (alwaysHuman.length > 0) {
+    return {
+      decision: "HUMAN_REVIEW",
+      reason: `${alwaysHuman
+        .map((j) => j.principle)
+        .join(", ")} require human editorial judgment by policy`,
+    };
+  }
+
   const hardFails = judgments.filter(
-    (j) => j.status === "FAIL" && j.confidence >= HIGH_CONFIDENCE_THRESHOLD,
+    (j) =>
+      j.status === "FAIL" &&
+      j.confidence >= HIGH_CONFIDENCE_THRESHOLD &&
+      !policyFor(j.principle).neverAutoReject,
   );
   if (hardFails.length > 0) {
     return {
@@ -110,15 +170,23 @@ function decideRouting(judgments: PrincipleJudgment[]): {
     };
   }
 
+  // FAILs on principles in `neverAutoReject` (P1, P7, P10) are surfaced as
+  // human-review work rather than auto-rejection.
+  const policyProtectedFails = judgments.filter(
+    (j) => j.status === "FAIL" && policyFor(j.principle).neverAutoReject,
+  );
+
   const needsHuman = judgments.filter(
     (j) => j.status === "UNCERTAIN" || j.human_review_needed,
   );
-  if (needsHuman.length > 0) {
+  if (needsHuman.length > 0 || policyProtectedFails.length > 0) {
+    const names = [
+      ...needsHuman.map((j) => j.principle),
+      ...policyProtectedFails.map((j) => `${j.principle} (policy-protected FAIL)`),
+    ];
     return {
       decision: "HUMAN_REVIEW",
-      reason: `Human review required on ${needsHuman
-        .map((j) => j.principle)
-        .join(", ")}`,
+      reason: `Human review required on ${names.join(", ")}`,
     };
   }
 

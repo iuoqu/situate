@@ -132,8 +132,10 @@ in `'human_review'` with a "AI editor unreachable" rationale.
 2. Run `drizzle/seed_constitution_v01.sql`
 3. Run `drizzle/seed_demo_3block.sql` (optional demo)
 4. Run `drizzle/0003_submit_form_and_ai_editor.sql`
+5. Run `drizzle/0004_p4_confidentiality.sql`
+6. Run `drizzle/seed_constitution_v02.sql` (publishes v0.2, supersedes v0.1)
 
-Existing deploys just need step 4.
+Existing deploys: run steps 5 and 6.
 
 ### Editorial constitution
 

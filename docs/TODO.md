@@ -7,11 +7,44 @@ survives between sessions and can be checked in PR diffs.
 
 ## In flight (parallel work)
 
-- [ ] **Editorial Constitution v0.2** — being refined in a separate
-      conversation, starting from a stress-test of P2 (the Han Feizi
-      hypothetical: separating *event* from *categorical framing*). When
-      v0.2 lands, drop it into `drizzle/seed_constitution_v02.sql`,
-      mark v0.1 as superseded, run on Supabase.
+- [x] **Editorial Constitution v0.2** — landed. 13 principles (P1–P13),
+      `drizzle/seed_constitution_v02.sql` applied locally, v0.1
+      superseded. `docs/constitution-v0.2.md` is the canonical text.
+- [ ] **8 new AI-editor checkers for v0.2 principles** — P3 (Place Is
+      Generative) is live and re-prompted to v0.2. Remaining: P1, P2,
+      P6, P7 (literary-judgment checkers), P4, P5, P10, P11
+      (disclosure-consistency checkers). P8 is a system check, P9 is
+      a translator workflow trigger, P12/P13 are governance. See
+      "Next AI editor work" below.
+
+### Next AI editor work
+
+Order from the v0 judgment project's recommended sequence:
+
+1. **P8 (Map Truth) — system check.** Geocode validation + private-address
+   classification. Not an LLM call; uses Mapbox geocoding API + a
+   privacy lookup. Add as `src/lib/ai-editor/checks/p8-map-truth.ts`.
+2. **P11 (Reality, Disclosed) — flag, never reject.** When author claims
+   FICTION but story contains documented-event details, flag for human
+   review. Per v0.2 P11 final paragraph, citation precedence with P5
+   matters.
+3. **P5 (Fiction Is Not a License) — disclosure-consistency check.** When
+   author claims FICTION + no real people, but story contains
+   identifiable real-person signals (full names + biographical details
+   that match a real person), flag for human review.
+4. **P2 (Specificity over Category) — literary judgment.** Detect
+   grammatical patterns like "people of X had a / are / always" and
+   judge whether one individual's story is being offered as a verdict
+   on a population.
+5. **P10 (AI Disclosure) — flag only, never reject.** Statistical
+   AI-text-detection runs as a flag for human review. Per v0.2 P10,
+   the verdict is never delegated to detectors.
+6. **P1 (Place as Inhabited Space) — flag, never reject.** Read the
+   prose and judge whether the story knows it is not alone there.
+7. **P6 (Mass Suffering) — flag for human review when keywords +
+   tone match the v0.2 P6 list.** Always escalates to human.
+8. **P7 (The Gaze) — density flag only.** Surface density of explicit
+   content; final verdict is always human (v0.2 P7 Decision Authority).
 
 ---
 
