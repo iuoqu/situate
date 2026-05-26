@@ -1,11 +1,10 @@
--- Custom migration: enable the PostGIS extension before any schema migrations
--- that reference `geometry` columns or GiST indexes are applied.
+-- Enable PostGIS so geometry columns and GiST indexes in subsequent
+-- migrations can be created.
 --
--- Supabase exposes the `extensions` schema for installable extensions; we
--- install PostGIS there to keep `public` clean. Both forms are accepted, but
--- this matches Supabase's documented convention.
-CREATE EXTENSION IF NOT EXISTS postgis WITH SCHEMA extensions;
---> statement-breakpoint
--- Make sure the extension's functions/types are resolvable from `public` and
--- whatever search_path Drizzle uses at migration time.
-GRANT USAGE ON SCHEMA extensions TO postgres, anon, authenticated, service_role;
+-- Portable across hosts: on Supabase this can also be enabled from
+-- Database → Extensions in the dashboard (their convention is to install
+-- extensions into the `extensions` schema). Installing into the default
+-- schema works fine because we reference functions unqualified
+-- (ST_MakeEnvelope, ST_Intersects, …) and Supabase's default search_path
+-- includes both `public` and `extensions`.
+CREATE EXTENSION IF NOT EXISTS postgis;
