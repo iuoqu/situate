@@ -316,6 +316,13 @@ export const moderationDecisions = pgTable(
       .$type<FlaggedEntity[]>()
       .notNull()
       .default(sql`'[]'::jsonb`),
+    // Snapshot of which editorial-constitution principles were cited
+    // in this decision, e.g. ["P2:v0.1", "P7:v0.1"]. Code+version is
+    // stored verbatim so the audit log survives later principle edits.
+    citedPrinciples: text("cited_principles")
+      .array()
+      .notNull()
+      .default(sql`ARRAY[]::text[]`),
     createdAt: timestamp("created_at", { withTimezone: true })
       .notNull()
       .default(sql`now()`),
@@ -325,6 +332,51 @@ export const moderationDecisions = pgTable(
       t.submissionId,
     ),
     layerIdx: index("moderation_decisions_layer_idx").on(t.layer),
+  }),
+);
+
+// The public "Editorial Constitution." Each principle has a code (P1, P2,
+// ...) and a version (v0.1, v0.2, ...). Old versions are kept so audit
+// trails remain intact when the constitution evolves; supersededBy points
+// at the row that replaced this version.
+export interface PrincipleExample {
+  kind: "accepted" | "declined";
+  text: string;
+}
+
+export const editorialPrinciples = pgTable(
+  "editorial_principles",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    code: text("code").notNull(),
+    version: text("version").notNull(),
+    titleI18n: jsonb("title_i18n")
+      .$type<Partial<Record<SupportedLanguage, string>>>()
+      .notNull(),
+    bodyI18n: jsonb("body_i18n")
+      .$type<Partial<Record<SupportedLanguage, string>>>()
+      .notNull(),
+    examples: jsonb("examples")
+      .$type<PrincipleExample[]>()
+      .notNull()
+      .default(sql`'[]'::jsonb`),
+    effectiveAt: timestamp("effective_at", { withTimezone: true })
+      .notNull()
+      .default(sql`now()`),
+    supersededBy: uuid("superseded_by"),
+    supersededAt: timestamp("superseded_at", { withTimezone: true }),
+    createdAt: timestamp("created_at", { withTimezone: true })
+      .notNull()
+      .default(sql`now()`),
+  },
+  (t) => ({
+    codeVersionIdx: uniqueIndex("editorial_principles_code_version_idx").on(
+      t.code,
+      t.version,
+    ),
+    activeIdx: index("editorial_principles_active_idx")
+      .on(t.code)
+      .where(sql`${t.supersededBy} IS NULL`),
   }),
 );
 
@@ -369,6 +421,8 @@ export type ModerationDecisionRow = typeof moderationDecisions.$inferSelect;
 export type NewModerationDecisionRow = typeof moderationDecisions.$inferInsert;
 export type Report = typeof reports.$inferSelect;
 export type NewReport = typeof reports.$inferInsert;
+export type EditorialPrinciple = typeof editorialPrinciples.$inferSelect;
+export type NewEditorialPrinciple = typeof editorialPrinciples.$inferInsert;
 
 export type SubmissionStatus = (typeof submissionStatus.enumValues)[number];
 export type EditionStatus = (typeof editionStatus.enumValues)[number];

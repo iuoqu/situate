@@ -73,10 +73,37 @@ from the result set.
 
 Submissions move through `draft → ai_review → human_review → published`.
 Every decision (AI scan, human editor, legal/ops) is logged to
-`moderation_decisions` with `layer`, `decision`, `rationale`, and
-`flagged_entities`. Reader-submitted `reports` carry a BCP-47 `locale` so
-ops can route by jurisdiction (24h SLA for `de-*` under NetzDG, `droit de
-réponse` for `fr-*`).
+`moderation_decisions` with `layer`, `decision`, `rationale`,
+`flagged_entities`, and `cited_principles` (code+version snapshot pointing
+at `editorial_principles` rows). Reader-submitted `reports` carry a BCP-47
+`locale` so ops can route by jurisdiction (24h SLA for `de-*` under
+NetzDG, `droit de réponse` for `fr-*`).
+
+### Editions (the magazine layer)
+
+Each issue is a row in `editions` (numbered, slugged, with editor's letter
++ cover image + publish date). A submission is either:
+
+- **Issue-bound** — `edition_id` set; visibility gated by the parent
+  edition reaching `status='published'`. Submissions are ordered within an
+  issue by `position_in_edition` (partial unique index on
+  `(edition_id, position_in_edition)`).
+- **Evergreen** — `edition_id IS NULL`; visibility gated only by the
+  submission's own `status='published'`.
+
+A CHECK constraint on `editions` blocks advancing past `planning` until
+`editors_letter`, `cover_image_url`, and `publish_at` are all set —
+"half-built issue can't ship" enforced at the database.
+
+### Editorial constitution
+
+`editorial_principles` is the versioned public ruleset that governs every
+moderation decision. Each row is one `(code, version)` pair (e.g.
+`P2:v0.1`), with i18n title + body + accepted/declined examples. Old
+versions are kept; a new version sets the predecessor's
+`superseded_by`/`superseded_at`. Audit-log rows in `moderation_decisions`
+snapshot the principle codes they cited so the log remains coherent across
+later edits to the constitution.
 
 ## Database setup
 

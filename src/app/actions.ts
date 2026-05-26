@@ -1,11 +1,13 @@
 "use server";
 
-import { eq, sql } from "drizzle-orm";
+import { and, eq, isNull, sql } from "drizzle-orm";
 
 import { db } from "@/db";
 import {
   blockTranslations,
   DEFAULT_CULTURAL_RENDERING,
+  editions,
+  editorialPrinciples,
   moderationDecisions,
   narrativeBlocks,
   reports,
@@ -13,19 +15,181 @@ import {
   type BlockTranslation,
   type CulturalAnnotation,
   type CulturalRendering,
+  type Edition,
+  type EditorialPrinciple,
   type FlaggedEntity,
   type ModerationDecisionRow,
   type ModerationDecisionValue,
   type ModerationLayer,
   type NarrativeBlock,
+  type PrincipleExample,
   type Report,
   type ReportCategory,
+  type Submission,
   type SubmissionStatus,
   type SupportedLanguage,
   type TranslationAccessTier,
   type TranslationMethod,
   type TranslationStatus,
 } from "@/db/schema";
+
+// ─── Editions ───────────────────────────────────────────────────────────────
+
+export interface CreateEditionInput {
+  slug: string;
+  title: string;
+  theme?: string;
+  editorsLetter?: string;
+  coverImageUrl?: string;
+  publishAt?: Date;
+}
+
+/**
+ * Create a new edition in `planning` status. The CHECK constraint allows
+ * editor's letter / cover / publish date to be filled in later, but they
+ * must all be present before `publishEdition()` will succeed.
+ */
+export async function createEdition(
+  input: CreateEditionInput,
+): Promise<Edition> {
+  const [row] = await db
+    .insert(editions)
+    .values({
+      slug: input.slug,
+      title: input.title,
+      theme: input.theme,
+      editorsLetter: input.editorsLetter,
+      coverImageUrl: input.coverImageUrl,
+      publishAt: input.publishAt,
+    })
+    .returning();
+  return row;
+}
+
+export type UpdateEditionPatch = Partial<
+  Pick<
+    Edition,
+    "slug" | "title" | "theme" | "editorsLetter" | "coverImageUrl" | "publishAt"
+  >
+>;
+
+export async function updateEdition(
+  id: string,
+  patch: UpdateEditionPatch,
+): Promise<Edition> {
+  const [row] = await db
+    .update(editions)
+    .set(patch)
+    .where(eq(editions.id, id))
+    .returning();
+  if (!row) throw new Error(`edition ${id} not found`);
+  return row;
+}
+
+export interface AssignSubmissionToEditionInput {
+  submissionId: string;
+  editionId: string;
+  positionInEdition: number;
+}
+
+export async function assignSubmissionToEdition(
+  input: AssignSubmissionToEditionInput,
+): Promise<Submission> {
+  if (!Number.isInteger(input.positionInEdition) || input.positionInEdition < 1) {
+    throw new Error("positionInEdition must be a positive integer");
+  }
+  const [row] = await db
+    .update(submissions)
+    .set({
+      editionId: input.editionId,
+      positionInEdition: input.positionInEdition,
+    })
+    .where(eq(submissions.id, input.submissionId))
+    .returning();
+  if (!row) throw new Error(`submission ${input.submissionId} not found`);
+  return row;
+}
+
+/**
+ * Unassign a submission from its issue, leaving it as "evergreen" content.
+ */
+export async function unassignSubmissionFromEdition(
+  submissionId: string,
+): Promise<Submission> {
+  const [row] = await db
+    .update(submissions)
+    .set({ editionId: null, positionInEdition: null })
+    .where(eq(submissions.id, submissionId))
+    .returning();
+  if (!row) throw new Error(`submission ${submissionId} not found`);
+  return row;
+}
+
+/**
+ * Lock contents and schedule an edition for publication. Validates that the
+ * issue has an editor's letter, cover image, and a publish date, and that at
+ * least one submission is assigned. Doesn't flip individual submissions'
+ * editorial status — that's the moderation pipeline's job.
+ */
+export async function scheduleEdition(editionId: string): Promise<Edition> {
+  return db.transaction(async (tx) => {
+    const [edition] = await tx
+      .select()
+      .from(editions)
+      .where(eq(editions.id, editionId))
+      .limit(1);
+    if (!edition) throw new Error(`edition ${editionId} not found`);
+    if (!edition.editorsLetter)
+      throw new Error("editor's letter is required before scheduling");
+    if (!edition.coverImageUrl)
+      throw new Error("cover image is required before scheduling");
+    if (!edition.publishAt)
+      throw new Error("publish_at is required before scheduling");
+
+    const [{ count }] = await tx
+      .select({ count: sql<number>`count(*)::int` })
+      .from(submissions)
+      .where(eq(submissions.editionId, editionId));
+    if (count < 1) {
+      throw new Error("at least one submission must be assigned before scheduling");
+    }
+
+    const [updated] = await tx
+      .update(editions)
+      .set({ status: "scheduled" })
+      .where(eq(editions.id, editionId))
+      .returning();
+    return updated;
+  });
+}
+
+/**
+ * Flip an edition to `published`. Idempotent; if already published, returns
+ * the existing row.
+ */
+export async function publishEdition(editionId: string): Promise<Edition> {
+  return db.transaction(async (tx) => {
+    const [edition] = await tx
+      .select()
+      .from(editions)
+      .where(eq(editions.id, editionId))
+      .limit(1);
+    if (!edition) throw new Error(`edition ${editionId} not found`);
+    if (edition.status === "published") return edition;
+    if (!edition.editorsLetter || !edition.coverImageUrl) {
+      throw new Error(
+        "edition is missing editor's letter or cover image; cannot publish",
+      );
+    }
+    const publishAt = edition.publishAt ?? new Date();
+    const [updated] = await tx
+      .update(editions)
+      .set({ status: "published", publishAt })
+      .where(eq(editions.id, editionId))
+      .returning();
+    return updated;
+  });
+}
 
 // ─── Narrative block insertion ──────────────────────────────────────────────
 
@@ -140,11 +304,6 @@ export interface AddTranslationInput {
   status?: TranslationStatus;
 }
 
-/**
- * Upsert an AI or human translation for an existing block. Uniqueness is on
- * `(block_id, language, method)` — re-running the AI translator overwrites
- * the previous AI row in place; the human row is kept separate.
- */
 export async function addTranslation(
   input: AddTranslationInput,
 ): Promise<BlockTranslation> {
@@ -195,6 +354,7 @@ export interface BoundingBox {
 export interface ViewportBlock {
   blockId: string;
   submissionId: string;
+  editionId: string | null;
   sequenceNumber: number;
   eventDate: Date | null;
   longitude: number;
@@ -216,13 +376,10 @@ const ACCESS_LEVEL_ORDER: Record<ReaderAccessLevel, number> = {
 
 export interface ViewportQueryOptions {
   readerLanguage: SupportedLanguage;
-  /**
-   * Highest access tier this reader is entitled to receive right now.
-   * App layer is responsible for actually enforcing metered quotas and
-   * premium entitlement; this filter only constrains what the DB returns.
-   */
   accessLevel?: ReaderAccessLevel;
   submissionId?: string;
+  /** Restrict to a specific issue (e.g. "browse Issue #12"). */
+  editionId?: string;
   limit?: number;
 }
 
@@ -235,8 +392,11 @@ export interface ViewportQueryOptions {
  *   3. ai in reader_language
  *   4. original (in the piece's source language)
  *
- * Coordinates are bound through Drizzle's `sql` tagged template — no string
- * interpolation — so this is safe against injection.
+ * Visibility gates (all must pass):
+ *   - block has a location and intersects the bbox
+ *   - submission.status = 'published'
+ *   - submission.edition_id IS NULL OR its edition.status = 'published'
+ *   - chosen translation has status='published' and access_tier ≤ reader's level
  */
 export async function getNarrativeBlocksInBoundingBox(
   bbox: BoundingBox,
@@ -248,7 +408,13 @@ export async function getNarrativeBlocksInBoundingBox(
     }
   }
   const { minLong, minLat, maxLong, maxLat } = bbox;
-  const { readerLanguage, accessLevel = "free", submissionId, limit } = options;
+  const {
+    readerLanguage,
+    accessLevel = "free",
+    submissionId,
+    editionId,
+    limit,
+  } = options;
 
   const envelope = sql`ST_MakeEnvelope(${minLong}, ${minLat}, ${maxLong}, ${maxLat}, 4326)`;
 
@@ -265,7 +431,6 @@ export async function getNarrativeBlocksInBoundingBox(
     END
   `;
 
-  // Numeric encoding of access tier; reader is entitled to anything ≤ their level.
   const accessFilter = sql`
     CASE ${blockTranslations.accessTier}
       WHEN 'free'    THEN 0
@@ -275,7 +440,11 @@ export async function getNarrativeBlocksInBoundingBox(
   `;
 
   const submissionFilter = submissionId
-    ? sql`AND ${narrativeBlocks.submissionId} = ${submissionId}`
+    ? sql`AND ${submissions.id} = ${submissionId}`
+    : sql``;
+
+  const editionFilter = editionId
+    ? sql`AND ${submissions.editionId} = ${editionId}`
     : sql``;
 
   const limitClause = limit ? sql`LIMIT ${limit}` : sql``;
@@ -283,6 +452,7 @@ export async function getNarrativeBlocksInBoundingBox(
   const rows = await db.execute<{
     block_id: string;
     submission_id: string;
+    edition_id: string | null;
     sequence_number: number;
     event_date: Date | null;
     longitude: number;
@@ -296,6 +466,7 @@ export async function getNarrativeBlocksInBoundingBox(
     SELECT DISTINCT ON (${narrativeBlocks.id})
       ${narrativeBlocks.id}             AS block_id,
       ${narrativeBlocks.submissionId}   AS submission_id,
+      ${submissions.editionId}          AS edition_id,
       ${narrativeBlocks.sequenceNumber} AS sequence_number,
       ${narrativeBlocks.eventDate}      AS event_date,
       ST_X(${narrativeBlocks.location}) AS longitude,
@@ -306,11 +477,17 @@ export async function getNarrativeBlocksInBoundingBox(
       ${blockTranslations.annotations}  AS annotations,
       ${blockTranslations.accessTier}   AS access_tier
     FROM ${narrativeBlocks}
+    INNER JOIN ${submissions}
+      ON ${submissions.id} = ${narrativeBlocks.submissionId}
     INNER JOIN ${blockTranslations}
       ON ${blockTranslations.blockId} = ${narrativeBlocks.id}
+    LEFT JOIN ${editions}
+      ON ${editions.id} = ${submissions.editionId}
     WHERE
       ${narrativeBlocks.location} IS NOT NULL
       AND ST_Intersects(${narrativeBlocks.location}, ${envelope})
+      AND ${submissions.status} = 'published'
+      AND (${submissions.editionId} IS NULL OR ${editions.status} = 'published')
       AND ${blockTranslations.status} = 'published'
       AND (
         ${blockTranslations.language} = ${readerLanguage}
@@ -318,6 +495,7 @@ export async function getNarrativeBlocksInBoundingBox(
       )
       AND ${accessFilter}
       ${submissionFilter}
+      ${editionFilter}
     ORDER BY
       ${narrativeBlocks.id},
       ${priority}
@@ -327,6 +505,7 @@ export async function getNarrativeBlocksInBoundingBox(
   return rows.map((r) => ({
     blockId: r.block_id,
     submissionId: r.submission_id,
+    editionId: r.edition_id,
     sequenceNumber: r.sequence_number,
     eventDate: r.event_date,
     longitude: Number(r.longitude),
@@ -348,6 +527,11 @@ export interface RecordModerationDecisionInput {
   reviewerId?: string;
   rationale?: string;
   flaggedEntities?: FlaggedEntity[];
+  /**
+   * Editorial-constitution principles cited, e.g. ["P2:v0.1", "P7:v0.1"].
+   * Stored verbatim as a snapshot so the audit log survives later edits.
+   */
+  citedPrinciples?: string[];
   /**
    * Optional: advance the submission's editorial status in the same
    * transaction. Typical mapping:
@@ -373,6 +557,7 @@ export async function recordModerationDecision(
         reviewerId: input.reviewerId,
         rationale: input.rationale,
         flaggedEntities: input.flaggedEntities ?? [],
+        citedPrinciples: input.citedPrinciples ?? [],
       })
       .returning();
 
@@ -411,16 +596,93 @@ export async function fileReport(input: FileReportInput): Promise<Report> {
   return row;
 }
 
+// ─── Editorial Constitution ─────────────────────────────────────────────────
+
+export interface PublishPrincipleInput {
+  code: string;                            // "P2"
+  version: string;                         // "v0.1"
+  titleI18n: Partial<Record<SupportedLanguage, string>>;
+  bodyI18n: Partial<Record<SupportedLanguage, string>>;
+  examples?: PrincipleExample[];
+  effectiveAt?: Date;
+  /**
+   * If supplied, marks an existing principle row as superseded by the new
+   * one in the same transaction. Pass the *id* of the row being replaced.
+   */
+  supersedes?: string;
+}
+
+/**
+ * Publish a new version of an editorial principle. When `supersedes` is
+ * provided, the prior row is marked superseded in the same transaction so
+ * a reader querying "current constitution" always gets a coherent snapshot.
+ */
+export async function publishPrinciple(
+  input: PublishPrincipleInput,
+): Promise<EditorialPrinciple> {
+  return db.transaction(async (tx) => {
+    const [created] = await tx
+      .insert(editorialPrinciples)
+      .values({
+        code: input.code,
+        version: input.version,
+        titleI18n: input.titleI18n,
+        bodyI18n: input.bodyI18n,
+        examples: input.examples ?? [],
+        effectiveAt: input.effectiveAt ?? new Date(),
+      })
+      .returning();
+
+    if (input.supersedes) {
+      await tx
+        .update(editorialPrinciples)
+        .set({ supersededBy: created.id, supersededAt: new Date() })
+        .where(eq(editorialPrinciples.id, input.supersedes));
+    }
+    return created;
+  });
+}
+
+/**
+ * Return the active editorial constitution — one row per principle code, in
+ * code order. Active = not superseded.
+ */
+export async function getActivePrinciples(): Promise<EditorialPrinciple[]> {
+  return db
+    .select()
+    .from(editorialPrinciples)
+    .where(isNull(editorialPrinciples.supersededBy))
+    .orderBy(editorialPrinciples.code);
+}
+
+/**
+ * Return a specific principle version verbatim — used by the audit-log
+ * rendering to show readers exactly which version of P2 was cited when a
+ * particular submission was decided.
+ */
+export async function getPrincipleVersion(
+  code: string,
+  version: string,
+): Promise<EditorialPrinciple | null> {
+  const [row] = await db
+    .select()
+    .from(editorialPrinciples)
+    .where(
+      and(
+        eq(editorialPrinciples.code, code),
+        eq(editorialPrinciples.version, version),
+      ),
+    )
+    .limit(1);
+  return row ?? null;
+}
+
 // ─── Pure render helper ─────────────────────────────────────────────────────
 
 export type RenderingPreference = CulturalRendering;
 
 /**
  * Apply a reader's cultural-rendering preference to a stored translation.
- * `content` is the canonical default rendering; spans in `annotations` point
- * into that string. Substitutions are applied right-to-left so earlier spans'
- * indices remain valid.
- *
  * Defaults to `DEFAULT_CULTURAL_RENDERING` ('literal') for unauthenticated /
  * no-preference readers. Pure function — safe in client components.
  */
