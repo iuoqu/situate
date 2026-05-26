@@ -290,6 +290,19 @@ export const submissions = pgTable(
     // Set by the AI editor when it finishes the pipeline.
     aiReviewedAt: timestamp("ai_reviewed_at", { withTimezone: true }),
 
+    // Editor-side triage (constitution v0.2 carveout — back-end only).
+    // editorialPriorityScore is a 0-100 sort signal used by editors to
+    // prioritize the queue. It is never shown to authors, never used as a
+    // routing gate, and audited monthly for bias against non-English / non-
+    // Western / experimental work. See docs/ai-editor-triage-rationale.md.
+    editorialPriorityScore: integer("editorial_priority_score"),
+    editorialPriorityPayload: jsonb("editorial_priority_payload"),
+    editorialPriorityModel: text("editorial_priority_model"),
+    editorialPriorityEvaluatedAt: timestamp(
+      "editorial_priority_evaluated_at",
+      { withTimezone: true },
+    ),
+
     createdAt: timestamp("created_at", { withTimezone: true })
       .notNull()
       .default(sql`now()`),

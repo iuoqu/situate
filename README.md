@@ -134,8 +134,9 @@ in `'human_review'` with a "AI editor unreachable" rationale.
 4. Run `drizzle/0003_submit_form_and_ai_editor.sql`
 5. Run `drizzle/0004_p4_confidentiality.sql`
 6. Run `drizzle/seed_constitution_v02.sql` (publishes v0.2, supersedes v0.1)
+7. Run `drizzle/0005_editorial_priority.sql` (editor-side triage columns)
 
-Existing deploys: run steps 5 and 6.
+Existing deploys: run steps 5, 6, and 7.
 
 ### Editorial constitution
 

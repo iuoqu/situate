@@ -1,4 +1,8 @@
 import { checkP3 } from "./principles/p3";
+import {
+  evaluateEngagementScore,
+  type EditorialPriorityReport,
+} from "./triage/engagement-score";
 import type {
   JudgmentSubmission,
   PrincipleJudgment,
@@ -77,12 +81,17 @@ function policyFor(principleCode: string): PrincipleRoutingPolicy {
 export async function evaluateSubmission(
   submission: JudgmentSubmission,
 ): Promise<SubmissionReport> {
-  // Parallel execution. If one principle's API call fails, we surface the
-  // failure rather than silently dropping it — the caller decides whether
-  // to retry or escalate to human review.
-  const settled = await Promise.allSettled(
-    CHECKERS.map((fn) => fn(submission)),
-  );
+  // Parallel execution of every principle checker AND the editor-side
+  // triage. The triage is on a separate track — its failure never affects
+  // routing, and its score never gates anything; it's pure editor-queue
+  // priority signal. See docs/ai-editor-triage-rationale.md.
+  const [settled, triageResult] = await Promise.all([
+    Promise.allSettled(CHECKERS.map((fn) => fn(submission))),
+    evaluateEngagementScore(submission).then(
+      (r) => ({ ok: true as const, value: r }),
+      (e) => ({ ok: false as const, error: e }),
+    ),
+  ]);
 
   const judgments: PrincipleJudgment[] = [];
   const failures: { principle: string; error: unknown }[] = [];
@@ -99,11 +108,16 @@ export async function evaluateSubmission(
     }
   }
 
+  const triage: EditorialPriorityReport | null = triageResult.ok
+    ? triageResult.value
+    : null;
+
   if (failures.length > 0) {
     // Any checker failure forces human review — the agreed "API down" fallback.
     return {
       submission_id: submission.meta.submission_id,
       judgments,
+      triage,
       routing: "HUMAN_REVIEW",
       routing_reason: `AI editor unreachable for ${failures.length} principle(s); routing to human queue. First error: ${
         failures[0].error instanceof Error
@@ -121,6 +135,7 @@ export async function evaluateSubmission(
   return {
     submission_id: submission.meta.submission_id,
     judgments,
+    triage,
     routing: routing.decision,
     routing_reason: routing.reason,
     cited_principles: judgments

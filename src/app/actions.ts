@@ -1060,9 +1060,26 @@ async function runAiReviewInternal(submissionId: string): Promise<SubmissionRepo
       })),
       citedPrinciples: report.cited_principles,
     });
+
+    // Editor-side triage: stored on submissions, separate from
+    // moderation_decisions. Never affects routing — pure queue sort.
+    // See docs/ai-editor-triage-rationale.md.
+    const triageUpdate: Partial<typeof submissions.$inferInsert> = {
+      status: nextStatus,
+      aiReviewedAt: new Date(),
+    };
+    if (report.triage) {
+      triageUpdate.editorialPriorityScore = report.triage.score;
+      triageUpdate.editorialPriorityPayload = report.triage as unknown as Record<
+        string,
+        unknown
+      >;
+      triageUpdate.editorialPriorityModel = report.triage.model;
+      triageUpdate.editorialPriorityEvaluatedAt = new Date();
+    }
     await tx
       .update(submissions)
-      .set({ status: nextStatus, aiReviewedAt: new Date() })
+      .set(triageUpdate)
       .where(eq(submissions.id, submissionId));
   });
 

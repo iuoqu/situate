@@ -17,6 +17,18 @@ survives between sessions and can be checked in PR diffs.
       a translator workflow trigger, P12/P13 are governance. See
       "Next AI editor work" below.
 
+### Editor-side triage (now live)
+
+- [x] **`editorial_priority_score`** — 0–100 sort signal for the editorial
+      queue, computed alongside principle checkers. Backend-only;
+      authors never see it; never used as a routing gate. See
+      `docs/ai-editor-triage-rationale.md`.
+- [ ] **Monthly bias audit cadence** — run the SQL audit in the
+      rationale doc on the 1st of every month. If non-English source
+      languages or `born_there`/`lived_there` non-English-context
+      affinities cluster in the bottom quartile, revise the triage
+      prompt.
+
 ### Next AI editor work
 
 Order from the v0 judgment project's recommended sequence:

@@ -7,6 +7,8 @@ import type {
   SupportedLanguage,
 } from "@/db/schema";
 
+import type { EditorialPriorityReport } from "./triage/engagement-score";
+
 /**
  * Submission shape passed to each principle checker. This is the
  * "judgment-facing view" — fields the AI editor needs to evaluate one
@@ -88,6 +90,12 @@ export type RoutingDecision = "AUTO_REJECT" | "HUMAN_REVIEW" | "PASS_TO_EDITOR";
 export interface SubmissionReport {
   submission_id: string;
   judgments: PrincipleJudgment[];
+  /**
+   * Editor-side triage signal. Null when the triage call failed (API
+   * unreachable, model error). Never affects routing — pure queue-sort
+   * input for the human editor.
+   */
+  triage: EditorialPriorityReport | null;
   routing: RoutingDecision;
   routing_reason: string;
   cited_principles: string[]; // e.g. ["P3:v0.1"] — used in moderation_decisions
