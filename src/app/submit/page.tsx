@@ -1,10 +1,20 @@
 import { getActivePrinciples } from "@/app/actions";
+import { getReaderPrefs } from "@/lib/reader-prefs";
 
 import { SubmitForm } from "./submit-form";
 
 export const dynamic = "force-dynamic";
 
-export default async function SubmitPage() {
+type Search = Promise<{ lang?: string }>;
+
+export default async function SubmitPage({
+  searchParams,
+}: {
+  searchParams: Search;
+}) {
+  const sp = await searchParams;
+  const { language } = await getReaderPrefs({ langParam: sp.lang });
+
   // Fetch active principles for the F7 attestation — the legal-attestation
   // label dynamically references the live constitution version + count, so
   // it survives v0.1 → v0.2 → ... without code changes.
@@ -13,5 +23,10 @@ export default async function SubmitPage() {
   const codes = principles.map((p) => p.code).join(", ");
   const constitutionSignature = `${version}, ${codes || "P1–P10"}`;
 
-  return <SubmitForm constitutionSignature={constitutionSignature} />;
+  return (
+    <SubmitForm
+      locale={language}
+      constitutionSignature={constitutionSignature}
+    />
+  );
 }

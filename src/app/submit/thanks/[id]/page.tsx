@@ -8,6 +8,9 @@ import {
   submissions,
   type PrincipleVerdict,
 } from "@/db/schema";
+import { LangSwitch } from "@/components/lang-switch";
+import { t, type MessageKey } from "@/lib/i18n";
+import { getReaderPrefs } from "@/lib/reader-prefs";
 import { and, desc, eq } from "drizzle-orm";
 
 export const dynamic = "force-dynamic";
@@ -18,56 +21,44 @@ const VERDICT_COLOR: Record<PrincipleVerdict, string> = {
   UNCERTAIN: "#ca8a04",
 };
 
-// What the AI pre-screen actually concluded for this submission. Derived from
-// the latest ai-layer moderation_decisions row + the submission's status, so
-// we can show copy that matches what really happened (not just what the
-// submission's status enum says).
 type AiOutcome =
-  | "passed"      // PASS_TO_EDITOR — AI batch approval, on to human review
-  | "flagged"     // HUMAN_REVIEW — at least one UNCERTAIN or escalation flag
-  | "declined"    // AUTO_REJECT — high-conf FAIL, returned to author
-  | "unavailable" // AI editor failed (no API key, billing, 5xx) — sent direct to human
-  | "pending"     // No AI decision row yet — editor still running or pre-AI status
+  | "passed"
+  | "flagged"
+  | "declined"
+  | "unavailable"
+  | "pending"
   | "published";
 
-interface OutcomeCopy {
-  headline: string;
-  lead: string;
-}
-
-const OUTCOME_COPY: Record<AiOutcome, OutcomeCopy> = {
-  passed: {
-    headline: "Your piece passed the AI pre-screen.",
-    lead: "Every principle the AI editor evaluated came back with a high-confidence PASS. The piece is now in the human review queue — typically 7 days for the fast lane.",
-  },
-  flagged: {
-    headline: "The AI editor flagged your piece for editorial attention.",
-    lead: "At least one principle came back uncertain. A human editor reviews next; you'll hear back within 14 days.",
-  },
-  declined: {
-    headline: "The AI editor declined your piece.",
-    lead: "The AI editor's pre-screen surfaced a high-confidence concern against the constitution. The piece has been returned to draft — revise the issue cited below and you can resubmit.",
-  },
-  unavailable: {
-    headline: "Your piece is in human review.",
-    lead: "The AI pre-screen is temporarily unavailable, so your piece went straight to the human queue. You'll hear back within 14 days.",
-  },
-  pending: {
-    headline: "The AI editor is still reading your piece.",
-    lead: "Hold tight — refresh this page in a moment. If nothing appears, the AI pre-screen failed silently and your piece is already in the human queue.",
-  },
-  published: {
-    headline: "Your piece has been published.",
-    lead: "It's live. Thank you for trusting us with it.",
-  },
+const OUTCOME_HEADLINE_KEY: Record<AiOutcome, MessageKey> = {
+  passed: "thanks.headline_passed",
+  flagged: "thanks.headline_flagged",
+  declined: "thanks.headline_declined",
+  unavailable: "thanks.headline_unavailable",
+  pending: "thanks.headline_pending",
+  published: "thanks.headline_published",
 };
+
+const OUTCOME_LEAD_KEY: Record<AiOutcome, MessageKey> = {
+  passed: "thanks.lead_passed",
+  flagged: "thanks.lead_flagged",
+  declined: "thanks.lead_declined",
+  unavailable: "thanks.lead_unavailable",
+  pending: "thanks.lead_pending",
+  published: "thanks.lead_published",
+};
+
+type Search = Promise<{ lang?: string }>;
 
 export default async function ThanksPage({
   params,
+  searchParams,
 }: {
   params: Promise<{ id: string }>;
+  searchParams: Search;
 }) {
   const { id } = await params;
+  const sp = await searchParams;
+  const { language: locale } = await getReaderPrefs({ langParam: sp.lang });
 
   const [submission] = await db
     .select()
@@ -76,8 +67,6 @@ export default async function ThanksPage({
     .limit(1);
   if (!submission) notFound();
 
-  // Latest ai-layer moderation decision — tells us which of the three v0
-  // routing branches actually fired (or if the AI editor was unreachable).
   const [aiDecision] = await db
     .select()
     .from(moderationDecisions)
@@ -97,7 +86,14 @@ export default async function ThanksPage({
     .orderBy(desc(principleJudgments.createdAt));
 
   const outcome = deriveOutcome(submission.status, aiDecision);
-  const { headline, lead } = OUTCOME_COPY[outcome];
+  const headline = t(locale, OUTCOME_HEADLINE_KEY[outcome]);
+  const lead = t(locale, OUTCOME_LEAD_KEY[outcome]);
+
+  // Footer's constitution link sentence — replace the {constitution_link}
+  // placeholder with a real anchor.
+  const footerTemplate = t(locale, "thanks.footer");
+  const constitutionLinkText = t(locale, "common.constitution_link");
+  const footerParts = footerTemplate.split("{constitution_link}");
 
   return (
     <main
@@ -108,6 +104,8 @@ export default async function ThanksPage({
         fontFamily: "system-ui, sans-serif",
       }}
     >
+      <LangSwitch current={locale} />
+
       <Link
         href="/"
         style={{
@@ -118,7 +116,7 @@ export default async function ThanksPage({
           textDecoration: "none",
         }}
       >
-        ← Situate Editions
+        {t(locale, "common.back_to_situate")}
       </Link>
 
       <div style={{ marginTop: 32 }}>
@@ -131,7 +129,7 @@ export default async function ThanksPage({
             marginBottom: 8,
           }}
         >
-          Submission {id.slice(0, 8)}…
+          {t(locale, "common.submission_id_prefix")} {id.slice(0, 8)}…
         </div>
         <h1
           style={{
@@ -176,7 +174,7 @@ export default async function ThanksPage({
               marginBottom: 4,
             }}
           >
-            Your piece
+            {t(locale, "thanks.your_piece_label")}
           </div>
           <div style={{ fontFamily: 'Georgia, "Times New Roman", serif', fontSize: 22 }}>
             {submission.title}
@@ -195,8 +193,11 @@ export default async function ThanksPage({
             </div>
           )}
           <div style={{ fontSize: 12, color: "#888", marginTop: 10 }}>
-            {submission.wordCount} words · {submission.sourceLanguage} ·{" "}
-            {submission.storyType}
+            {t(locale, "thanks.piece_meta", {
+              words: submission.wordCount ?? "?",
+              language: submission.sourceLanguage,
+              story_type: submission.storyType ?? "fiction",
+            })}
           </div>
         </div>
       )}
@@ -213,17 +214,26 @@ export default async function ThanksPage({
             marginBottom: 20,
           }}
         >
-          AI editor's per-principle read
+          {t(locale, "thanks.section_per_principle")}
         </h2>
 
         {judgments.length === 0 ? (
           <p style={{ color: "#888", fontStyle: "italic" }}>
             {outcome === "unavailable"
-              ? "The AI editor wasn't reached on this submission — there are no per-principle reads to show. A human editor takes it from here."
-              : "No judgments recorded yet. Refresh in a moment if the AI editor is still running."}
+              ? t(locale, "thanks.empty_unavailable")
+              : t(locale, "thanks.empty_pending")}
           </p>
         ) : (
-          <ol style={{ listStyle: "none", padding: 0, margin: 0, display: "flex", flexDirection: "column", gap: 18 }}>
+          <ol
+            style={{
+              listStyle: "none",
+              padding: 0,
+              margin: 0,
+              display: "flex",
+              flexDirection: "column",
+              gap: 18,
+            }}
+          >
             {judgments.map((j) => (
               <li
                 key={j.id}
@@ -268,13 +278,11 @@ export default async function ThanksPage({
                       {j.verdict}
                     </span>
                     <span
-                      style={{
-                        marginLeft: 8,
-                        fontSize: 11,
-                        color: "#888",
-                      }}
+                      style={{ marginLeft: 8, fontSize: 11, color: "#888" }}
                     >
-                      confidence {Math.round(j.confidence * 100)}%
+                      {t(locale, "thanks.confidence_label", {
+                        percent: Math.round(j.confidence * 100),
+                      })}
                     </span>
                   </div>
                   <span style={{ fontSize: 10, color: "#aaa" }}>{j.model}</span>
@@ -307,7 +315,7 @@ export default async function ThanksPage({
                 )}
                 {j.humanReviewNeeded && (
                   <div style={{ fontSize: 11, color: "#888", marginTop: 10 }}>
-                    flagged for human review
+                    {t(locale, "thanks.flagged_for_human")}
                   </div>
                 )}
               </li>
@@ -324,15 +332,14 @@ export default async function ThanksPage({
           lineHeight: 1.6,
         }}
       >
-        The AI editor is a pre-screen, not the publication decision. A human
-        editor always makes the final call. Decisions reference the public{" "}
+        {footerParts[0]}
         <Link
           href="/about/constitution"
           style={{ color: "#666", textDecoration: "underline" }}
         >
-          editorial constitution
+          {constitutionLinkText}
         </Link>
-        .
+        {footerParts[1]}
       </p>
     </main>
   );
@@ -340,21 +347,13 @@ export default async function ThanksPage({
 
 function deriveOutcome(
   status: typeof submissions.$inferSelect["status"],
-  aiDecision:
-    | typeof moderationDecisions.$inferSelect
-    | undefined,
+  aiDecision: typeof moderationDecisions.$inferSelect | undefined,
 ): AiOutcome {
   if (status === "published") return "published";
-
-  // No AI row yet — the editor hasn't finished, or never started.
   if (!aiDecision) return "pending";
-
-  // Engine's "all checkers failed" path writes a rationale that starts with
-  // this prefix; the submission lands in human_review with no judgments.
   if (aiDecision.rationale?.startsWith("AI editor unreachable")) {
     return "unavailable";
   }
-
   switch (aiDecision.decision) {
     case "reject":
       return "declined";

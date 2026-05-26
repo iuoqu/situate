@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 import { useEffect, useRef, useState } from "react";
 
 import { submitFromForm, type SubmitFormPayload } from "@/app/actions";
+import { LangSwitch } from "@/components/lang-switch";
 import type {
   AiUsageLabel,
   AuthorRelationship,
@@ -12,6 +13,7 @@ import type {
   StoryType,
   SupportedLanguage,
 } from "@/db/schema";
+import { t } from "@/lib/i18n";
 
 const MAPBOX_TOKEN = process.env.NEXT_PUBLIC_MAPBOX_TOKEN;
 if (typeof window !== "undefined" && MAPBOX_TOKEN) {
@@ -34,41 +36,6 @@ const LANGUAGES: { value: SupportedLanguage; label: string }[] = [
   { value: "ko", label: "한국어" },
 ];
 
-const RELATIONSHIPS: { value: AuthorRelationship; label: string }[] = [
-  { value: "born_there", label: "I was born there" },
-  { value: "lived_there", label: "I lived there" },
-  { value: "worked_there", label: "I worked there" },
-  { value: "researched", label: "I researched this place for this story" },
-  { value: "passing_through", label: "I was passing through" },
-  { value: "never_been", label: "I have never been there" },
-];
-
-const RISK_OPTIONS = [
-  { value: "recently_deceased", label: "A real, recently deceased person (≤10 years)" },
-  { value: "recent_disaster", label: "A real, recent disaster or tragedy" },
-  { value: "ongoing_conflict", label: "An ongoing conflict or trauma" },
-  { value: "strong_local_reaction", label: "I know a specific person/community will react strongly" },
-];
-
-const AI_USAGE_OPTIONS: { value: AiUsageLabel; label: string; help: string }[] = [
-  { value: "human_written", label: "Human-written", help: "No AI used in writing" },
-  {
-    value: "human_written_ai_translated",
-    label: "Human-written, AI-translated",
-    help: "I wrote the original; AI handled translation or copy-edits on the language layer",
-  },
-  {
-    value: "ai_assisted",
-    label: "AI-assisted",
-    help: "AI helped me brainstorm or rewrite parts, but the imagining was mine",
-  },
-  {
-    value: "ai_created",
-    label: "AI-created",
-    help: "AI authored or substantially revised the prose — flagged for editorial review (P8)",
-  },
-];
-
 function newScene(longitude: number, latitude: number): Scene {
   return {
     id: crypto.randomUUID(),
@@ -88,8 +55,10 @@ function countWordsClient(s: string): number {
 }
 
 export function SubmitForm({
+  locale,
   constitutionSignature,
 }: {
+  locale: SupportedLanguage;
   constitutionSignature: string;
 }) {
   const router = useRouter();
@@ -97,14 +66,14 @@ export function SubmitForm({
   const mapRef = useRef<mapboxgl.Map | null>(null);
   const markersRef = useRef<Map<string, mapboxgl.Marker>>(new Map());
 
-  // F7
+  // F7 metadata
   const [title, setTitle] = useState("");
   const [abstract, setAbstract] = useState("");
   const [language, setLanguage] = useState<SupportedLanguage>("en");
   const [authorEmail, setAuthorEmail] = useState("");
   const [authorPenName, setAuthorPenName] = useState("");
 
-  // F1
+  // F1 scenes
   const [scenes, setScenes] = useState<Scene[]>([]);
   const [relocationTest, setRelocationTest] = useState("");
 
@@ -117,7 +86,7 @@ export function SubmitForm({
   // F3
   const [storyType, setStoryType] = useState<StoryType>("fiction");
 
-  // F4 (conditional)
+  // F4
   const [hasRealPeople, setHasRealPeople] = useState(false);
   const [consentStatus, setConsentStatus] = useState<ConsentStatus>("explicit");
   const [consentExplanation, setConsentExplanation] = useState("");
@@ -138,11 +107,33 @@ export function SubmitForm({
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  // Computed
   const totalWords = scenes.reduce((sum, s) => sum + countWordsClient(s.content), 0);
   const relocationWords = countWordsClient(relocationTest);
   const showField4 = storyType === "based_on_reality";
   const showRiskExplanation = sensitivityWarnings.length > 0;
+
+  // Localised option lists — re-derived per render so locale changes
+  // (rare in practice, but possible) propagate immediately.
+  const RELATIONSHIPS: { value: AuthorRelationship; label: string }[] = [
+    { value: "born_there", label: t(locale, "submit.rel_born_there") },
+    { value: "lived_there", label: t(locale, "submit.rel_lived_there") },
+    { value: "worked_there", label: t(locale, "submit.rel_worked_there") },
+    { value: "researched", label: t(locale, "submit.rel_researched") },
+    { value: "passing_through", label: t(locale, "submit.rel_passing_through") },
+    { value: "never_been", label: t(locale, "submit.rel_never_been") },
+  ];
+  const RISK_OPTIONS: { value: string; label: string }[] = [
+    { value: "recently_deceased", label: t(locale, "submit.risk_recently_deceased") },
+    { value: "recent_disaster", label: t(locale, "submit.risk_recent_disaster") },
+    { value: "ongoing_conflict", label: t(locale, "submit.risk_ongoing_conflict") },
+    { value: "strong_local_reaction", label: t(locale, "submit.risk_strong_local_reaction") },
+  ];
+  const AI_USAGE_OPTIONS: { value: AiUsageLabel; label: string; help: string }[] = [
+    { value: "human_written", label: t(locale, "submit.ai_human_written"), help: t(locale, "submit.ai_human_written_desc") },
+    { value: "human_written_ai_translated", label: t(locale, "submit.ai_translated"), help: t(locale, "submit.ai_translated_desc") },
+    { value: "ai_assisted", label: t(locale, "submit.ai_assisted"), help: t(locale, "submit.ai_assisted_desc") },
+    { value: "ai_created", label: t(locale, "submit.ai_created"), help: t(locale, "submit.ai_created_desc") },
+  ];
 
   // Initialize the map once.
   useEffect(() => {
@@ -196,7 +187,6 @@ export function SubmitForm({
       });
       markersRef.current.set(scene.id, marker);
     }
-    // Update pin labels in case scenes were reordered/removed.
     for (const [idx, scene] of scenes.entries()) {
       const marker = markersRef.current.get(scene.id);
       if (marker) {
@@ -223,19 +213,19 @@ export function SubmitForm({
     setError(null);
 
     if (scenes.length === 0) {
-      setError("Please drop at least one pin on the map.");
+      setError(t(locale, "submit.err_no_pins"));
       return;
     }
     if (totalWords < 800 || totalWords > 2500) {
-      setError(`Total word count must be between 800 and 2500 (currently ${totalWords}).`);
+      setError(t(locale, "submit.err_word_count", { count: totalWords }));
       return;
     }
     if (relocationWords < 50) {
-      setError(`"Why these places, in this order?" must be at least 50 words (currently ${relocationWords}).`);
+      setError(t(locale, "submit.err_relocation_too_short", { count: relocationWords }));
       return;
     }
     if (!legalAttestation) {
-      setError("Please confirm the four attestation checkboxes before submitting.");
+      setError(t(locale, "submit.err_attestation_required"));
       return;
     }
 
@@ -246,7 +236,7 @@ export function SubmitForm({
       language,
       authorEmail: authorEmail.trim(),
       authorPenName: authorPenName.trim() || null,
-      authorId: authorEmail.trim(), // until real auth lands, email = identity
+      authorId: authorEmail.trim(),
       scenes: scenes.map((s, idx) => ({
         longitude: s.longitude,
         latitude: s.latitude,
@@ -266,9 +256,10 @@ export function SubmitForm({
         : null,
       storyType,
       hasRealPeople: storyType === "based_on_reality" && hasRealPeople,
-      consentStatus: storyType === "based_on_reality" && hasRealPeople
-        ? consentStatus
-        : "not_applicable",
+      consentStatus:
+        storyType === "based_on_reality" && hasRealPeople
+          ? consentStatus
+          : "not_applicable",
       consentExplanation: consentExplanation.trim() || null,
       realPersonsList: realPersonsList
         .split(/,|\n/)
@@ -287,26 +278,37 @@ export function SubmitForm({
       const result = await submitFromForm(payload);
       router.push(`/submit/thanks/${result.submissionId}`);
     } catch (err) {
+      // Server-side error messages are English (developer-oriented). UX-
+      // critical errors are caught client-side above and localised.
       setError(err instanceof Error ? err.message : "Submission failed.");
       setSubmitting(false);
     }
   }
 
+  // Render the F7 attestation text with the {constitution_link} placeholder
+  // replaced by an anchor tag, preserving any locale-specific surround.
+  const attestationTemplate = t(locale, "submit.attestation_text");
+  const constitutionLinkLabel = t(locale, "submit.attestation_constitution_link", {
+    signature: constitutionSignature,
+  });
+  const attestationParts = attestationTemplate.split("{constitution_link}");
+
   return (
     <main style={mainStyle}>
+      <LangSwitch current={locale} />
+
       <header style={{ marginBottom: 40 }}>
-        <h1 style={h1Style}>Submit a piece</h1>
-        <p style={leadStyle}>
-          We publish flash fiction (800–2500 words) anchored to real places.
-          This form runs through an AI editor on submission; you’ll see the
-          verdict right after you submit.
-        </p>
+        <h1 style={h1Style}>{t(locale, "submit.page_title")}</h1>
+        <p style={leadStyle}>{t(locale, "submit.lead")}</p>
       </header>
 
       <form onSubmit={handleSubmit} style={{ display: "flex", flexDirection: "column", gap: 36 }}>
-        {/* ─── Title / abstract / language / author ─── */}
-        <Section title="Your story" hint="The basics — title, language, author identity.">
-          <Field label="Title">
+        {/* ─── Your story ─── */}
+        <Section
+          title={t(locale, "submit.section_your_story_title")}
+          hint={t(locale, "submit.section_your_story_hint")}
+        >
+          <Field label={t(locale, "submit.field_title")}>
             <input
               required
               value={title}
@@ -315,7 +317,7 @@ export function SubmitForm({
               maxLength={200}
             />
           </Field>
-          <Field label="One-line abstract (optional)">
+          <Field label={t(locale, "submit.field_abstract")}>
             <input
               value={abstract}
               onChange={(e) => setAbstract(e.target.value)}
@@ -324,7 +326,7 @@ export function SubmitForm({
             />
           </Field>
           <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 16 }}>
-            <Field label="Source language">
+            <Field label={t(locale, "submit.field_source_language")}>
               <select
                 value={language}
                 onChange={(e) => setLanguage(e.target.value as SupportedLanguage)}
@@ -337,18 +339,21 @@ export function SubmitForm({
                 ))}
               </select>
             </Field>
-            <Field label="Email">
+            <Field label={t(locale, "submit.field_email")}>
               <input
                 required
                 type="email"
                 value={authorEmail}
                 onChange={(e) => setAuthorEmail(e.target.value)}
                 style={inputStyle}
-                placeholder="you@example.com"
+                placeholder={t(locale, "submit.email_placeholder")}
               />
             </Field>
           </div>
-          <Field label="Pen name (optional)" hint="If different from your legal name.">
+          <Field
+            label={t(locale, "submit.field_pen_name")}
+            hint={t(locale, "submit.field_pen_name_hint")}
+          >
             <input
               value={authorPenName}
               onChange={(e) => setAuthorPenName(e.target.value)}
@@ -360,28 +365,32 @@ export function SubmitForm({
 
         {/* ─── F1: scenes on the map ─── */}
         <Section
-          title="F1 — Where does your story happen?"
-          hint="Click on the map to drop a pin for each scene. You can drop up to 6. Drag pins to fine-tune their position. Pin order = narrative order."
+          title={t(locale, "submit.section_f1_title")}
+          hint={t(locale, "submit.section_f1_hint")}
         >
           <div style={{ position: "relative", width: "100%", height: 400, borderRadius: 4, overflow: "hidden", border: "1px solid #e8e3d8" }}>
             <div ref={mapContainer} style={{ position: "absolute", inset: 0 }} />
             <div style={{ position: "absolute", top: 12, right: 12, padding: "6px 10px", background: "rgba(255,255,255,.92)", borderRadius: 3, fontFamily: "system-ui", fontSize: 11, color: "#555" }}>
-              {scenes.length}/6 pins
+              {t(locale, "submit.pins_indicator", { current: scenes.length })}
             </div>
           </div>
 
           {scenes.length === 0 ? (
-            <p style={mutedStyle}>No pins yet. Click on the map to place your first scene.</p>
+            <p style={mutedStyle}>{t(locale, "submit.pins_empty")}</p>
           ) : (
             <ol style={{ listStyle: "none", padding: 0, margin: 0, display: "flex", flexDirection: "column", gap: 18 }}>
               {scenes.map((scene, idx) => (
                 <li key={scene.id} style={{ border: "1px solid #e8e3d8", padding: 16, borderRadius: 4, background: "white" }}>
                   <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline", marginBottom: 10 }}>
                     <strong style={{ fontFamily: "system-ui", fontSize: 12, letterSpacing: 1, textTransform: "uppercase", color: "#9b8a6b" }}>
-                      Scene {String(idx + 1).padStart(2, "0")} · ({scene.longitude.toFixed(4)}, {scene.latitude.toFixed(4)})
+                      {t(locale, "submit.scene_label", {
+                        ordinal: String(idx + 1).padStart(2, "0"),
+                        lon: scene.longitude.toFixed(4),
+                        lat: scene.latitude.toFixed(4),
+                      })}
                     </strong>
                     <button type="button" onClick={() => deleteScene(scene.id)} style={smallButtonStyle}>
-                      remove
+                      {t(locale, "submit.scene_remove")}
                     </button>
                   </div>
                   <div style={{ display: "grid", gridTemplateColumns: "1fr 200px", gap: 12 }}>
@@ -390,10 +399,12 @@ export function SubmitForm({
                       value={scene.content}
                       onChange={(e) => updateScene(scene.id, { content: e.target.value })}
                       style={{ ...inputStyle, minHeight: 120, fontFamily: 'Georgia, "Times New Roman", serif', lineHeight: 1.6 }}
-                      placeholder="What happens at this place? Write the scene here."
+                      placeholder={t(locale, "submit.scene_content_placeholder")}
                     />
                     <div>
-                      <label style={smallLabelStyle}>Event date (optional)</label>
+                      <label style={smallLabelStyle}>
+                        {t(locale, "submit.scene_event_date")}
+                      </label>
                       <input
                         type="datetime-local"
                         value={scene.eventDate}
@@ -401,7 +412,7 @@ export function SubmitForm({
                         style={inputStyle}
                       />
                       <div style={{ marginTop: 6, fontSize: 11, color: "#999" }}>
-                        {countWordsClient(scene.content)} words
+                        {t(locale, "submit.scene_word_count", { count: countWordsClient(scene.content) })}
                       </div>
                     </div>
                   </div>
@@ -411,12 +422,12 @@ export function SubmitForm({
           )}
 
           <div style={{ fontSize: 12, color: "#888", marginTop: 4 }}>
-            Total: <strong>{totalWords}</strong> words. Required range 800–2500.
+            {t(locale, "submit.total_words_line", { count: totalWords })}
           </div>
 
           <Field
-            label="Why these places, in this order? (the relocation test)"
-            hint={`At least 50 words (currently ${relocationWords}). What would break if the route were moved or reshuffled? Cite specific local features — geography, transit, language, ritual — not "the mood of the city."`}
+            label={t(locale, "submit.field_relocation_test")}
+            hint={t(locale, "submit.field_relocation_test_hint", { count: relocationWords })}
           >
             <textarea
               required
@@ -428,7 +439,10 @@ export function SubmitForm({
         </Section>
 
         {/* ─── F2: affinity ─── */}
-        <Section title="F2 — Your relationship to these places" hint="All six are equally valid — this just tells us your distance.">
+        <Section
+          title={t(locale, "submit.section_f2_title")}
+          hint={t(locale, "submit.section_f2_hint")}
+        >
           <Field>
             <select
               value={relationship}
@@ -443,41 +457,37 @@ export function SubmitForm({
             </select>
           </Field>
           {(relationship === "lived_there" || relationship === "worked_there") && (
-            <Field label="Duration / dates">
+            <Field label={t(locale, "submit.field_duration")}>
               <input
                 value={relationshipDuration}
                 onChange={(e) => setRelationshipDuration(e.target.value)}
                 style={inputStyle}
-                placeholder="e.g. 2015–2020, or “3 years”"
+                placeholder={t(locale, "submit.duration_placeholder")}
               />
             </Field>
           )}
-          <Field
-            hint="If disclosing your relationship to this place could endanger you — exile, dissident writing, ongoing safety concerns — tick the box and we will hold the affinity in confidence and publish a redacted note in its place. (Constitution v0.2 / P4)"
-          >
+          <Field hint={t(locale, "submit.confidentiality_hint")}>
             <label style={checkboxRowStyle}>
               <input
                 type="checkbox"
                 checked={affinityConfidential}
                 onChange={(e) => setAffinityConfidential(e.target.checked)}
               />
-              <span>I request confidentiality for safety reasons.</span>
+              <span>{t(locale, "submit.confidentiality_checkbox")}</span>
             </label>
             {affinityConfidential && (
               <input
                 value={affinityConfidentialReason}
-                onChange={(e) =>
-                  setAffinityConfidentialReason(e.target.value)
-                }
+                onChange={(e) => setAffinityConfidentialReason(e.target.value)}
                 style={{ ...inputStyle, marginTop: 8 }}
-                placeholder="Brief reason (kept private to editors)"
+                placeholder={t(locale, "submit.confidentiality_reason_placeholder")}
               />
             )}
           </Field>
         </Section>
 
         {/* ─── F3: story type ─── */}
-        <Section title="F3 — Fiction or based on reality?">
+        <Section title={t(locale, "submit.section_f3_title")}>
           <Field>
             <label style={radioRowStyle}>
               <input
@@ -487,7 +497,8 @@ export function SubmitForm({
                 onChange={() => setStoryType("fiction")}
               />
               <span>
-                <strong>Fiction.</strong> People, events, conflicts are invented or altered enough to be unrecognizable.
+                <strong>{t(locale, "submit.story_type_fiction")}</strong>{" "}
+                {t(locale, "submit.story_type_fiction_desc")}
               </span>
             </label>
             <label style={radioRowStyle}>
@@ -498,7 +509,8 @@ export function SubmitForm({
                 onChange={() => setStoryType("based_on_reality")}
               />
               <span>
-                <strong>Based on reality.</strong> Real events or real people I witnessed, experienced, or carefully researched.
+                <strong>{t(locale, "submit.story_type_reality")}</strong>{" "}
+                {t(locale, "submit.story_type_reality_desc")}
               </span>
             </label>
           </Field>
@@ -507,8 +519,8 @@ export function SubmitForm({
         {/* ─── F4: real people consent (conditional) ─── */}
         {showField4 && (
           <Section
-            title="F4 — Real people"
-            hint="You chose 'based on reality.' Tell us about any identifiable real people in the piece."
+            title={t(locale, "submit.section_f4_title")}
+            hint={t(locale, "submit.section_f4_hint")}
           >
             <Field>
               <label style={checkboxRowStyle}>
@@ -517,27 +529,27 @@ export function SubmitForm({
                   checked={hasRealPeople}
                   onChange={(e) => setHasRealPeople(e.target.checked)}
                 />
-                <span>This story includes real, identifiable people.</span>
+                <span>{t(locale, "submit.f4_has_real_people")}</span>
               </label>
             </Field>
             {hasRealPeople && (
               <>
-                <Field label="Consent status">
+                <Field label={t(locale, "submit.field_consent_status")}>
                   <select
                     value={consentStatus}
                     onChange={(e) => setConsentStatus(e.target.value as ConsentStatus)}
                     style={inputStyle}
                   >
-                    <option value="explicit">Yes — I have explicit consent</option>
-                    <option value="deceased">No consent — the person is deceased</option>
-                    <option value="public_figure">No consent — public figure in public conduct</option>
-                    <option value="transformed">No consent — sufficiently transformed</option>
-                    <option value="no_consent">No consent (none of the above)</option>
+                    <option value="explicit">{t(locale, "submit.consent_explicit")}</option>
+                    <option value="deceased">{t(locale, "submit.consent_deceased")}</option>
+                    <option value="public_figure">{t(locale, "submit.consent_public_figure")}</option>
+                    <option value="transformed">{t(locale, "submit.consent_transformed")}</option>
+                    <option value="no_consent">{t(locale, "submit.consent_no_consent")}</option>
                   </select>
                 </Field>
                 <Field
-                  label="Explanation (required if no explicit consent)"
-                  hint="Brief — why is depicting this person without consent OK in this piece?"
+                  label={t(locale, "submit.field_consent_explanation")}
+                  hint={t(locale, "submit.field_consent_explanation_hint")}
                 >
                   <textarea
                     value={consentExplanation}
@@ -545,7 +557,10 @@ export function SubmitForm({
                     style={{ ...inputStyle, minHeight: 80 }}
                   />
                 </Field>
-                <Field label="Who are these people?" hint="Brief description; one per line or comma-separated.">
+                <Field
+                  label={t(locale, "submit.field_real_persons_list")}
+                  hint={t(locale, "submit.field_real_persons_list_hint")}
+                >
                   <textarea
                     value={realPersonsList}
                     onChange={(e) => setRealPersonsList(e.target.value)}
@@ -559,8 +574,8 @@ export function SubmitForm({
 
         {/* ─── F5: AI in composition ─── */}
         <Section
-          title="F5 — AI in writing this piece"
-          hint="Be honest. AI translation ≠ AI creation. (Translator-side AI is logged separately on every translation row.)"
+          title={t(locale, "submit.section_f5_title")}
+          hint={t(locale, "submit.section_f5_hint")}
         >
           <Field>
             {AI_USAGE_OPTIONS.map((opt) => (
@@ -572,25 +587,26 @@ export function SubmitForm({
                   onChange={() => setAiUsageLabel(opt.value)}
                 />
                 <span>
-                  <strong>{opt.label}.</strong> <span style={{ color: "#666" }}>{opt.help}</span>
+                  <strong>{opt.label}</strong>{" "}
+                  <span style={{ color: "#666" }}>{opt.help}</span>
                 </span>
               </label>
             ))}
           </Field>
-          <Field label="Notes (optional)">
+          <Field label={t(locale, "submit.field_ai_notes")}>
             <textarea
               value={aiNotes}
               onChange={(e) => setAiNotes(e.target.value)}
               style={{ ...inputStyle, minHeight: 60 }}
-              placeholder="e.g. 'Used Claude to draft the opening, rewrote it myself.'"
+              placeholder={t(locale, "submit.ai_notes_placeholder")}
             />
           </Field>
         </Section>
 
         {/* ─── F6: known harm risks ─── */}
         <Section
-          title="F6 — Known harm risks"
-          hint="Heads-up to the editorial team. Disclosing risks doesn't auto-reject — hiding them is what creates problems later."
+          title={t(locale, "submit.section_f6_title")}
+          hint={t(locale, "submit.section_f6_hint")}
         >
           <Field>
             {RISK_OPTIONS.map((r) => (
@@ -609,11 +625,14 @@ export function SubmitForm({
                 checked={satireDisclosure}
                 onChange={(e) => setSatireDisclosure(e.target.checked)}
               />
-              <span>This piece is satirical.</span>
+              <span>{t(locale, "submit.risk_satire")}</span>
             </label>
           </Field>
           {showRiskExplanation && (
-            <Field label="Explain (≥ 50 words)" hint="Required if you checked any risk above.">
+            <Field
+              label={t(locale, "submit.field_risks_explanation")}
+              hint={t(locale, "submit.field_risks_explanation_hint")}
+            >
               <textarea
                 value={risksExplanation}
                 onChange={(e) => setRisksExplanation(e.target.value)}
@@ -624,7 +643,10 @@ export function SubmitForm({
         </Section>
 
         {/* ─── F7: legal attestation ─── */}
-        <Section title="F7 — Attestation" hint="Your signature here is a legal statement.">
+        <Section
+          title={t(locale, "submit.section_f7_title")}
+          hint={t(locale, "submit.section_f7_hint")}
+        >
           <label style={checkboxRowStyle}>
             <input
               type="checkbox"
@@ -632,19 +654,31 @@ export function SubmitForm({
               onChange={(e) => setLegalAttestation(e.target.checked)}
             />
             <span>
-              I have read and accept the{" "}
-              <a href="/about/constitution" target="_blank" style={{ color: "#1a1a1a", textDecoration: "underline" }}>
-                editorial constitution ({constitutionSignature})
+              {attestationParts[0]}
+              <a
+                href="/about/constitution"
+                target="_blank"
+                style={{ color: "#1a1a1a", textDecoration: "underline" }}
+              >
+                {constitutionLinkLabel}
               </a>
-              . The information in this form is true and accurate. I am legally responsible
-              for claims about real people. I understand the piece may be removed if legal
-              issues arise.
+              {attestationParts[1]}
             </span>
           </label>
         </Section>
 
         {error && (
-          <div role="alert" style={{ padding: 14, background: "#fce9e9", border: "1px solid #dc2626", borderRadius: 4, color: "#7f1d1d", fontSize: 14 }}>
+          <div
+            role="alert"
+            style={{
+              padding: 14,
+              background: "#fce9e9",
+              border: "1px solid #dc2626",
+              borderRadius: 4,
+              color: "#7f1d1d",
+              fontSize: 14,
+            }}
+          >
             {error}
           </div>
         )}
@@ -665,14 +699,14 @@ export function SubmitForm({
             cursor: submitting ? "not-allowed" : "pointer",
           }}
         >
-          {submitting ? "AI editor is reading your piece — about 10 seconds…" : "Submit for editorial review"}
+          {submitting
+            ? t(locale, "submit.button_submit_loading")
+            : t(locale, "submit.button_submit")}
         </button>
       </form>
     </main>
   );
 }
-
-// ─── Layout primitives ─────────────────────────────────────────────────────
 
 function Section({
   title,
@@ -713,8 +747,6 @@ function Field({
     </div>
   );
 }
-
-// ─── Styles ────────────────────────────────────────────────────────────────
 
 const mainStyle: React.CSSProperties = {
   maxWidth: 820,
