@@ -1,4 +1,4 @@
-@import "maplibre-gl/dist/maplibre-gl.css";
+@import "mapbox-gl/dist/mapbox-gl.css";
 
 * {
   box-sizing: border-box;
@@ -22,7 +22,7 @@ a {
   color: #1a1a1a;
 }
 
-.maplibregl-popup-content {
+.mapboxgl-popup-content {
   font-family: Georgia, "Times New Roman", serif;
   font-size: 14px;
   line-height: 1.5;

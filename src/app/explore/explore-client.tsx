@@ -1,6 +1,6 @@
 "use client";
 
-import maplibregl from "maplibre-gl";
+import mapboxgl from "mapbox-gl";
 import { useCallback, useEffect, useRef, useState } from "react";
 
 import {
@@ -10,6 +10,18 @@ import {
 } from "@/app/actions";
 import type { SupportedLanguage } from "@/db/schema";
 import { renderTranslation } from "@/lib/rendering";
+
+// Public Mapbox token. Safe to expose to the browser when restricted to
+// allowed URLs in the Mapbox dashboard. Set in `.env` (local) or in your
+// hosting provider's environment variables (Vercel etc.).
+const MAPBOX_TOKEN = process.env.NEXT_PUBLIC_MAPBOX_TOKEN;
+if (MAPBOX_TOKEN) {
+  mapboxgl.accessToken = MAPBOX_TOKEN;
+}
+
+// Editorial-leaning default. Swap in a custom Mapbox Studio style URL
+// (`mapbox://styles/<account>/<style-id>`) once the brand visual is set.
+const MAP_STYLE = "mapbox://styles/mapbox/light-v11";
 
 const LANGUAGES: { value: SupportedLanguage; label: string }[] = [
   { value: "en", label: "English" },
@@ -33,8 +45,8 @@ const TIER_BADGE: Record<ViewportBlock["accessTier"], string> = {
 
 export function ExploreClient() {
   const containerRef = useRef<HTMLDivElement>(null);
-  const mapRef = useRef<maplibregl.Map | null>(null);
-  const markersRef = useRef<maplibregl.Marker[]>([]);
+  const mapRef = useRef<mapboxgl.Map | null>(null);
+  const markersRef = useRef<mapboxgl.Marker[]>([]);
   const latestRequestId = useRef(0);
 
   const [language, setLanguage] = useState<SupportedLanguage>("en");
@@ -47,6 +59,7 @@ export function ExploreClient() {
     const map = mapRef.current;
     if (!map) return;
     const bounds = map.getBounds();
+    if (!bounds) return; // mapbox-gl can return null before the map sizes itself
     const requestId = ++latestRequestId.current;
     setLoading(true);
     try {
@@ -73,14 +86,19 @@ export function ExploreClient() {
   // Initialize map once.
   useEffect(() => {
     if (!containerRef.current || mapRef.current) return;
-    const map = new maplibregl.Map({
+    if (!MAPBOX_TOKEN) {
+      console.error(
+        "NEXT_PUBLIC_MAPBOX_TOKEN is not set. Get a public token at https://account.mapbox.com/access-tokens/ and add it to .env or your hosting provider's environment variables.",
+      );
+      return;
+    }
+    const map = new mapboxgl.Map({
       container: containerRef.current,
-      style: "https://tiles.openfreemap.org/styles/positron",
+      style: MAP_STYLE,
       center: [139.7006, 35.6745], // Tokyo, between Shibuya and Shinjuku
       zoom: 12,
-      attributionControl: { compact: true },
     });
-    map.addControl(new maplibregl.NavigationControl({ showCompass: false }));
+    map.addControl(new mapboxgl.NavigationControl({ showCompass: false }));
     mapRef.current = map;
     // Bounds are available immediately after construction; firing refresh
     // here means pins surface even if the base-map tiles are slow or
@@ -128,7 +146,7 @@ export function ExploreClient() {
       ].join(";");
       el.title = `${block.method.replace("_", " ")} · ${block.language}`;
       el.addEventListener("click", () => setSelected(block));
-      const marker = new maplibregl.Marker({ element: el })
+      const marker = new mapboxgl.Marker({ element: el })
         .setLngLat([block.longitude, block.latitude])
         .addTo(map);
       markersRef.current.push(marker);
@@ -137,7 +155,45 @@ export function ExploreClient() {
 
   return (
     <div style={{ position: "relative", width: "100vw", height: "100vh" }}>
-      <div ref={containerRef} style={{ position: "absolute", inset: 0 }} />
+      <div ref={containerRef} style={{ position: "absolute", inset: 0, background: "#fafaf7" }} />
+
+      {!MAPBOX_TOKEN && (
+        <div
+          style={{
+            position: "absolute",
+            inset: 0,
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "center",
+            background: "rgba(250,250,247,.96)",
+            zIndex: 10,
+          }}
+        >
+          <div
+            style={{
+              maxWidth: 440,
+              padding: 28,
+              background: "white",
+              border: "1px solid #ddd",
+              borderRadius: 8,
+              fontFamily: 'Georgia, "Times New Roman", serif',
+            }}
+          >
+            <div style={{ fontSize: 18, marginBottom: 10 }}>Mapbox token missing</div>
+            <div style={{ fontSize: 14, color: "#555", lineHeight: 1.6 }}>
+              Set <code style={{ background: "#f3f3ef", padding: "1px 5px", fontFamily: "monospace" }}>NEXT_PUBLIC_MAPBOX_TOKEN</code> in
+              your <code style={{ background: "#f3f3ef", padding: "1px 5px", fontFamily: "monospace" }}>.env</code> file
+              (local) or in your hosting provider&apos;s environment variables.
+              Get a public token at{" "}
+              <a href="https://account.mapbox.com/access-tokens/" target="_blank" rel="noreferrer">
+                account.mapbox.com/access-tokens
+              </a>
+              .
+            </div>
+          </div>
+        </div>
+      )}
+
 
       {/* Reader controls */}
       <div
