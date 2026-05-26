@@ -2,19 +2,13 @@ import Link from "next/link";
 import { notFound } from "next/navigation";
 
 import { getEditionBySlug } from "@/app/actions";
-import type { SupportedLanguage } from "@/db/schema";
+import { LangSwitch } from "@/components/lang-switch";
+import { getReaderPrefs } from "@/lib/reader-prefs";
 
 export const dynamic = "force-dynamic";
 
-function pickLanguage(raw: string | undefined): SupportedLanguage {
-  const allowed: SupportedLanguage[] = ["en", "zh_CN", "zh_TW", "ja", "ko"];
-  return allowed.includes(raw as SupportedLanguage)
-    ? (raw as SupportedLanguage)
-    : "en";
-}
-
 type Params = Promise<{ slug: string }>;
-type Search = Promise<{ lang?: string }>;
+type Search = Promise<{ lang?: string; access?: string }>;
 
 export default async function EditionPage({
   params,
@@ -24,12 +18,15 @@ export default async function EditionPage({
   searchParams: Search;
 }) {
   const { slug } = await params;
-  const { lang } = await searchParams;
-  const readerLanguage = pickLanguage(lang);
+  const sp = await searchParams;
+  const { language: readerLanguage, accessLevel } = await getReaderPrefs({
+    langParam: sp.lang,
+    accessParam: sp.access,
+  });
 
   const data = await getEditionBySlug(slug, {
     readerLanguage,
-    accessLevel: "free",
+    accessLevel,
   });
   if (!data) notFound();
 
@@ -53,6 +50,7 @@ export default async function EditionPage({
         lineHeight: 1.7,
       }}
     >
+      <LangSwitch current={readerLanguage} />
       <Link
         href="/"
         style={{
@@ -177,7 +175,7 @@ export default async function EditionPage({
                 }}
               >
                 <Link
-                  href={`/stories/${submission.id}${lang ? `?lang=${lang}` : ""}`}
+                  href={`/stories/${submission.id}?lang=${readerLanguage}`}
                   style={{
                     textDecoration: "none",
                     color: "inherit",

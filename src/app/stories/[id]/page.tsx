@@ -2,8 +2,11 @@ import Link from "next/link";
 import { notFound } from "next/navigation";
 
 import { getSubmissionForReader } from "@/app/actions";
-import type { SupportedLanguage } from "@/db/schema";
+import { LangSwitch } from "@/components/lang-switch";
+import { getReaderPrefs } from "@/lib/reader-prefs";
 import { renderTranslation } from "@/lib/rendering";
+
+import { StoryMap } from "./story-map";
 
 export const dynamic = "force-dynamic";
 
@@ -20,15 +23,8 @@ const TIER_COLOR: Record<string, string> = {
   premium: "#9333ea",
 };
 
-function pickLanguage(raw: string | undefined): SupportedLanguage {
-  const allowed: SupportedLanguage[] = ["en", "zh_CN", "zh_TW", "ja", "ko"];
-  return allowed.includes(raw as SupportedLanguage)
-    ? (raw as SupportedLanguage)
-    : "en";
-}
-
 type Params = Promise<{ id: string }>;
-type Search = Promise<{ lang?: string }>;
+type Search = Promise<{ lang?: string; access?: string }>;
 
 export default async function StoryPage({
   params,
@@ -38,13 +34,15 @@ export default async function StoryPage({
   searchParams: Search;
 }) {
   const { id } = await params;
-  const { lang } = await searchParams;
-  const readerLanguage = pickLanguage(lang);
+  const sp = await searchParams;
+  const { language: readerLanguage, accessLevel } = await getReaderPrefs({
+    langParam: sp.lang,
+    accessParam: sp.access,
+  });
 
-  // TODO: once auth lands, derive accessLevel from the reader's subscription.
   const detail = await getSubmissionForReader(id, {
     readerLanguage,
-    accessLevel: "free",
+    accessLevel,
   });
   if (!detail) notFound();
 
@@ -61,6 +59,7 @@ export default async function StoryPage({
         lineHeight: 1.7,
       }}
     >
+      <LangSwitch current={readerLanguage} />
       <Link
         href="/explore"
         style={{
@@ -144,6 +143,15 @@ export default async function StoryPage({
           borderTop: "1px solid #e8e3d8",
           margin: "40px 0",
         }}
+      />
+
+      <StoryMap
+        points={blocks.map((b, idx) => ({
+          blockId: b.blockId,
+          longitude: b.longitude,
+          latitude: b.latitude,
+          ordinal: idx + 1,
+        }))}
       />
 
       {blocks.length === 0 ? (

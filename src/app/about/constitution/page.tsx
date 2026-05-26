@@ -1,7 +1,9 @@
 import Link from "next/link";
 
 import { getActivePrinciples } from "@/app/actions";
+import { LangSwitch } from "@/components/lang-switch";
 import type { SupportedLanguage } from "@/db/schema";
+import { getReaderPrefs } from "@/lib/reader-prefs";
 
 // The page is a runtime read of editorial_principles, so don't try to
 // prerender it at build time (which would need DATABASE_URL in the build
@@ -40,13 +42,6 @@ const HEADINGS: Partial<Record<SupportedLanguage, { title: string; effective: st
 
 type ConstitutionSearchParams = Promise<{ lang?: string }>;
 
-function pickLanguage(raw: string | undefined): SupportedLanguage {
-  const allowed: SupportedLanguage[] = ["en", "zh_CN", "zh_TW", "ja", "ko"];
-  return allowed.includes(raw as SupportedLanguage)
-    ? (raw as SupportedLanguage)
-    : "en";
-}
-
 function pickI18n<T>(
   bag: Partial<Record<SupportedLanguage, T>>,
   lang: SupportedLanguage,
@@ -66,7 +61,7 @@ export default async function ConstitutionPage({
   searchParams: ConstitutionSearchParams;
 }) {
   const params = await searchParams;
-  const lang = pickLanguage(params.lang);
+  const { language: lang } = await getReaderPrefs({ langParam: params.lang });
   const principles = await getActivePrinciples();
   const preamble = pickI18n(PREAMBLE, lang).value;
   const headings = pickI18n(HEADINGS, lang).value;
@@ -82,7 +77,7 @@ export default async function ConstitutionPage({
         lineHeight: 1.7,
       }}
     >
-      <LanguageSwitcher current={lang} />
+      <LangSwitch current={lang} />
 
       <header style={{ marginBottom: 56 }}>
         <Link
@@ -222,44 +217,3 @@ export default async function ConstitutionPage({
   );
 }
 
-function LanguageSwitcher({ current }: { current: SupportedLanguage }) {
-  const options: { code: SupportedLanguage; label: string }[] = [
-    { code: "en", label: "EN" },
-    { code: "zh_CN", label: "简" },
-    { code: "zh_TW", label: "繁" },
-    { code: "ja", label: "JA" },
-    { code: "ko", label: "KO" },
-  ];
-  return (
-    <nav
-      style={{
-        position: "fixed",
-        top: 20,
-        right: 24,
-        display: "flex",
-        gap: 6,
-        background: "rgba(255,255,255,0.92)",
-        padding: "6px 8px",
-        borderRadius: 4,
-        fontFamily: "system-ui, sans-serif",
-        fontSize: 11,
-        letterSpacing: 1,
-      }}
-    >
-      {options.map((opt) => (
-        <Link
-          key={opt.code}
-          href={`?lang=${opt.code}`}
-          style={{
-            textDecoration: "none",
-            padding: "2px 6px",
-            color: opt.code === current ? "#1a1a1a" : "#999",
-            fontWeight: opt.code === current ? 600 : 400,
-          }}
-        >
-          {opt.label}
-        </Link>
-      ))}
-    </nav>
-  );
-}

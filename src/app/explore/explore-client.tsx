@@ -10,7 +10,23 @@ import {
   type ViewportBlock,
 } from "@/app/actions";
 import type { SupportedLanguage } from "@/db/schema";
+import {
+  ACCESS_COOKIE,
+  isSupportedAccess,
+  isSupportedLang,
+  LANG_COOKIE,
+  writeReaderPrefAccess,
+  writeReaderPrefLang,
+} from "@/lib/reader-prefs";
 import { renderTranslation } from "@/lib/rendering";
+
+function readCookie(name: string): string | undefined {
+  if (typeof document === "undefined") return undefined;
+  const match = document.cookie.match(
+    new RegExp("(?:^|; )" + name.replace(/[.$?*|{}()[\]\\\/+^]/g, "\\$&") + "=([^;]*)"),
+  );
+  return match ? decodeURIComponent(match[1]) : undefined;
+}
 
 // Public Mapbox token. Safe to expose to the browser when restricted to
 // allowed URLs in the Mapbox dashboard. Set in `.env` (local) or in your
@@ -50,8 +66,26 @@ export function ExploreClient() {
   const markersRef = useRef<mapboxgl.Marker[]>([]);
   const latestRequestId = useRef(0);
 
-  const [language, setLanguage] = useState<SupportedLanguage>("en");
-  const [accessLevel, setAccessLevel] = useState<ReaderAccessLevel>("free");
+  const [language, setLanguageState] = useState<SupportedLanguage>("en");
+  const [accessLevel, setAccessLevelState] = useState<ReaderAccessLevel>("free");
+
+  // Hydrate preferences from cookies on mount. We default to 'en' / 'free'
+  // for the SSR render to avoid a hydration mismatch, then upgrade.
+  useEffect(() => {
+    const c = readCookie(LANG_COOKIE);
+    if (isSupportedLang(c)) setLanguageState(c);
+    const a = readCookie(ACCESS_COOKIE);
+    if (isSupportedAccess(a)) setAccessLevelState(a);
+  }, []);
+
+  function setLanguage(next: SupportedLanguage) {
+    writeReaderPrefLang(next);
+    setLanguageState(next);
+  }
+  function setAccessLevel(next: ReaderAccessLevel) {
+    writeReaderPrefAccess(next);
+    setAccessLevelState(next);
+  }
   const [blocks, setBlocks] = useState<ViewportBlock[]>([]);
   const [selected, setSelected] = useState<ViewportBlock | null>(null);
   const [loading, setLoading] = useState(false);
