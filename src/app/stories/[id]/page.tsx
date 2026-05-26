@@ -146,6 +146,7 @@ export default async function StoryPage({
       />
 
       <StoryMap
+        readerLanguage={readerLanguage}
         points={blocks.map((b, idx) => ({
           blockId: b.blockId,
           longitude: b.longitude,
