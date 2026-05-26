@@ -34,12 +34,15 @@ const NEAR_ZOOM = 16;
 /**
  * Atmospheric map at the top of /stories/[id]. Uses Mapbox Standard's 3D
  * buildings + terrain + day lighting to evoke the place, then on load
- * runs a cinematic flyTo tour through each pin in narrative order, ending
- * on a tilted overview that frames the whole route. A "Skip" button drops
- * straight to the overview; a "Replay" button restarts the tour.
+ * runs a cinematic flyTo tour through each pin in narrative order. Once
+ * the tour finishes (or the reader hits Skip), an IntersectionObserver
+ * watches the in-page `<article id="block-N">` elements and flies the
+ * camera to whichever block the reader is currently reading — the map
+ * stays in sync with the reading position.
  *
- * Numbered pins double as in-page anchors — clicking pin 02 smooth-scrolls
- * to <article id="block-2">.
+ * The component itself just renders the map; the surrounding page sets
+ * `position: sticky` on the wrapper so the map stays pinned at the top
+ * of the viewport while the prose scrolls below it.
  */
 export function StoryMap({
   points,
@@ -77,21 +80,17 @@ export function StoryMap({
     mapRef.current = map;
 
     map.on("style.load", () => {
-      // Localize basemap labels to the reader's language.
       try {
         map.setConfigProperty(
           "basemap",
           "language",
           MAPBOX_LANG[readerLanguage] ?? "en",
         );
-        // Standard's lighting preset; "dusk" gives long shadows that
-        // emphasize the 3D buildings.
         map.setConfigProperty("basemap", "lightPreset", "dusk");
       } catch (_err) {
-        // Older SDK / network blip — non-fatal, default lighting is fine.
+        // Older SDK or transient — non-fatal.
       }
 
-      // Route line between pins, dashed.
       if (sorted.length > 1) {
         map.addSource("story-route", {
           type: "geojson",
@@ -118,7 +117,6 @@ export function StoryMap({
         });
       }
 
-      // Numbered pins.
       for (const point of sorted) {
         const el = document.createElement("a");
         el.href = `#block-${point.ordinal}`;
@@ -152,8 +150,6 @@ export function StoryMap({
           .addTo(map);
       }
 
-      // Kick off the cinematic tour after a brief pause to let the
-      // initial frame breathe.
       setTimeout(() => runTour(map, sorted), 900);
     });
 
@@ -165,16 +161,12 @@ export function StoryMap({
       for (let i = 0; i < pts.length; i++) {
         if (cancel.cancelled) return;
         const p = pts[i];
-        // Compute bearing toward the next pin so the camera "faces forward"
-        // through the route; on the final pin, hold the last bearing.
         const next = pts[i + 1] ?? p;
-        const bearing = computeBearing(p, next);
-
         m.flyTo({
           center: [p.longitude, p.latitude],
           zoom: NEAR_ZOOM,
           pitch: PITCH,
-          bearing,
+          bearing: computeBearing(p, next),
           speed: 0.7,
           curve: 1.5,
           essential: true,
@@ -193,6 +185,51 @@ export function StoryMap({
       mapRef.current = null;
     };
   }, [points, readerLanguage]);
+
+  // Scroll-driven fly: once the intro tour completes (or the reader skips
+  // it), the map starts mirroring the reading position. We watch each
+  // `<article id="block-N">` and flyTo the matching point when a block
+  // crosses the centre band of the viewport.
+  useEffect(() => {
+    if (tourPhase !== "done" || !mapRef.current) return;
+    const map = mapRef.current;
+    const sorted = [...points].sort((a, b) => a.ordinal - b.ordinal);
+
+    let currentOrdinal = -1;
+    const observer = new IntersectionObserver(
+      (entries) => {
+        for (const entry of entries) {
+          if (!entry.isIntersecting) continue;
+          const id = (entry.target as HTMLElement).id; // "block-N"
+          const ord = parseInt(id.replace("block-", ""), 10);
+          if (Number.isNaN(ord) || ord === currentOrdinal) continue;
+          const point = sorted.find((p) => p.ordinal === ord);
+          if (!point) continue;
+          currentOrdinal = ord;
+          const next = sorted[sorted.findIndex((p) => p.ordinal === ord) + 1] ?? point;
+          map.flyTo({
+            center: [point.longitude, point.latitude],
+            zoom: NEAR_ZOOM,
+            pitch: PITCH,
+            bearing: computeBearing(point, next),
+            speed: 1.1,
+            curve: 1.4,
+            essential: true,
+          });
+        }
+      },
+      // Only fire when a block is in the middle band of the viewport,
+      // not when it first peeks in from the bottom.
+      { rootMargin: "-30% 0px -50% 0px", threshold: 0 },
+    );
+
+    for (const point of sorted) {
+      const el = document.getElementById(`block-${point.ordinal}`);
+      if (el) observer.observe(el);
+    }
+
+    return () => observer.disconnect();
+  }, [tourPhase, points]);
 
   function settle(m: mapboxgl.Map, pts: MapPoint[]) {
     if (pts.length === 1) {
@@ -290,19 +327,21 @@ export function StoryMap({
       style={{
         position: "relative",
         width: "100%",
-        height: 400,
-        marginBottom: 48,
+        // Slightly shorter than the v1 cinematic map; this version is
+        // sticky, so it sits at the top of the viewport while the prose
+        // scrolls — too tall would leave no room for the words.
+        height: "min(360px, 42vh)",
         borderRadius: 4,
         overflow: "hidden",
         border: "1px solid #e8e3d8",
-        boxShadow: "0 6px 24px rgba(0,0,0,0.08)",
+        boxShadow: "0 8px 28px rgba(0,0,0,0.10)",
       }}
     >
       <div ref={containerRef} style={{ position: "absolute", inset: 0 }} />
       {tourPhase === "running" ? (
         <button
           onClick={skip}
-          style={controlButtonStyle({ position: "top-right" })}
+          style={controlButtonStyle()}
           aria-label="Skip the map intro"
         >
           Skip
@@ -311,7 +350,7 @@ export function StoryMap({
       {tourPhase === "done" && points.length > 1 ? (
         <button
           onClick={replay}
-          style={controlButtonStyle({ position: "top-right" })}
+          style={controlButtonStyle()}
           aria-label="Replay the map tour"
         >
           ↻ Replay
@@ -321,11 +360,7 @@ export function StoryMap({
   );
 }
 
-function controlButtonStyle({
-  position,
-}: {
-  position: "top-right";
-}): React.CSSProperties {
+function controlButtonStyle(): React.CSSProperties {
   return {
     position: "absolute",
     top: 14,

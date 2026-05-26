@@ -145,32 +145,54 @@ export default async function StoryPage({
         }}
       />
 
-      <StoryMap
-        readerLanguage={readerLanguage}
-        points={blocks.map((b, idx) => ({
-          blockId: b.blockId,
-          longitude: b.longitude,
-          latitude: b.latitude,
-          ordinal: idx + 1,
-        }))}
-      />
-
-      {blocks.length === 0 ? (
-        <p style={{ color: "#888", fontStyle: "italic" }}>
-          This piece has no readable blocks at your access level. Try a higher
-          access tier, or come back when more translations are published.
-        </p>
-      ) : null}
-
-      {blocks.map((block, idx) => (
-        <article
-          key={block.blockId}
+      {/* The sticky-context wrapper holds the map + every block.
+         The map sticks to the top of the viewport while the prose
+         scrolls past underneath it; sticky releases as soon as the
+         last block exits, so the footer renders cleanly below. */}
+      <div style={{ position: "relative" }}>
+        <div
           style={{
-            marginBottom: 56,
-            scrollMarginTop: 60,
+            position: "sticky",
+            top: 16,
+            zIndex: 5,
+            marginBottom: 40,
+            // Match page background so sticky behaviour reads as
+            // intentional (no text bleeding through).
+            background: "#fafaf7",
+            paddingTop: 4,
+            paddingBottom: 8,
           }}
-          id={`block-${idx + 1}`}
         >
+          <StoryMap
+            readerLanguage={readerLanguage}
+            points={blocks.map((b, idx) => ({
+              blockId: b.blockId,
+              longitude: b.longitude,
+              latitude: b.latitude,
+              ordinal: idx + 1,
+            }))}
+          />
+        </div>
+
+        {blocks.length === 0 ? (
+          <p style={{ color: "#888", fontStyle: "italic" }}>
+            This piece has no readable blocks at your access level. Try a higher
+            access tier, or come back when more translations are published.
+          </p>
+        ) : null}
+
+        {blocks.map((block, idx) => (
+          <article
+            key={block.blockId}
+            style={{
+              marginBottom: 56,
+              // Reserve enough space above an anchored block for the
+              // sticky map, so clicking pin 02 lands at the top of
+              // block 2 rather than under the map.
+              scrollMarginTop: "calc(min(360px, 42vh) + 32px)",
+            }}
+            id={`block-${idx + 1}`}
+          >
           <header style={{ marginBottom: 16 }}>
             <div
               style={{
@@ -212,6 +234,7 @@ export default async function StoryPage({
           </div>
         </article>
       ))}
+      </div>
 
       <hr
         style={{
