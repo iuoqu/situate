@@ -3,12 +3,12 @@ import { notFound } from "next/navigation";
 
 import { db } from "@/db";
 import {
+  moderationDecisions,
   principleJudgments,
   submissions,
   type PrincipleVerdict,
-  type SubmissionStatus,
 } from "@/db/schema";
-import { desc, eq } from "drizzle-orm";
+import { and, desc, eq } from "drizzle-orm";
 
 export const dynamic = "force-dynamic";
 
@@ -18,21 +18,48 @@ const VERDICT_COLOR: Record<PrincipleVerdict, string> = {
   UNCERTAIN: "#ca8a04",
 };
 
-const STATUS_HEADLINE: Partial<Record<SubmissionStatus, string>> = {
-  human_review: "Your piece is in human review.",
-  draft: "The AI editor declined your piece.",
-  ai_review: "The AI editor is still reading your piece.",
-  published: "Your piece has been published.",
-};
+// What the AI pre-screen actually concluded for this submission. Derived from
+// the latest ai-layer moderation_decisions row + the submission's status, so
+// we can show copy that matches what really happened (not just what the
+// submission's status enum says).
+type AiOutcome =
+  | "passed"      // PASS_TO_EDITOR — AI batch approval, on to human review
+  | "flagged"     // HUMAN_REVIEW — at least one UNCERTAIN or escalation flag
+  | "declined"    // AUTO_REJECT — high-conf FAIL, returned to author
+  | "unavailable" // AI editor failed (no API key, billing, 5xx) — sent direct to human
+  | "pending"     // No AI decision row yet — editor still running or pre-AI status
+  | "published";
 
-const STATUS_LEAD: Partial<Record<SubmissionStatus, string>> = {
-  human_review:
-    "An AI pre-screen flagged the piece for editorial attention. A human editor reviews next; you'll hear back within 14 days.",
-  draft:
-    "The AI editor's pre-screen surfaced a high-confidence concern against the constitution. The piece has been returned to draft — revise the issue cited below and you can resubmit.",
-  ai_review:
-    "Hold tight — the AI editor is still working. Refresh this page in a moment.",
-  published: "It's live. Thank you for trusting us with it.",
+interface OutcomeCopy {
+  headline: string;
+  lead: string;
+}
+
+const OUTCOME_COPY: Record<AiOutcome, OutcomeCopy> = {
+  passed: {
+    headline: "Your piece passed the AI pre-screen.",
+    lead: "Every principle the AI editor evaluated came back with a high-confidence PASS. The piece is now in the human review queue — typically 7 days for the fast lane.",
+  },
+  flagged: {
+    headline: "The AI editor flagged your piece for editorial attention.",
+    lead: "At least one principle came back uncertain. A human editor reviews next; you'll hear back within 14 days.",
+  },
+  declined: {
+    headline: "The AI editor declined your piece.",
+    lead: "The AI editor's pre-screen surfaced a high-confidence concern against the constitution. The piece has been returned to draft — revise the issue cited below and you can resubmit.",
+  },
+  unavailable: {
+    headline: "Your piece is in human review.",
+    lead: "The AI pre-screen is temporarily unavailable, so your piece went straight to the human queue. You'll hear back within 14 days.",
+  },
+  pending: {
+    headline: "The AI editor is still reading your piece.",
+    lead: "Hold tight — refresh this page in a moment. If nothing appears, the AI pre-screen failed silently and your piece is already in the human queue.",
+  },
+  published: {
+    headline: "Your piece has been published.",
+    lead: "It's live. Thank you for trusting us with it.",
+  },
 };
 
 export default async function ThanksPage({
@@ -49,11 +76,28 @@ export default async function ThanksPage({
     .limit(1);
   if (!submission) notFound();
 
+  // Latest ai-layer moderation decision — tells us which of the three v0
+  // routing branches actually fired (or if the AI editor was unreachable).
+  const [aiDecision] = await db
+    .select()
+    .from(moderationDecisions)
+    .where(
+      and(
+        eq(moderationDecisions.submissionId, id),
+        eq(moderationDecisions.layer, "ai"),
+      ),
+    )
+    .orderBy(desc(moderationDecisions.createdAt))
+    .limit(1);
+
   const judgments = await db
     .select()
     .from(principleJudgments)
     .where(eq(principleJudgments.submissionId, id))
     .orderBy(desc(principleJudgments.createdAt));
+
+  const outcome = deriveOutcome(submission.status, aiDecision);
+  const { headline, lead } = OUTCOME_COPY[outcome];
 
   return (
     <main
@@ -98,7 +142,7 @@ export default async function ThanksPage({
             margin: 0,
           }}
         >
-          {STATUS_HEADLINE[submission.status] ?? "Submission received."}
+          {headline}
         </h1>
         <p
           style={{
@@ -109,7 +153,7 @@ export default async function ThanksPage({
             marginTop: 14,
           }}
         >
-          {STATUS_LEAD[submission.status] ?? ""}
+          {lead}
         </p>
       </div>
 
@@ -174,8 +218,9 @@ export default async function ThanksPage({
 
         {judgments.length === 0 ? (
           <p style={{ color: "#888", fontStyle: "italic" }}>
-            No judgments recorded yet. Refresh in a moment if the AI editor is
-            still running.
+            {outcome === "unavailable"
+              ? "The AI editor wasn't reached on this submission — there are no per-principle reads to show. A human editor takes it from here."
+              : "No judgments recorded yet. Refresh in a moment if the AI editor is still running."}
           </p>
         ) : (
           <ol style={{ listStyle: "none", padding: 0, margin: 0, display: "flex", flexDirection: "column", gap: 18 }}>
@@ -291,4 +336,34 @@ export default async function ThanksPage({
       </p>
     </main>
   );
+}
+
+function deriveOutcome(
+  status: typeof submissions.$inferSelect["status"],
+  aiDecision:
+    | typeof moderationDecisions.$inferSelect
+    | undefined,
+): AiOutcome {
+  if (status === "published") return "published";
+
+  // No AI row yet — the editor hasn't finished, or never started.
+  if (!aiDecision) return "pending";
+
+  // Engine's "all checkers failed" path writes a rationale that starts with
+  // this prefix; the submission lands in human_review with no judgments.
+  if (aiDecision.rationale?.startsWith("AI editor unreachable")) {
+    return "unavailable";
+  }
+
+  switch (aiDecision.decision) {
+    case "reject":
+      return "declined";
+    case "approve":
+      return "passed";
+    case "request_changes":
+    case "flag_for_legal":
+      return "flagged";
+    default:
+      return "flagged";
+  }
 }
