@@ -140,7 +140,15 @@ We publish fiction about specific people in specific places. Specificity is the 
 
 ### P3 — Place Is Generative
 
-A story must depend on its coordinates in a way another setting could not replicate. Move the pin and the story should break. Geographic accuracy and stylistic polish are not enough: a universal drama dressed in local occupation, dialect, or scenery is still a universal drama. The test asks whether the story's central events and tensions need this place — not whether the protagonist carries a local biography. Aesthetic and lyrical attention to a place is not itself an event; a work that only describes the beauty of a place, without anything happening there, is not for us. We are not a publication of well-written stories. We are a publication of stories that owe their existence to where they are set.
+> *Amended to v0.2.1. The v0.2 text over-rejected work whose place-dependence is sensory or cultural rather than plot-mechanical (Annie Dillard, Lispector, zuihitsu, prose-poem-leaning short fiction). v0.2.1 admits implicit dependence when it structurally constitutes the story's central insight or transformation, and adds an operational guardrail (structural argument, not atmospheric appeal) so the door does not become a loophole.*
+
+A story must depend on its coordinates in a way another setting could not replicate. The dependence can be **explicit** (the story's central event requires this place — a specific architectural feature, a local custom, a geography-determined plot point) or **implicit** (the place's sensory texture, cultural weight, or environmental quality structurally constitutes the story's central insight or transformation). Move the pin and the story should break.
+
+Implicit dependence requires structural argument, not atmospheric appeal. If the story's meaning would survive transplant to another setting — even if the surface description loses something — the dependence is decorative, not structural.
+
+Test: does this story's central tension, insight, or transformation depend on something only this place provides? Not "could a similar story happen elsewhere," but "could this exact story's exact meaning emerge elsewhere."
+
+We are not a publication of well-written stories. We are a publication of stories that owe their existence to where they are set.
 
 ### P4 — Author Affinity, Disclosed
 

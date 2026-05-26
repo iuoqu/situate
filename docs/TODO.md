@@ -11,7 +11,9 @@ survives between sessions and can be checked in PR diffs.
       `drizzle/seed_constitution_v02.sql` applied locally, v0.1
       superseded. `docs/constitution-v0.2.md` is the canonical text.
 - [ ] **8 new AI-editor checkers for v0.2 principles** — P3 (Place Is
-      Generative) is live and re-prompted to v0.2. Remaining: P1, P2,
+      Generative) is live at v0.2.1 (admits implicit dependence with
+      structural-argument guardrail; see
+      `docs/constitution-p3-v0.2.1-amendment.md`). Remaining: P1, P2,
       P6, P7 (literary-judgment checkers), P4, P5, P10, P11
       (disclosure-consistency checkers). P8 is a system check, P9 is
       a translator workflow trigger, P12/P13 are governance. See

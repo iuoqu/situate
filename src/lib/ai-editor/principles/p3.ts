@@ -2,15 +2,25 @@ import { AI_EDITOR_MODEL, anthropicClient } from "../client";
 import type { JudgmentSubmission, PrincipleJudgment } from "../types";
 
 /**
- * P3 — Place Is Generative (v0.2).
+ * P3 — Place Is Generative (v0.2.1).
  *
  * Evaluates the author's "why these places, in this order?" answer (Field
  * 1.b). The question is whether the author made a verifiable, place-grounded
  * promise — would the story break if the route were moved or reshuffled?
  *
  * v0.2 split this principle out of v0.1's P2 (which conflated framing and
- * place-dependence). v0.2 P2 now handles categorical framing of populations;
- * v0.2 P3 is purely about whether the place is generative.
+ * place-dependence). v0.2.1 (this version) refines further:
+ *   - Admits *implicit* dependence (sensory texture, cultural weight,
+ *     environmental quality) when it structurally constitutes the story's
+ *     central insight or transformation. v0.2 over-rejected this class
+ *     of work (Annie Dillard, Lispector, zuihitsu, prose-poem-leaning
+ *     short fiction).
+ *   - Adds an operational guardrail: implicit dependence requires
+ *     structural argument, not atmospheric appeal. If the story's meaning
+ *     would survive transplant to another setting, the dependence is
+ *     decorative — that fails.
+ *   - Restores the flagship sentence ("we are not a publication of
+ *     well-written stories…") as the principle's closing line.
  *
  * We check the CLAIM, not the prose. A human editor reads the story to
  * verify the promise is kept.
@@ -28,7 +38,15 @@ P1 — Place as Inhabited Space. A real place is not a setting; it is somewhere 
 
 P2 — Specificity over Category. We publish fiction about specific people in specific places. We do not publish work that uses one individual's story as a verdict on the people of a place. A farmer waiting beside a tree stump is a story. "The people of Song had a farmer who…" is a verdict, and the grammar betrays it.
 
-P3 — Place Is Generative (THE PRINCIPLE YOU JUDGE). A story must depend on its coordinates in a way another setting could not replicate. Move the pin and the story should break. Geographic accuracy and stylistic polish are not enough: a universal drama dressed in local occupation, dialect, or scenery is still a universal drama. The test asks whether the story's central events and tensions need this place — not whether the protagonist carries a local biography. Aesthetic and lyrical attention to a place is not itself an event; a work that only describes the beauty of a place, without anything happening there, is not for us. We are not a publication of well-written stories. We are a publication of stories that owe their existence to where they are set.
+P3 — Place Is Generative (THE PRINCIPLE YOU JUDGE).
+
+A story must depend on its coordinates in a way another setting could not replicate. The dependence can be EXPLICIT (the story's central event requires this place — a specific architectural feature, a local custom, a geography-determined plot point) or IMPLICIT (the place's sensory texture, cultural weight, or environmental quality structurally constitutes the story's central insight or transformation). Move the pin and the story should break.
+
+Implicit dependence requires structural argument, not atmospheric appeal. If the story's meaning would survive transplant to another setting — even if the surface description loses something — the dependence is decorative, not structural.
+
+Test: does this story's central tension, insight, or transformation depend on something only this place provides? Not "could a similar story happen elsewhere," but "could this exact story's exact meaning emerge elsewhere."
+
+We are not a publication of well-written stories. We are a publication of stories that owe their existence to where they are set.
 
 P4 — Author Affinity, Disclosed. Authors tell us their relationship to the places they write about. Outsider work is welcome, but the further the distance, the more closely the writing must look.
 
@@ -59,23 +77,28 @@ You are checking the CLAIM, not the prose. A separate human editor reads the sto
 DECISION RULES
 
 1. Author self-disclosed a P3 failure.
-   Signals: "could happen anywhere", "the city doesn't really matter", "this is a universal story", "place is just the setting", "any city would work", "the route is just for flavor", "essentially universal", "interchangeable with their counterparts elsewhere".
+   Signals: "could happen anywhere", "the city doesn't really matter", "this is a universal story", "place is just the setting", "any city would work", "the route is just for flavor", "essentially universal", "interchangeable with their counterparts elsewhere", "the meaning would survive moving the pin".
    → status: FAIL, confidence high (≥ 0.9).
 
-2. Author made a specific, place-grounded claim.
+2. Author made a specific, place-grounded claim — EXPLICIT dependence.
    Signals: cites named architectural features, local history, dialect, specific geography, named institutions, rituals, transit lines, regulatory environments, the geometry of how the places relate, AND explains how the central events and tensions depend on them.
    → status: PASS, confidence calibrated to specificity (0.7 – 0.9).
    Note: PASS at the claim level means "the author has made a verifiable promise." Whether the prose delivers it is a human editor's call.
 
-3. Vague or sophisticated-sounding non-answer.
-   Signals: "the city is essential to the mood", "this place has its own atmosphere", "deeply rooted in [city]" — without specifics; or specific-sounding but generic ("the contrast between old and new", "the city's pulse", "an undeniably local feeling").
+3. Author claimed IMPLICIT dependence (sensory / cultural / environmental).
+   v0.2.1 admits this category. Signals: the author argues that a quality of the place — its light, its sound register, its specific cultural weight, the way a season behaves there — structurally constitutes the story's central insight or transformation. Acceptable when the structural argument is made: not merely "the place is beautiful and that matters," but "this exact insight emerges only because the place has THIS specific quality."
+   → If the structural argument is articulated and concrete: PASS, confidence 0.7 – 0.85.
+   → If the structural argument is gestured at but not built: UNCERTAIN, confidence ≤ 0.7. Apply the transplant test (see rule 5).
+
+4. Vague or sophisticated-sounding non-answer.
+   Signals: "the city is essential to the mood", "this place has its own atmosphere", "deeply rooted in [city]", "the city's pulse" — without specifics; or specific-sounding but generic ("the contrast between old and new", "an undeniably local feeling").
    → status: UNCERTAIN, confidence low (≤ 0.7).
 
-4. Multi-coordinate but no route argument.
-   If the author cites individual places well but says nothing about why this sequence/route specifically (and the story has more than one coordinate), call UNCERTAIN and name the gap. The route is the story; without an argument for the route, you cannot judge the claim.
+5. Transplant test — the v0.2.1 guardrail for implicit dependence.
+   If the author claims implicit dependence, ask yourself: would the story's central meaning survive transplanting to another setting, even if the surface description loses something? If yes, the dependence is decorative, not structural — call UNCERTAIN or FAIL depending on how candidly the author has conceded that.
 
-5. Aesthetic-only setting (v0.2 addition).
-   If the author's answer is mostly about how beautiful, evocative, or atmospheric the place is, with no central event or tension that requires it, lean UNCERTAIN — and call it out. v0.2 P3 explicitly excludes "well-written stories about a place where nothing happens."
+6. Multi-coordinate but no route argument.
+   If the author cites individual places well but says nothing about why this sequence/route specifically (and the story has more than one coordinate), call UNCERTAIN and name the gap. The route is the story; without an argument for the route, you cannot judge the claim.
 
 CALIBRATION
 
@@ -129,7 +152,7 @@ const P3_TOOL: Anthropic.Tool = {
   },
 };
 
-export const P3_VERSION = "v0.2";
+export const P3_VERSION = "v0.2.1";
 
 export async function checkP3(
   submission: JudgmentSubmission,
