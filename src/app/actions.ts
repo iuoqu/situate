@@ -5,7 +5,6 @@ import { and, eq, isNull, sql } from "drizzle-orm";
 import { db } from "@/db";
 import {
   blockTranslations,
-  DEFAULT_CULTURAL_RENDERING,
   editions,
   editorialPrinciples,
   moderationDecisions,
@@ -14,7 +13,6 @@ import {
   submissions,
   type BlockTranslation,
   type CulturalAnnotation,
-  type CulturalRendering,
   type Edition,
   type EditorialPrinciple,
   type FlaggedEntity,
@@ -677,29 +675,6 @@ export async function getPrincipleVersion(
   return row ?? null;
 }
 
-// ─── Pure render helper ─────────────────────────────────────────────────────
-
-export type RenderingPreference = CulturalRendering;
-
-/**
- * Apply a reader's cultural-rendering preference to a stored translation.
- * Defaults to `DEFAULT_CULTURAL_RENDERING` ('literal') for unauthenticated /
- * no-preference readers. Pure function — safe in client components.
- */
-export function renderTranslation(
-  content: string,
-  annotations: CulturalAnnotation[],
-  preference: CulturalRendering = DEFAULT_CULTURAL_RENDERING,
-): string {
-  if (annotations.length === 0) return content;
-
-  const sorted = [...annotations].sort((a, b) => b.spanStart - a.spanStart);
-  let out = content;
-  for (const ann of sorted) {
-    const rendering =
-      ann.renderings[preference] ?? ann.renderings[ann.defaultRendering];
-    if (rendering === undefined) continue;
-    out = out.slice(0, ann.spanStart) + rendering + out.slice(ann.spanEnd);
-  }
-  return out;
-}
+// Note: the pure-function `renderTranslation` helper lives at
+// `@/lib/rendering` so it can be imported from client components without
+// pulling the server-action bundle. Re-import from there.
