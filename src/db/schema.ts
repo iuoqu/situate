@@ -8,6 +8,7 @@ import {
   jsonb,
   pgEnum,
   pgTable,
+  real,
   serial,
   text,
   timestamp,
@@ -92,6 +93,46 @@ export const reportStatus = pgEnum("report_status", [
   "in_review",
   "resolved",
   "dismissed",
+]);
+
+// ─── Submission form enums (per the public submission spec) ─────────────────
+
+export const storyType = pgEnum("story_type", [
+  "fiction",
+  "based_on_reality",
+]);
+
+export const authorRelationship = pgEnum("author_relationship", [
+  "born_there",
+  "lived_there",
+  "worked_there",
+  "researched",
+  "passing_through",
+  "never_been",
+]);
+
+export const consentStatus = pgEnum("consent_status", [
+  "not_applicable",
+  "explicit",
+  "deceased",
+  "public_figure",
+  "transformed",
+  "no_consent",
+]);
+
+export const aiUsageLabel = pgEnum("ai_usage_label", [
+  "human_written",
+  "human_written_ai_translated",
+  "ai_assisted",
+  "ai_created",
+]);
+
+// ─── AI editor enums ────────────────────────────────────────────────────────
+
+export const principleVerdict = pgEnum("principle_verdict", [
+  "PASS",
+  "FAIL",
+  "UNCERTAIN",
 ]);
 
 // ─── JSON shapes ────────────────────────────────────────────────────────────
@@ -215,6 +256,32 @@ export const submissions = pgTable(
       .array()
       .notNull()
       .default(sql`ARRAY[]::text[]`),
+
+    // ─── Submission form fields (v1.0 spec) ───
+    // The raw form payload — audit trail + editor-view source of truth.
+    submissionForm: jsonb("submission_form"),
+    wordCount: integer("word_count"),
+    authorEmail: text("author_email"),
+    authorPenName: text("author_pen_name"),
+    legalAttestation: boolean("legal_attestation").notNull().default(false),
+    // F1.b — "why these places, in this order?" (multi-coordinate version
+    // of the original relocation test).
+    relocationTest: text("relocation_test"),
+    // F3 — fiction vs based_on_reality.
+    storyType: storyType("story_type"),
+    // F2 — author's relationship to the place(s).
+    authorRelationship: authorRelationship("author_relationship"),
+    relationshipDuration: text("relationship_duration"),
+    // F4 — real-person consent (only meaningful when storyType='based_on_reality').
+    consentStatus: consentStatus("consent_status"),
+    consentExplanation: text("consent_explanation"),
+    // F5 — author-side AI usage (translator-side AI is on block_translations).
+    aiUsageLabel: aiUsageLabel("ai_usage_label"),
+    aiNotes: text("ai_notes"),
+    // F6 — author-disclosed harm risks (free text alongside sensitivityWarnings).
+    risksExplanation: text("risks_explanation"),
+    // Set by the AI editor when it finishes the pipeline.
+    aiReviewedAt: timestamp("ai_reviewed_at", { withTimezone: true }),
 
     createdAt: timestamp("created_at", { withTimezone: true })
       .notNull()
@@ -407,6 +474,44 @@ export const reports = pgTable(
   }),
 );
 
+// One row per (submission, principle) AI-editor verdict. Each principle is a
+// separate Claude API call (independent context, independent reasoning), so
+// each judgment is logged independently. The aggregate routing decision
+// (PASS_TO_EDITOR / HUMAN_REVIEW / AUTO_REJECT) is written separately to
+// `moderation_decisions` with `layer='ai'`.
+export const principleJudgments = pgTable(
+  "principle_judgments",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    submissionId: uuid("submission_id")
+      .notNull()
+      .references(() => submissions.id, { onDelete: "cascade" }),
+    principleCode: text("principle_code").notNull(),    // "P3"
+    principleVersion: text("principle_version").notNull(), // "v0.1"
+    verdict: principleVerdict("verdict").notNull(),
+    confidence: real("confidence").notNull(),           // 0.0 – 1.0
+    reasoning: text("reasoning").notNull(),
+    keyQuote: text("key_quote").notNull(),
+    humanReviewNeeded: boolean("human_review_needed").notNull(),
+    model: text("model").notNull(),                     // "claude-sonnet-4-6"
+    inputTokens: integer("input_tokens"),
+    outputTokens: integer("output_tokens"),
+    cacheReadInputTokens: integer("cache_read_input_tokens"),
+    cacheCreationInputTokens: integer("cache_creation_input_tokens"),
+    createdAt: timestamp("created_at", { withTimezone: true })
+      .notNull()
+      .default(sql`now()`),
+  },
+  (t) => ({
+    submissionIdx: index("principle_judgments_submission_id_idx").on(
+      t.submissionId,
+    ),
+    principleIdx: index("principle_judgments_principle_code_idx").on(
+      t.principleCode,
+    ),
+  }),
+);
+
 // ─── Inferred types ─────────────────────────────────────────────────────────
 
 export type Edition = typeof editions.$inferSelect;
@@ -423,6 +528,14 @@ export type Report = typeof reports.$inferSelect;
 export type NewReport = typeof reports.$inferInsert;
 export type EditorialPrinciple = typeof editorialPrinciples.$inferSelect;
 export type NewEditorialPrinciple = typeof editorialPrinciples.$inferInsert;
+export type PrincipleJudgmentRow = typeof principleJudgments.$inferSelect;
+export type NewPrincipleJudgmentRow = typeof principleJudgments.$inferInsert;
+
+export type StoryType = (typeof storyType.enumValues)[number];
+export type AuthorRelationship = (typeof authorRelationship.enumValues)[number];
+export type ConsentStatus = (typeof consentStatus.enumValues)[number];
+export type AiUsageLabel = (typeof aiUsageLabel.enumValues)[number];
+export type PrincipleVerdict = (typeof principleVerdict.enumValues)[number];
 
 export type SubmissionStatus = (typeof submissionStatus.enumValues)[number];
 export type EditionStatus = (typeof editionStatus.enumValues)[number];

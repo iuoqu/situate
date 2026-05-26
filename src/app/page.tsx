@@ -59,6 +59,21 @@ export default function HomePage() {
         >
           Read Issue #1
         </Link>
+        <Link
+          href="/submit"
+          style={{
+            padding: "10px 18px",
+            background: "white",
+            color: "#1a1a1a",
+            textDecoration: "none",
+            borderRadius: 4,
+            fontSize: 14,
+            letterSpacing: 0.5,
+            border: "1px solid #ccc",
+          }}
+        >
+          Submit a piece
+        </Link>
       </div>
       <Link
         href="/about/constitution"

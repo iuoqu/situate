@@ -17,7 +17,10 @@ Geospatial storytelling platform — MVP database foundation.
 | `src/db/index.ts`                     | `postgres` client + Drizzle `db` instance            |
 | `src/db/schema.ts`                    | Tables, enums, PostGIS geometry, multilingual translations |
 | `drizzle/0000_enable_postgis.sql`     | Custom migration that enables the PostGIS extension  |
-| `src/app/actions.ts`                  | Server actions: insertion, translation upsert, bbox queries |
+| `drizzle/0003_submit_form_and_ai_editor.sql` | Adds submit-form columns + `principle_judgments` table |
+| `src/lib/ai-editor/`                  | AI editor pipeline (engine + per-principle checkers) |
+| `src/app/submit/`                     | Public submission form (multi-scene, AI pre-screen)  |
+| `src/app/actions.ts`                  | Server actions: insertion, translation upsert, bbox queries, submit + AI review |
 
 ## Data model
 
@@ -94,6 +97,43 @@ Each issue is a row in `editions` (numbered, slugged, with editor's letter
 A CHECK constraint on `editions` blocks advancing past `planning` until
 `editors_letter`, `cover_image_url`, and `publish_at` are all set —
 "half-built issue can't ship" enforced at the database.
+
+### Public submission form + AI editor
+
+`/submit` is the public submission surface. Authors fill the 7-field spec
+(coordinates + relocation test, affinity, fiction-or-reality, real-people
+consent, AI usage, risks, attestation) — multi-coordinate is supported
+(1–6 scenes per piece). On submit, the server:
+
+1. Persists the submission + one `narrative_blocks` row per scene + the
+   `method='original'` translation in a single transaction.
+2. Sets `submissions.status = 'ai_review'`.
+3. Runs the AI editor synchronously: each enabled principle in
+   `src/lib/ai-editor/principles/` is its own `claude-sonnet-4-6` call
+   with `tool_use`-forced structured output. Calls run in parallel.
+4. Records one `principle_judgments` row per checker (verdict +
+   confidence + key_quote + token usage) and one aggregate
+   `moderation_decisions` row with `layer='ai'`.
+5. Updates `submissions.status` based on the routing decision:
+   - `AUTO_REJECT` (any FAIL ≥ 0.85 confidence) → `'draft'` (returned
+     to the author with the cited principles).
+   - `HUMAN_REVIEW` (any UNCERTAIN or `human_review_needed`, or any
+     checker failed unreachable) → `'human_review'`.
+   - `PASS_TO_EDITOR` (all PASS) → `'human_review'` fast-lane — never
+     auto-publish (P9 / P10).
+
+`ANTHROPIC_API_KEY` must be set in the environment. If unset, the AI
+editor degrades gracefully: all checkers fail-soft and submissions land
+in `'human_review'` with a "AI editor unreachable" rationale.
+
+### Deploy steps (new database)
+
+1. Run `drizzle/bootstrap.sql`
+2. Run `drizzle/seed_constitution_v01.sql`
+3. Run `drizzle/seed_demo_3block.sql` (optional demo)
+4. Run `drizzle/0003_submit_form_and_ai_editor.sql`
+
+Existing deploys just need step 4.
 
 ### Editorial constitution
 

@@ -3,15 +3,21 @@
 import { and, eq, isNull, sql } from "drizzle-orm";
 
 import { db } from "@/db";
+import { evaluateSubmission } from "@/lib/ai-editor/engine";
+import type { JudgmentSubmission, SubmissionReport } from "@/lib/ai-editor/types";
 import {
   blockTranslations,
   editions,
   editorialPrinciples,
   moderationDecisions,
   narrativeBlocks,
+  principleJudgments,
   reports,
   submissions,
+  type AiUsageLabel,
+  type AuthorRelationship,
   type BlockTranslation,
+  type ConsentStatus,
   type CulturalAnnotation,
   type Edition,
   type EditorialPrinciple,
@@ -21,8 +27,10 @@ import {
   type ModerationLayer,
   type NarrativeBlock,
   type PrincipleExample,
+  type PrincipleJudgmentRow,
   type Report,
   type ReportCategory,
+  type StoryType,
   type Submission,
   type SubmissionStatus,
   type SupportedLanguage,
@@ -842,4 +850,300 @@ export async function getEditionBySlug(
   );
 
   return { edition, pieces };
+}
+
+// ─── Submission form ────────────────────────────────────────────────────────
+
+export interface SubmitFormScene {
+  longitude: number;
+  latitude: number;
+  eventDate: string | null;  // ISO 8601 or null
+  content: string;           // the scene's story text
+  ordinal: number;            // 1-indexed display ordinal
+}
+
+export interface SubmitFormPayload {
+  // F7
+  title: string;
+  abstract: string | null;
+  wordCount: number;
+  language: SupportedLanguage;
+  authorEmail: string;
+  authorPenName: string | null;
+  authorId: string;           // for now, derived from email — auth comes later
+
+  // F1
+  scenes: SubmitFormScene[];  // 1..6 entries
+  relocationTest: string;     // ≥ 50 words
+
+  // F2
+  relationship: AuthorRelationship;
+  relationshipDuration: string | null;
+  authorAffiliations: string[];
+
+  // F3
+  storyType: StoryType;
+
+  // F4 (only meaningful when storyType === 'based_on_reality' AND has real people)
+  hasRealPeople: boolean;
+  consentStatus: ConsentStatus;
+  consentExplanation: string | null;
+  realPersonsList: string[];
+
+  // F5
+  aiUsageLabel: AiUsageLabel;
+  aiNotes: string | null;
+
+  // F6
+  sensitivityWarnings: string[];
+  risksExplanation: string | null;
+  satireDisclosure: boolean;
+
+  // F7
+  legalAttestation: boolean;
+}
+
+export interface SubmitFormResult {
+  submissionId: string;
+  report: SubmissionReport;
+  status: SubmissionStatus;
+}
+
+export async function submitFromForm(
+  input: SubmitFormPayload,
+): Promise<SubmitFormResult> {
+  if (input.scenes.length < 1) throw new Error("at least one scene required");
+  if (input.scenes.length > 6) throw new Error("at most six scenes allowed");
+  for (const scene of input.scenes) {
+    if (!Number.isFinite(scene.longitude) || scene.longitude < -180 || scene.longitude > 180)
+      throw new Error("scene longitude out of range");
+    if (!Number.isFinite(scene.latitude) || scene.latitude < -90 || scene.latitude > 90)
+      throw new Error("scene latitude out of range");
+    if (!scene.content || scene.content.trim().length === 0)
+      throw new Error("scene content cannot be empty");
+  }
+  if (input.wordCount < 800 || input.wordCount > 2500)
+    throw new Error("word_count must be between 800 and 2500");
+  if (countWords(input.relocationTest) < 50)
+    throw new Error("relocation test must be at least 50 words");
+  if (!input.legalAttestation)
+    throw new Error("legal attestation must be accepted");
+  if (!isValidEmail(input.authorEmail))
+    throw new Error("invalid author email");
+
+  const submissionId = await db.transaction(async (tx) => {
+    const [submission] = await tx
+      .insert(submissions)
+      .values({
+        authorId: input.authorId,
+        title: input.title,
+        abstract: input.abstract,
+        sourceLanguage: input.language,
+        status: "ai_review",
+        contentFlags: {
+          realPlaces: [],
+          realPersons: input.realPersonsList,
+          realOrgs: [],
+          conflictZone: false,
+        },
+        authorAffiliations: input.authorAffiliations,
+        satireDisclosure: input.satireDisclosure,
+        sensitivityWarnings: input.sensitivityWarnings,
+        submissionForm: input as unknown as Record<string, unknown>,
+        wordCount: input.wordCount,
+        authorEmail: input.authorEmail,
+        authorPenName: input.authorPenName,
+        legalAttestation: input.legalAttestation,
+        relocationTest: input.relocationTest,
+        storyType: input.storyType,
+        authorRelationship: input.relationship,
+        relationshipDuration: input.relationshipDuration,
+        consentStatus: input.hasRealPeople ? input.consentStatus : "not_applicable",
+        consentExplanation: input.consentExplanation,
+        aiUsageLabel: input.aiUsageLabel,
+        aiNotes: input.aiNotes,
+        risksExplanation: input.risksExplanation,
+      })
+      .returning({ id: submissions.id });
+
+    for (const scene of input.scenes) {
+      const [block] = await tx
+        .insert(narrativeBlocks)
+        .values({
+          submissionId: submission.id,
+          eventDate: scene.eventDate ? new Date(scene.eventDate) : null,
+          location: { x: scene.longitude, y: scene.latitude },
+        })
+        .returning({ id: narrativeBlocks.id });
+
+      await tx.insert(blockTranslations).values({
+        blockId: block.id,
+        language: input.language,
+        method: "original",
+        status: "draft",
+        accessTier: "free",
+        content: scene.content,
+        annotations: [],
+      });
+    }
+
+    return submission.id;
+  });
+
+  // AI review runs outside the transaction — a slow Anthropic call
+  // shouldn't hold a DB connection.
+  const report = await runAiReviewInternal(submissionId);
+
+  const [post] = await db
+    .select({ status: submissions.status })
+    .from(submissions)
+    .where(eq(submissions.id, submissionId))
+    .limit(1);
+
+  return { submissionId, report, status: post?.status ?? "ai_review" };
+}
+
+export async function runAiReview(submissionId: string): Promise<SubmissionReport> {
+  return runAiReviewInternal(submissionId);
+}
+
+async function runAiReviewInternal(submissionId: string): Promise<SubmissionReport> {
+  const judgmentInput = await buildJudgmentSubmission(submissionId);
+  const report = await evaluateSubmission(judgmentInput);
+
+  if (report.judgments.length > 0) {
+    await db.insert(principleJudgments).values(
+      report.judgments.map((j) => ({
+        submissionId,
+        principleCode: j.principle,
+        principleVersion: j.version,
+        verdict: j.status,
+        confidence: j.confidence,
+        reasoning: j.reasoning,
+        keyQuote: j.key_quote,
+        humanReviewNeeded: j.human_review_needed,
+        model: "claude-sonnet-4-6",
+        inputTokens: j.usage.input_tokens,
+        outputTokens: j.usage.output_tokens,
+        cacheReadInputTokens: j.usage.cache_read_input_tokens,
+        cacheCreationInputTokens: j.usage.cache_creation_input_tokens,
+      })),
+    );
+  }
+
+  const decision: ModerationDecisionValue =
+    report.routing === "AUTO_REJECT"
+      ? "reject"
+      : report.routing === "PASS_TO_EDITOR"
+        ? "approve"
+        : "request_changes";
+  const nextStatus: SubmissionStatus =
+    report.routing === "AUTO_REJECT" ? "draft" : "human_review";
+
+  await db.transaction(async (tx) => {
+    await tx.insert(moderationDecisions).values({
+      submissionId,
+      layer: "ai",
+      decision,
+      rationale: report.routing_reason,
+      flaggedEntities: report.judgments.map((j) => ({
+        kind: `${j.principle}:${j.version}`,
+        value: j.key_quote,
+        sentiment: j.confidence,
+      })),
+      citedPrinciples: report.cited_principles,
+    });
+    await tx
+      .update(submissions)
+      .set({ status: nextStatus, aiReviewedAt: new Date() })
+      .where(eq(submissions.id, submissionId));
+  });
+
+  return report;
+}
+
+async function buildJudgmentSubmission(
+  submissionId: string,
+): Promise<JudgmentSubmission> {
+  const [row] = await db
+    .select()
+    .from(submissions)
+    .where(eq(submissions.id, submissionId))
+    .limit(1);
+  if (!row) throw new Error(`submission ${submissionId} not found`);
+
+  const blocks = await db.execute<{
+    longitude: number;
+    latitude: number;
+    sequence_number: number;
+    content: string;
+  }>(sql`
+    SELECT
+      ST_X(${narrativeBlocks.location}) AS longitude,
+      ST_Y(${narrativeBlocks.location}) AS latitude,
+      ${narrativeBlocks.sequenceNumber}  AS sequence_number,
+      ${blockTranslations.content}       AS content
+    FROM ${narrativeBlocks}
+    INNER JOIN ${blockTranslations}
+      ON ${blockTranslations.blockId} = ${narrativeBlocks.id}
+    WHERE ${narrativeBlocks.submissionId} = ${submissionId}
+      AND ${blockTranslations.method} = 'original'
+    ORDER BY ${narrativeBlocks.sequenceNumber} ASC
+  `);
+
+  return {
+    meta: {
+      submission_id: submissionId,
+      title: row.title,
+      abstract: row.abstract,
+      word_count: row.wordCount,
+      language: row.sourceLanguage,
+      author_id: row.authorId,
+      author_pen_name: row.authorPenName,
+    },
+    field1_route: {
+      places: blocks.map((b, idx) => ({
+        longitude: Number(b.longitude),
+        latitude: Number(b.latitude),
+        ordinal: idx + 1,
+      })),
+      relocation_test: row.relocationTest,
+    },
+    field2_affinity: {
+      relationship: row.authorRelationship,
+      duration: row.relationshipDuration,
+      affiliations: row.authorAffiliations,
+    },
+    field3_story_type: row.storyType,
+    field4_real_people: {
+      has_real_people:
+        (row.contentFlags?.realPersons?.length ?? 0) > 0,
+      consent_status: row.consentStatus,
+      consent_explanation: row.consentExplanation,
+    },
+    field5_ai: {
+      label: row.aiUsageLabel,
+      notes: row.aiNotes,
+    },
+    field6_risks: {
+      warnings: row.sensitivityWarnings,
+      explanation: row.risksExplanation,
+      satire: row.satireDisclosure,
+    },
+    story_blocks: blocks.map((b) => b.content),
+  };
+}
+
+function countWords(s: string): number {
+  const trimmed = s.trim();
+  if (!trimmed) return 0;
+  const latinWords = trimmed
+    .split(/\s+/)
+    .filter((w) => /[A-Za-zÀ-ÿ]/.test(w)).length;
+  const cjkChars = (trimmed.match(/[一-鿿぀-ヿ가-힯]/g) ?? []).length;
+  return latinWords + cjkChars;
+}
+
+function isValidEmail(s: string): boolean {
+  return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(s);
 }
