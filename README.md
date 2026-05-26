@@ -35,18 +35,48 @@ Geospatial storytelling platform — MVP database foundation.
 
 ### Supported languages (Phase 1)
 
-`en` (primary), `zh`, `ja`. Extending the `supported_language` enum requires
-a Drizzle migration.
+`en` (primary), `zh_CN`, `zh_TW`, `ja`, `ko`. Extending the
+`supported_language` enum requires a Drizzle migration (`ALTER TYPE ... ADD
+VALUE` for additions; rename/remove is destructive).
+
+### Translation access tiers
+
+| Tier      | Used by         | Reader sees        |
+| --------- | --------------- | ------------------ |
+| `free`    | `original`, `ai`| Always             |
+| `metered` | `ai_post_edited`| Free with quota — app enforces rate-limit |
+| `premium` | `human`         | Paywalled          |
+
+### Default cultural rendering
+
+`DEFAULT_CULTURAL_RENDERING = "literal"`. Unauthenticated readers see the
+faithful, slightly foreign rendering by default (e.g. Chinese idioms render
+literally rather than being transposed into English proverbs). Authenticated
+readers can switch to `transposed` (localized) or `explained` (annotated)
+at read time via `renderTranslation()`.
 
 ### Reading priority (viewport query)
 
-For a given `readerLanguage`, the bbox query returns one row per block,
-picking the best available **published** translation in this order:
+For a given `readerLanguage` and `accessLevel`, the bbox query returns one
+row per block, picking the best available **published** translation in this
+order:
 
-1. `human` in `readerLanguage` (paid, if `includePremium`)
-2. `ai_post_edited` in `readerLanguage`
-3. `ai` in `readerLanguage`
-4. `original` (falls back to source language)
+1. `human` in `readerLanguage` (premium)
+2. `ai_post_edited` in `readerLanguage` (metered)
+3. `ai` in `readerLanguage` (free)
+4. `original` (falls back to source language, free)
+
+Rows whose `access_tier` exceeds the reader's `accessLevel` are excluded
+from the result set.
+
+### Moderation pipeline
+
+Submissions move through `draft → ai_review → human_review → published`.
+Every decision (AI scan, human editor, legal/ops) is logged to
+`moderation_decisions` with `layer`, `decision`, `rationale`, and
+`flagged_entities`. Reader-submitted `reports` carry a BCP-47 `locale` so
+ops can route by jurisdiction (24h SLA for `de-*` under NetzDG, `droit de
+réponse` for `fr-*`).
 
 ## Database setup
 

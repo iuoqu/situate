@@ -5,16 +5,29 @@ import { eq, sql } from "drizzle-orm";
 import { db } from "@/db";
 import {
   blockTranslations,
+  DEFAULT_CULTURAL_RENDERING,
+  moderationDecisions,
   narrativeBlocks,
+  reports,
   submissions,
   type BlockTranslation,
   type CulturalAnnotation,
   type CulturalRendering,
+  type FlaggedEntity,
+  type ModerationDecisionRow,
+  type ModerationDecisionValue,
+  type ModerationLayer,
   type NarrativeBlock,
+  type Report,
+  type ReportCategory,
+  type SubmissionStatus,
   type SupportedLanguage,
+  type TranslationAccessTier,
   type TranslationMethod,
   type TranslationStatus,
 } from "@/db/schema";
+
+// ─── Narrative block insertion ──────────────────────────────────────────────
 
 export interface CreateNarrativeBlockInput {
   submissionId: string;
@@ -22,10 +35,7 @@ export interface CreateNarrativeBlockInput {
   longitude: number;
   latitude: number;
   content: string;
-  /**
-   * Optional override of the submission's source language. Defaults to the
-   * value stored on `submissions.source_language`.
-   */
+  /** Override the parent submission's `source_language`. */
   sourceLanguage?: SupportedLanguage;
   annotations?: CulturalAnnotation[];
 }
@@ -33,6 +43,7 @@ export interface CreateNarrativeBlockInput {
 /**
  * Insert a new narrative block AND its `method='original'` translation row in a
  * single transaction. Location uses Drizzle's `{ x, y }` geometry syntax.
+ * The original row is always `accessTier='free'` and `status='published'`.
  */
 export async function createNarrativeBlock(
   input: CreateNarrativeBlockInput,
@@ -86,12 +97,37 @@ export async function createNarrativeBlock(
         status: "published",
         content,
         annotations,
+        accessTier: "free",
       })
       .returning();
 
     return { block, original };
   });
 }
+
+// ─── Translation upsert ─────────────────────────────────────────────────────
+
+// Method → default access tier (overridable per call).
+//   ai             → free       (always open)
+//   ai_post_edited → metered    (free, but quota-limited app-side)
+//   human          → premium    (paywalled)
+const DEFAULT_ACCESS_TIER: Record<
+  Exclude<TranslationMethod, "original">,
+  TranslationAccessTier
+> = {
+  ai: "free",
+  ai_post_edited: "metered",
+  human: "premium",
+};
+
+const DEFAULT_TRANSLATION_STATUS: Record<
+  Exclude<TranslationMethod, "original">,
+  TranslationStatus
+> = {
+  ai: "ai_generated",
+  ai_post_edited: "in_review",
+  human: "in_review",
+};
 
 export interface AddTranslationInput {
   blockId: string;
@@ -100,20 +136,20 @@ export interface AddTranslationInput {
   content: string;
   annotations?: CulturalAnnotation[];
   translatorId?: string;
-  isPremium?: boolean;
+  accessTier?: TranslationAccessTier;
   status?: TranslationStatus;
 }
 
 /**
  * Upsert an AI or human translation for an existing block. Uniqueness is on
- * (block_id, language, method) — re-running the AI translator overwrites the
- * previous AI row in place; the human row is kept separate.
+ * `(block_id, language, method)` — re-running the AI translator overwrites
+ * the previous AI row in place; the human row is kept separate.
  */
 export async function addTranslation(
   input: AddTranslationInput,
 ): Promise<BlockTranslation> {
-  const isHuman = input.method === "human";
-  const defaultStatus: TranslationStatus = isHuman ? "in_review" : "ai_generated";
+  const accessTier = input.accessTier ?? DEFAULT_ACCESS_TIER[input.method];
+  const status = input.status ?? DEFAULT_TRANSLATION_STATUS[input.method];
 
   const [row] = await db
     .insert(blockTranslations)
@@ -124,8 +160,8 @@ export async function addTranslation(
       content: input.content,
       annotations: input.annotations ?? [],
       translatorId: input.translatorId,
-      isPremium: input.isPremium ?? isHuman,
-      status: input.status ?? defaultStatus,
+      accessTier,
+      status,
     })
     .onConflictDoUpdate({
       target: [
@@ -137,8 +173,8 @@ export async function addTranslation(
         content: input.content,
         annotations: input.annotations ?? [],
         translatorId: input.translatorId,
-        isPremium: input.isPremium ?? isHuman,
-        status: input.status ?? defaultStatus,
+        accessTier,
+        status,
         updatedAt: sql`now()`,
       },
     })
@@ -146,6 +182,8 @@ export async function addTranslation(
 
   return row;
 }
+
+// ─── Viewport query ─────────────────────────────────────────────────────────
 
 export interface BoundingBox {
   minLong: number;
@@ -165,13 +203,25 @@ export interface ViewportBlock {
   method: TranslationMethod;
   content: string;
   annotations: CulturalAnnotation[];
-  isPremium: boolean;
+  accessTier: TranslationAccessTier;
 }
+
+export type ReaderAccessLevel = "free" | "metered" | "premium";
+
+const ACCESS_LEVEL_ORDER: Record<ReaderAccessLevel, number> = {
+  free: 0,
+  metered: 1,
+  premium: 2,
+};
 
 export interface ViewportQueryOptions {
   readerLanguage: SupportedLanguage;
-  /** When false (default), premium / paywalled translations are excluded. */
-  includePremium?: boolean;
+  /**
+   * Highest access tier this reader is entitled to receive right now.
+   * App layer is responsible for actually enforcing metered quotas and
+   * premium entitlement; this filter only constrains what the DB returns.
+   */
+  accessLevel?: ReaderAccessLevel;
   submissionId?: string;
   limit?: number;
 }
@@ -198,7 +248,7 @@ export async function getNarrativeBlocksInBoundingBox(
     }
   }
   const { minLong, minLat, maxLong, maxLat } = bbox;
-  const { readerLanguage, includePremium = false, submissionId, limit } = options;
+  const { readerLanguage, accessLevel = "free", submissionId, limit } = options;
 
   const envelope = sql`ST_MakeEnvelope(${minLong}, ${minLat}, ${maxLong}, ${maxLat}, 4326)`;
 
@@ -215,9 +265,14 @@ export async function getNarrativeBlocksInBoundingBox(
     END
   `;
 
-  const premiumFilter = includePremium
-    ? sql`TRUE`
-    : sql`${blockTranslations.isPremium} = FALSE`;
+  // Numeric encoding of access tier; reader is entitled to anything ≤ their level.
+  const accessFilter = sql`
+    CASE ${blockTranslations.accessTier}
+      WHEN 'free'    THEN 0
+      WHEN 'metered' THEN 1
+      WHEN 'premium' THEN 2
+    END <= ${ACCESS_LEVEL_ORDER[accessLevel]}
+  `;
 
   const submissionFilter = submissionId
     ? sql`AND ${narrativeBlocks.submissionId} = ${submissionId}`
@@ -236,7 +291,7 @@ export async function getNarrativeBlocksInBoundingBox(
     method: TranslationMethod;
     content: string;
     annotations: CulturalAnnotation[] | null;
-    is_premium: boolean;
+    access_tier: TranslationAccessTier;
   }>(sql`
     SELECT DISTINCT ON (${narrativeBlocks.id})
       ${narrativeBlocks.id}             AS block_id,
@@ -249,7 +304,7 @@ export async function getNarrativeBlocksInBoundingBox(
       ${blockTranslations.method}       AS method,
       ${blockTranslations.content}      AS content,
       ${blockTranslations.annotations}  AS annotations,
-      ${blockTranslations.isPremium}    AS is_premium
+      ${blockTranslations.accessTier}   AS access_tier
     FROM ${narrativeBlocks}
     INNER JOIN ${blockTranslations}
       ON ${blockTranslations.blockId} = ${narrativeBlocks.id}
@@ -261,7 +316,7 @@ export async function getNarrativeBlocksInBoundingBox(
         ${blockTranslations.language} = ${readerLanguage}
         OR ${blockTranslations.method} = 'original'
       )
-      AND ${premiumFilter}
+      AND ${accessFilter}
       ${submissionFilter}
     ORDER BY
       ${narrativeBlocks.id},
@@ -280,9 +335,85 @@ export async function getNarrativeBlocksInBoundingBox(
     method: r.method,
     content: r.content,
     annotations: r.annotations ?? [],
-    isPremium: r.is_premium,
+    accessTier: r.access_tier,
   }));
 }
+
+// ─── Moderation ─────────────────────────────────────────────────────────────
+
+export interface RecordModerationDecisionInput {
+  submissionId: string;
+  layer: ModerationLayer;
+  decision: ModerationDecisionValue;
+  reviewerId?: string;
+  rationale?: string;
+  flaggedEntities?: FlaggedEntity[];
+  /**
+   * Optional: advance the submission's editorial status in the same
+   * transaction. Typical mapping:
+   *   ai/approve              → 'human_review'
+   *   ai/reject               → 'draft' (returned to author)
+   *   human/approve           → 'published'
+   *   human/reject            → 'draft'
+   *   human/request_changes   → 'draft'
+   */
+  advanceSubmissionStatusTo?: SubmissionStatus;
+}
+
+export async function recordModerationDecision(
+  input: RecordModerationDecisionInput,
+): Promise<ModerationDecisionRow> {
+  return db.transaction(async (tx) => {
+    const [row] = await tx
+      .insert(moderationDecisions)
+      .values({
+        submissionId: input.submissionId,
+        layer: input.layer,
+        decision: input.decision,
+        reviewerId: input.reviewerId,
+        rationale: input.rationale,
+        flaggedEntities: input.flaggedEntities ?? [],
+      })
+      .returning();
+
+    if (input.advanceSubmissionStatusTo) {
+      await tx
+        .update(submissions)
+        .set({ status: input.advanceSubmissionStatusTo })
+        .where(eq(submissions.id, input.submissionId));
+    }
+    return row;
+  });
+}
+
+// ─── Reader reports ─────────────────────────────────────────────────────────
+
+export interface FileReportInput {
+  submissionId: string;
+  category: ReportCategory;
+  /** BCP-47 locale, e.g. "de-DE" — used by ops to route by jurisdiction. */
+  locale: string;
+  body?: string;
+  reporterId?: string;
+}
+
+export async function fileReport(input: FileReportInput): Promise<Report> {
+  const [row] = await db
+    .insert(reports)
+    .values({
+      submissionId: input.submissionId,
+      category: input.category,
+      locale: input.locale,
+      body: input.body,
+      reporterId: input.reporterId,
+    })
+    .returning();
+  return row;
+}
+
+// ─── Pure render helper ─────────────────────────────────────────────────────
+
+export type RenderingPreference = CulturalRendering;
 
 /**
  * Apply a reader's cultural-rendering preference to a stored translation.
@@ -290,12 +421,13 @@ export async function getNarrativeBlocksInBoundingBox(
  * into that string. Substitutions are applied right-to-left so earlier spans'
  * indices remain valid.
  *
- * Pure function — safe to call in client components.
+ * Defaults to `DEFAULT_CULTURAL_RENDERING` ('literal') for unauthenticated /
+ * no-preference readers. Pure function — safe in client components.
  */
 export function renderTranslation(
   content: string,
   annotations: CulturalAnnotation[],
-  preference: CulturalRendering,
+  preference: CulturalRendering = DEFAULT_CULTURAL_RENDERING,
 ): string {
   if (annotations.length === 0) return content;
 
