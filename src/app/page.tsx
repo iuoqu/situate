@@ -44,6 +44,17 @@ export default function HomePage() {
       >
         Explore the map →
       </Link>
+      <Link
+        href="/about/constitution"
+        style={{
+          marginTop: 4,
+          fontSize: 12,
+          color: "#888",
+          letterSpacing: 0.4,
+        }}
+      >
+        Read the editorial constitution
+      </Link>
     </main>
   );
 }

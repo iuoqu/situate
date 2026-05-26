@@ -643,14 +643,16 @@ export async function publishPrinciple(
 
 /**
  * Return the active editorial constitution — one row per principle code, in
- * code order. Active = not superseded.
+ * numeric code order (P1, P2, … P9, P10, P11, …). Active = not superseded.
+ * We sort by the integer suffix, not the raw code string, so P10 sits after
+ * P9 instead of between P1 and P2.
  */
 export async function getActivePrinciples(): Promise<EditorialPrinciple[]> {
   return db
     .select()
     .from(editorialPrinciples)
     .where(isNull(editorialPrinciples.supersededBy))
-    .orderBy(editorialPrinciples.code);
+    .orderBy(sql`(substring(${editorialPrinciples.code} from 2))::int`);
 }
 
 /**
