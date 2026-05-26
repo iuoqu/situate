@@ -15,9 +15,38 @@ Geospatial storytelling platform — MVP database foundation.
 | ------------------------------------- | ---------------------------------------------------- |
 | `drizzle.config.ts`                   | Drizzle Kit configuration                            |
 | `src/db/index.ts`                     | `postgres` client + Drizzle `db` instance            |
-| `src/db/schema.ts`                    | Tables, enums, and PostGIS geometry columns          |
+| `src/db/schema.ts`                    | Tables, enums, PostGIS geometry, multilingual translations |
 | `drizzle/0000_enable_postgis.sql`     | Custom migration that enables the PostGIS extension  |
-| `src/app/actions.ts`                  | Server actions for insertion and bbox queries        |
+| `src/app/actions.ts`                  | Server actions: insertion, translation upsert, bbox queries |
+
+## Data model
+
+- `submissions` — one flash-fiction piece, with `source_language` and an
+  editorial pipeline (`draft → ai_review → human_review → published`).
+- `narrative_blocks` — spacetime anchors for the piece. Each block has a
+  PostGIS `geometry(point, 4326)` location and an event date. **No text**
+  lives on this table; content is always stored as a translation row so the
+  original and every translation are first-class peers.
+- `block_translations` — `(block_id, language, method)` is unique. `method`
+  is one of `original | ai | ai_post_edited | human`. `is_premium` gates
+  paid human-polished translations. `annotations` (JSONB) carries culturally
+  loaded spans (idioms, proverbs, wordplay) with multiple renderings
+  (`literal | transposed | explained`) so readers can switch at runtime.
+
+### Supported languages (Phase 1)
+
+`en` (primary), `zh`, `ja`. Extending the `supported_language` enum requires
+a Drizzle migration.
+
+### Reading priority (viewport query)
+
+For a given `readerLanguage`, the bbox query returns one row per block,
+picking the best available **published** translation in this order:
+
+1. `human` in `readerLanguage` (paid, if `includePremium`)
+2. `ai_post_edited` in `readerLanguage`
+3. `ai` in `readerLanguage`
+4. `original` (falls back to source language)
 
 ## Database setup
 
