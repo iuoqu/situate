@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 
 import { transcribeAudioSegment } from "@/lib/openai-client";
+import { getServerSupabase } from "@/lib/supabase/server";
 
 /**
  * POST /api/transcribe
@@ -22,6 +23,16 @@ export const runtime = "nodejs"; // multipart audio + outbound multipart needs N
 export const maxDuration = 30; // a 12-s segment is rarely > a few seconds to transcribe
 
 export async function POST(req: NextRequest) {
+  // Closed-beta gate. Every Whisper call costs real money; we never want
+  // this endpoint reachable by an unauthenticated caller.
+  const supabase = await getServerSupabase();
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+  if (!user) {
+    return NextResponse.json({ error: "unauthorized" }, { status: 401 });
+  }
+
   let form: FormData;
   try {
     form = await req.formData();

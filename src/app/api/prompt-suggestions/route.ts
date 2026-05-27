@@ -3,6 +3,7 @@ import { NextRequest, NextResponse } from "next/server";
 
 import { AI_EDITOR_MODEL, anthropicClient } from "@/lib/ai-editor/client";
 import type { SupportedLanguage } from "@/db/schema";
+import { getServerSupabase } from "@/lib/supabase/server";
 
 /**
  * POST /api/prompt-suggestions
@@ -113,6 +114,15 @@ export const runtime = "nodejs";
 export const maxDuration = 30;
 
 export async function POST(req: NextRequest) {
+  // Closed-beta gate. AI hooks are billed to our Anthropic account.
+  const supabase = await getServerSupabase();
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+  if (!user) {
+    return NextResponse.json({ error: "unauthorized" }, { status: 401 });
+  }
+
   let body: unknown;
   try {
     body = await req.json();

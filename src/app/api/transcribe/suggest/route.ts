@@ -2,6 +2,7 @@ import type Anthropic from "@anthropic-ai/sdk";
 import { NextRequest, NextResponse } from "next/server";
 
 import { anthropicClient } from "@/lib/ai-editor/client";
+import { getServerSupabase } from "@/lib/supabase/server";
 
 /**
  * POST /api/transcribe/suggest
@@ -98,6 +99,15 @@ export const runtime = "nodejs";
 export const maxDuration = 15;
 
 export async function POST(req: NextRequest) {
+  // Closed-beta gate.
+  const supabase = await getServerSupabase();
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+  if (!user) {
+    return NextResponse.json({ error: "unauthorized" }, { status: 401 });
+  }
+
   let body: unknown;
   try {
     body = await req.json();

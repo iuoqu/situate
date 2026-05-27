@@ -532,6 +532,63 @@ export const principleJudgments = pgTable(
   }),
 );
 
+// ─── Invite codes (closed-signup gate) ──────────────────────────────────────
+//
+// Supabase is configured with "Allow new users to sign up" OFF. The only
+// path for a new email → Supabase user is `/api/auth/invite`, which validates
+// a code against this table then calls `supabase.auth.admin.inviteUserByEmail`
+// using the service-role key. Codes are NOT email-bound — any holder of the
+// string can redeem, up to `maxUses` redemptions. See
+// `drizzle/0006_invite_codes.sql` for the canonical schema.
+export const inviteCodes = pgTable(
+  "invite_codes",
+  {
+    code: text("code").primaryKey(),
+    note: text("note"),
+    maxUses: integer("max_uses").notNull().default(1),
+    usesCount: integer("uses_count").notNull().default(0),
+    expiresAt: timestamp("expires_at", { withTimezone: true }),
+    createdAt: timestamp("created_at", { withTimezone: true })
+      .notNull()
+      .default(sql`now()`),
+  },
+  () => ({
+    maxUsesPositive: check(
+      "invite_codes_max_uses_positive",
+      sql`"max_uses" >= 1`,
+    ),
+    usesCountNonneg: check(
+      "invite_codes_uses_count_nonneg",
+      sql`"uses_count" >= 0`,
+    ),
+    usesWithinMax: check(
+      "invite_codes_uses_within_max",
+      sql`"uses_count" <= "max_uses"`,
+    ),
+  }),
+);
+
+export const inviteCodeUses = pgTable(
+  "invite_code_uses",
+  {
+    id: serial("id").primaryKey(),
+    code: text("code")
+      .notNull()
+      .references(() => inviteCodes.code, { onDelete: "cascade" }),
+    email: text("email").notNull(),
+    usedAt: timestamp("used_at", { withTimezone: true })
+      .notNull()
+      .default(sql`now()`),
+  },
+  (t) => ({
+    codeIdx: index("invite_code_uses_code_idx").on(t.code),
+    codeEmailUq: uniqueIndex("invite_code_uses_code_email_uq").on(
+      t.code,
+      t.email,
+    ),
+  }),
+);
+
 // ─── Inferred types ─────────────────────────────────────────────────────────
 
 export type Edition = typeof editions.$inferSelect;
@@ -550,6 +607,10 @@ export type EditorialPrinciple = typeof editorialPrinciples.$inferSelect;
 export type NewEditorialPrinciple = typeof editorialPrinciples.$inferInsert;
 export type PrincipleJudgmentRow = typeof principleJudgments.$inferSelect;
 export type NewPrincipleJudgmentRow = typeof principleJudgments.$inferInsert;
+export type InviteCode = typeof inviteCodes.$inferSelect;
+export type NewInviteCode = typeof inviteCodes.$inferInsert;
+export type InviteCodeUse = typeof inviteCodeUses.$inferSelect;
+export type NewInviteCodeUse = typeof inviteCodeUses.$inferInsert;
 
 export type StoryType = (typeof storyType.enumValues)[number];
 export type AuthorRelationship = (typeof authorRelationship.enumValues)[number];
