@@ -348,24 +348,122 @@ rationale: chat session 2026-05-27.
 
 ---
 
-## GTM (parked, not engineering work)
+## Reader acquisition (Year-1 GTM)
 
-- [ ] Pitch Lit Hub a reading list: *"10 Flash Stories That Could Only
-      Have Happened in Their City"* — 5 of ours, 5 public-domain
-      classics with our annotations. Use the
+Pattern from 6 case studies (Atlas Obscura, LitHub, The Drift, MUBI,
+Asymptote, Astra) reviewed in chat 2026-05-27: literary / curated
+platforms grow on **partnerships + distinct voice + multi-channel
+distribution**, over 5–10 year horizons. No 2-year explosion exists
+in this category. Six actions, ordered by ROI.
+
+### 1. LitHub-style partnership wave (highest ROI)
+
+Benchmark: LitHub hit 1.2M monthly visitors in 18 months via 100+
+content partners providing exclusive excerpts. Adapt to Situate:
+
+- [ ] **Compile a 50-target partnership list.** Categories: international
+      lit mags (Granta Brazil, Asymptote, The Drift, La Tercera, Caravan),
+      independent publishers, translation institutions, travel-meets-
+      literature media (Atlas Obscura editorial), literary podcasts.
+- [ ] **Pitch one per week for 12 weeks.** Goal: 5–10 signed mutual
+      reprint + cross-promo agreements by Year-1 end. No money;
+      attribution + cross-link only.
+- [ ] **Pitch Lit Hub a reading list:** *"10 Flash Stories That Could
+      Only Have Happened in Their City"* — 5 of ours, 5 public-domain
+      classics with our annotations. See
       [Lit Hub pitch page](https://lithub.com/how-to-pitch-lit-hub/).
-- [ ] Apply to LTI Korea Q3 translation-grant cycle. Pays into
-      eligible projects; subsidises supply-side cost for KR-en
-      translation pairs.
-- [ ] Compile 6 translator-curator candidates (1 each for
-      ko / es / fr / de / pt / ja) with public work samples and contact
-      surfaces. Retainer model: $500/mo + revenue share.
-- [ ] Pre-sell 1 cultural-institution partnership (Goethe-Institut,
-      Japan Foundation, Korea Literature Translation Institute) for
-      Year-1 PR + supply support.
-- [ ] Decide pricing: research-agent suggested $10/mo or $99/yr
-      standard, $4/mo LatAm/SEA, $15/mo "patron" with printed
-      postcard. Confirm before /subscribe page.
+- [ ] **Compile 6 translator-curator candidates** (ko / es / fr / de /
+      pt / ja) with public work samples and contact surfaces. Retainer
+      $500/mo + revenue share. These translators double as partnership
+      channels into their own lit-mag networks.
+
+### 2. Founder "Notes from the Editor" Substack (Elle Griffin model)
+
+Benchmark: Elle Griffin's Substack made $19K Y1 by alternating fiction
+with non-fiction craft / behind-the-story content — readers came for
+craft, stayed for fiction. Adapt to Situate:
+
+- [ ] **Weekly 1000–1500-word Substack** under your name. Cadence:
+      editor's notes ("why I chose this piece"), place-behind-the-story,
+      flash-fiction craft commentary. End every post with a Situate
+      story link.
+- [ ] **Excerpt as Substack Note + Twitter/X thread.** Keep full content
+      on Substack so the audience accrues to that surface.
+
+### 3. Multi-format distribution per piece (Granta model)
+
+Benchmark: each Granta launch under John Freeman generated ~10
+touchpoints (events, profiles, radio, digital trails). Adapt per
+Situate piece — every story published triggers all five:
+
+- [ ] **Twitter/X 5-tweet thread** — opener + 4 scene fragments + link.
+- [ ] **Instagram 3-image post** — map screenshot + opening-paragraph
+      typography + author/location image.
+- [ ] **TikTok / Reels 60-sec video** — Mapbox flyover footage + author
+      audio reading the first paragraph.
+- [ ] **LinkedIn editor's-view essay** — 500 words on why this piece,
+      what about this place.
+- [ ] **Substack post** — full piece + behind-the-story (feeds Action 2).
+
+### 4. Festival / institution binding (MUBI festival model)
+
+Benchmark: MUBI's wedge was festival-circuit acquisition rights
+(Cannes / Venice / Berlin). Literary equivalents: translation
+institutes, book fairs, prize ceremonies. Adapt to Situate:
+
+- [ ] **Apply to LTI Korea Q3 translation-grant cycle.** Subsidises
+      KR↔EN translation pairs.
+- [ ] **Pre-sell 1 cultural-institution partnership** — Goethe-Institut,
+      Japan Foundation, or LTI Korea — for Year-1 PR + supply support.
+- [ ] **Attend / present at 1–2 fairs per year** — Frankfurt, London
+      Book Fair, AWP, PEN Translates events. Budget $2–5K each.
+- [ ] **Festival-issue concept** — once a partnership exists, publish
+      one Situate issue per major festival with their curated writers;
+      invite festival jury as guest editors.
+
+### 5. SEO / discoverability foundation
+
+Benchmark: MUBI + Atlas Obscura both carry heavy long-tail SEO traffic
+("weird places in Kyoto", "Tokyo documentary"). Adapt to Situate:
+
+- [ ] **Per-story SEO completeness** — title / description / location
+      `schema.org` markup. Coordinate with the existing
+      `generateMetadata` task in "Read-side polish."
+- [ ] **`sitemap.xml` + `robots.txt` baseline.** Coordinate with the
+      existing item in "Read-side polish."
+- [ ] **Geographic long-tail strategy** — each pinned story should rank
+      for "[place name] short story" / "fiction set in [place]" within
+      90 days of publication. Audit after Issue #2.
+
+### 6. Pricing decision (carry-over)
+
+- [ ] **Confirm pricing tiers** before `/subscribe` page goes live.
+      Research-agent suggested $10/mo or $99/yr standard, $4/mo
+      LatAm/SEA, $15/mo "patron" with printed postcard.
+
+### Five-year reader-acquisition reality (sanity check)
+
+Based on case-study back-projection (chat 2026-05-27):
+
+| Year | Monthly visitors | Paid subs | Comparable |
+|------|------------------|-----------|------------|
+| Y1 | 5K–20K | 50–300 | early The Drift |
+| Y2 | 20K–80K | 300–1.5K | early Asymptote |
+| Y3 | 50K–200K | 1K–5K | early LitHub |
+| Y5 | 100K–500K | 3K–15K | mature Asymptote / mid LitHub |
+| Y10 | 500K–2M | 10K–50K | mature LitHub / The Drift |
+
+### What NOT to do (failure patterns)
+
+- **Print-first launch.** Astra Magazine (2022): launched April, dead
+  by November despite "succeeding by every measure," killed by paper
+  price + inflation + parent-company strategy shift.
+- **100% paid-subscription bet.** Substack data: 0 fiction newsletters
+  in top 50 earners. Asymptote 13 years in, still nonprofit-only.
+- **Expensive ad acquisition.** CAC > LTV in literary niche; not
+  recoverable at small-platform scale.
+- **Short-term explosion targets.** Atlas Obscura: 16 years to profit.
+  MUBI: 18 years to $1B. No platform in this category cleared in <5.
 
 ---
 
