@@ -264,6 +264,50 @@ Full design rationale in chat session 2026-05-27.
 
 ---
 
+## Year-1 priority sequence (around voice-to-fiction launch)
+
+Voice-to-fiction MVP, once shipped, exposes 4 known value gaps that
+block conversion: no author downstream, weak reader discovery,
+unproven first-time-writer retention, unproven reader payment
+willingness. The 5 actions below close those gaps at low marginal cost
+(~$15–30K total ex-prize). Order matters; do not skip ahead. Full
+rationale: chat session 2026-05-27.
+
+- [ ] **1. Ship voice-to-fiction Week 1–2 MVP first.** See
+      "Voice-to-fiction onboarding" above. Validates the strongest
+      unique value (30-min reader → author) before any GTM spend.
+
+- [ ] **2. GTM first wave, concurrent with Week 1 ship.** Cross-ref
+      the GTM section below: Lit Hub pitch + Substack editor's notes
+      + Twitter/X account posting one excerpt + map flyover per day.
+      Cost: editorial time only. Closes the reader-discovery gap.
+
+- [ ] **3. Situate Prize, first edition.** ~$5K winner + $1K × 5
+      finalists + $300 × 12 nominees ≈ $13K / year. Public call;
+      3-person jury (1 founder + 2 outside writers / translators).
+      Announce concurrent with MVP launch. Closes the
+      author-downstream gap by signalling seriousness.
+
+- [ ] **4. Sister-magazine reciprocal-publication agreements.** Sign
+      3–5. Candidate list: Granta Brazil (pt), Asymptote
+      (cross-language), one Spanish-language lit magazine, one
+      Asian-English lit magazine, one French / German venue. Terms:
+      free mutual reprint with attribution; no money changes hands.
+      Closes the author-downstream gap — a story appears in 5
+      markets, not 1.
+
+- [ ] **5. Set 3-month and 6-month launch-retro dates.** Two
+      calendared decision points after MVP ship. Metrics to review:
+  - Voice-to-fiction conversion funnel (CTR → completion → publish).
+  - L1 → L2 → L3 promotion rate (did anyone climb the ladder?).
+  - Paid-subscriber count vs. target.
+  - Sister-magazine cross-publish actual volume.
+  - Prize submission count.
+  - **Rule:** failing 3 of 5 at the 6-month review = re-strategize,
+    not push harder.
+
+---
+
 ## Infrastructure / ops
 
 - [ ] **Supabase Auth.** Once admin/submit need real identity. Email
