@@ -467,6 +467,182 @@ Based on case-study back-projection (chat 2026-05-27):
 
 ---
 
+## Revenue model (Year-1 → Year-5)
+
+Multi-stream design — no single revenue source carries the platform.
+Patterns from comparables (Atlas Obscura, MUBI, LitHub, Asymptote,
+Substack literary, Granta) in chat 2026-05-27 plus project-specific
+economics. Eight streams, ordered by Year-1 contribution.
+
+### Stream 1: Subscriptions (primary anchor, Year-1+)
+
+Reader-paid monthly / annual. Pricing tiers (carry-over from Reader
+acquisition Action 6; requires confirmation before /subscribe ships):
+
+- **Standard:** $10/mo or $99/yr — NA / EU adults
+- **Regional:** $4/mo — LatAm / SEA / India
+- **Patron:** $15/mo with printed postcard — superfans
+
+- [ ] **Confirm pricing tiers** before /subscribe page.
+- [ ] **Annual-vs-monthly default.** Substack literary data: annual
+      drives 60–70% of total sub revenue. Default annual on
+      /subscribe.
+- Y1 target: 50–300 paid = $3.6K–21K ARR
+- Y3 target: 1K–5K paid = $72K–360K ARR
+- Y5 target: 3K–15K paid = $216K–1.08M ARR
+
+### Stream 2: Translation access tiers (Year-1+)
+
+Existing `translationAccessTier` enum (`free` / `metered` / `premium`)
+needs a coherent commercial strategy:
+
+- **Free:** original-language + raw AI translation. Open to all.
+- **Metered:** AI + light human pass. Limited reads / month for
+  non-subscribers; unlimited for subscribers.
+- **Premium:** full human polish. Subscriber-only.
+
+- [ ] **`ai_post_edited` quota policy** (cross-ref Decisions pending).
+      Starting point: 10 free metered reads / month, then paywall.
+- [ ] **Premium tier inclusion bar.** Which translations get human
+      polish — editorial pick of ~20% of pieces, or all L3 Editions
+      tier (cross-ref Voice-to-fiction three-tier publication)?
+- [ ] **Cost-to-revenue gating.** Human polish costs $20–200 per
+      translation per language. Only stories above a readership
+      threshold qualify, to avoid burning translation budget on
+      unread pieces.
+
+### Stream 3: Print anthology (Year-1+, modest breakeven)
+
+Annual print volume — strong supply-side incentive (writers value
+print) + modest revenue.
+
+- [ ] **Anthology Volume 1** — curated picks from Year-1; 1000–3000
+      print run; Amazon + indie bookstores; $15–25 retail. May slip
+      to early Y2 if Y1 lead time runs out.
+- Economics per volume:
+  - Print + design + distribution: $20–40K
+  - Sales: 500–2000 copies × $15–25 = $7.5K–50K
+  - Y1 outcome: breakeven to modest loss (cultural capital >> cash)
+  - Y3+: profitable as brand strengthens
+
+### Stream 4: Workshops + cohorts (Year-2+)
+
+Author training as revenue + supply-side onramp.
+
+- [ ] **First Story 4-week cohort** — $30–50 / participant initially,
+      scaling to $100–200 once curriculum matures. Output: 1
+      submission-ready story per participant.
+- [ ] **Advanced craft workshops** — $200–500 / 4-week course, led
+      by Situate-published authors as a fellowship.
+- Y2 target: 2–3 cohorts × 20 × $50 = $2–3K (validation)
+- Y3 target: 4–6 cohorts × 20 × $100 = $8–12K
+- Y5 target: 200–500 participants / yr at $150 avg = $30–75K
+
+### Stream 5: Translation rights brokerage (Year-2+)
+
+Help Situate authors sell foreign-language book rights. Commission
+15–25%. Lumpy, probabilistic revenue.
+
+- [ ] **Standard agency agreement template** with Situate authors
+      (opt-in; nonexclusive; only for rights Situate brokers).
+- Y2 realistic: 1–2 small deals = $0–10K
+- Y5 realistic: 5–10 deals / year = $20–100K (if Situate becomes a
+  recognized supply venue)
+
+### Stream 6: Adaptation option fees (Year-3+)
+
+Lottery-style revenue from film / TV / podcast options.
+
+- [ ] **Adaptation rights clause** in standard publication agreement
+      — Situate gets agent role with 10–15% commission. Requires
+      legal review and an author-comms plan; promote to Decisions
+      pending if Y2 rolls around without action.
+- [ ] **Adaptation development fund** — $15–30K / yr to proactively
+      option 3–5 stories. Most lose; outsized lottery upside if any
+      get produced.
+- Y3 baseline: 1–2 small option deals = $2K–20K.
+
+### Stream 7: Grants + institutional partnerships (Year-1+)
+
+Translation-focused literary platforms are unusually grant-eligible.
+
+- [ ] **LTI Korea Q3 cycle** (cross-ref Reader acquisition Action 4).
+- [ ] **Goethe-Institut / Japan Foundation** (cross-ref).
+- [ ] **PEN Translates** — annual project grants up to £3K.
+- [ ] **NEA translation fellowship** — up to $25K per project.
+- [ ] **Banff International Literary Translation Centre** — residency
+      + small stipend.
+- Y1 realistic: $5–30K from 1–2 small grants
+- Y3+ realistic: $30–100K if recognized in translation circles
+
+### Stream 8: Brand partnerships (Year-3+, careful)
+
+Atlas Obscura model — partnered storytelling for cultural / travel
+brands. NOT advertising. Requires Y3+ brand strength.
+
+- [ ] **Pilot 1 partnership** in Y2 with a travel-meets-culture brand
+      (e.g. Wildsam, indie tourism board) to test format / pricing.
+      $5–15K range.
+- [ ] **Editorial firewall policy** — partnerships clearly labeled;
+      selection criteria documented; constitution may need P14
+      (sponsored-content disclosure) addendum before scaling.
+- Y3+ realistic: $30–150K from 2–5 partnerships / year.
+
+### Cost structure (key recurring)
+
+- **AI inference (voice-to-fiction):** $0.20 / submission. 100 / mo
+  = $20; 10K / mo = $2K / mo.
+- **Translation (AI baseline):** ~$0.50 / translation / language.
+  100 stories × 5 languages / mo = $250 / mo.
+- **Translation (human polish, premium):** $20–200 per translation
+  per language. Gated by Premium revenue.
+- **Situate Prize:** $13K / yr (cross-ref Year-1 priority sequence).
+- **Editorial team:** Editor + 2–3 part-time = $80–150K / yr (Y1
+  lean: 1 editor at $40–60K).
+- **Translator retainers:** 6 × $500 / mo = $36K / yr (cross-ref
+  Reader acquisition Action 1).
+- **Infrastructure:** Vercel + Supabase + Mapbox + Anthropic =
+  $200–1000 / mo early, scaling with usage.
+- **GTM (festivals, partnerships, travel):** $10–30K / yr.
+
+### Year-by-year ARR scenarios
+
+Three scenarios, using $6 / mo blended sub Y2+:
+
+| Year | Pessimistic | Realistic | Optimistic |
+|------|-------------|-----------|------------|
+| Y1   | $5K         | $20K      | $50K       |
+| Y2   | $15K        | $80K      | $200K      |
+| Y3   | $50K        | $250K     | $600K      |
+| Y5   | $150K       | $700K     | $2M        |
+| Y10  | $400K       | $1.5M     | $4M        |
+
+### Year-5 realistic ARR breakdown ($700K)
+
+- Subscriptions: **$400K** (~5K subs × $80 / yr blended)
+- Grants: **$80K** (3–5 small grants annually)
+- Sponsorships: **$90K** (3–4 brand partnerships)
+- Workshops: **$50K**
+- Translation rights: **$50K**
+- Anthology: **$30K**
+- Adaptation upside: not counted (lumpy; treat as bonus)
+
+### Open revenue questions
+
+- [ ] **Patron tier scope** — Patron gets original-language only, or
+      all premium translations? Affects perceived value.
+- [ ] **Founding-subscriber lifetime deal** — $300 lifetime for first
+      100 subscribers? Common indie-magazine tactic; trades Y1 cash
+      for permanent supporter relationship. If yes, promote to Y1
+      priority sequence.
+- [ ] **Pay-what-you-want option** — for readers who can't afford
+      $4 / mo regional pricing.
+- [ ] **B2B / institutional subscriptions** — university / library
+      subs at $500–2K / institution / year? Common for lit journals,
+      viable Y2+; could become Stream 9 if validated.
+
+---
+
 ## Decisions pending (need a human to pick)
 
 - [ ] **`ai_post_edited` quota policy.** Schema says "metered" tier;
