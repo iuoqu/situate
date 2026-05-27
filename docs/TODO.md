@@ -179,6 +179,17 @@ Full design rationale in chat session 2026-05-27.
       `published_l1` / `published_l2` / `published_l3`, OR add a
       separate `publication_tier` column. **Must resolve before Week
       5 submission handoff lands.**
+- [ ] **`voice_corpus` table** — user-uploaded style samples for
+      personal voice profile. Columns: `id`, `user_id`, `raw_text`,
+      `source_label` (e.g. "diary", "blog", "email"), `char_count`,
+      `uploaded_at`. Max 50 KB / sample; max 20 samples / user. RLS:
+      per-user private. Migration `drizzle/0008_voice_profile.sql`.
+- [ ] **`voice_profile` table** — LLM-distilled style profile.
+      Columns: `user_id` (PK), `profile_json` (sentence-length
+      distribution / vocabulary signature / tone tags / characteristic
+      sentence patterns / topic preferences / 3–5 sample fragments),
+      `generated_at`, `last_refreshed_at`, `status`
+      (`computing` / `ready` / `stale`). Same migration as above.
 
 ### API routes (under `src/app/api/`)
 
@@ -212,6 +223,28 @@ Full design rationale in chat session 2026-05-27.
       vote. Authenticated subscribers only; idempotent per
       voter-story pair; rejects self-votes. On 5th unique vote within
       30 days, promotes story tier + notifies author.
+- [ ] **Subscription middleware** on `/api/transcribe`,
+      `/api/transcribe/suggest`, `/api/structure-draft`,
+      `/api/refine-paragraph`, `/api/disclosure-chat`,
+      `/api/voice-corpus`, `/api/voice-profile/*`. Non-subscriber
+      requests return **HTTP 402 Payment Required**; frontend
+      surfaces `PaywallGate`. Decision: **hard paywall (Option A)** —
+      no free demo recordings. `/submit` text path stays open to all.
+- [ ] **`POST /api/voice-corpus`** (Week 2.5) — upload style sample
+      (paste text or `.txt` file). Enforces 50 KB / 20 samples
+      limits. Triggers async `voice_profile` regeneration.
+- [ ] **`POST /api/voice-profile/regenerate`** (Week 2.5) — Claude
+      Sonnet analyzes all `voice_corpus` rows for the user, writes
+      structured profile to `voice_profile.profile_json`. ~$0.30 /
+      call. Async with status polling.
+- [ ] **`GET /api/voice-profile`** (Week 2.5) — return current
+      `voice_profile` for display in `ProfileViewer` and for
+      injection into other AI prompts.
+- [ ] **Voice profile injection** in `/api/structure-draft` +
+      `/api/refine-paragraph` + `/api/prompt-suggestions` — when the
+      user has a `ready` voice profile, include its key fields in
+      the system prompt as style constraints. Fall back to default
+      behaviour when no profile exists.
 
 ### Components
 
@@ -255,6 +288,26 @@ Full design rationale in chat session 2026-05-27.
       signal (community votes + AI quality score + editorial
       bookmarks + recency). Editor picks candidates for L3 promotion.
       Behind Supabase Auth.
+- [ ] **`src/components/paywall/PaywallGate.tsx`** — surfaces when
+      a non-subscriber hits a 402 from a voice / AI-co-edit endpoint.
+      Copy: *"Voice recording + AI co-edit are included with
+      Standard ($10 / mo). The text-based `/submit` path stays free."*
+      Single CTA: *Subscribe*. No demo / no free trial (Option A
+      hard paywall, decided 2026-05-27).
+- [ ] **`src/components/voice-profile/CorpusUpload.tsx`** (Week 2.5)
+      — text paste box + `.txt` file upload + source label dropdown
+      ("diary" / "blog" / "email" / "other"). Counts toward 20-sample
+      limit. Submit triggers `POST /api/voice-corpus`.
+- [ ] **`src/components/voice-profile/ProfileViewer.tsx`** (Week 2.5)
+      — **transparency UI**: shows what the AI inferred from the
+      user's samples (sentence-length tendency, vocabulary signature,
+      tone tags, topic preferences, characteristic fragments). The
+      author can see what AI is learning — important for the
+      "keeps your voice" promise.
+- [ ] **`src/components/voice-profile/ProfileSettings.tsx`**
+      (Week 2.5) — list uploaded samples; delete; toggle "Auto-enroll
+      my published Situate pieces into corpus" (see Open product
+      questions); manual regenerate button.
 
 ### Implementation sequence
 
@@ -270,6 +323,16 @@ Full design rationale in chat session 2026-05-27.
 - [ ] **Week 2: Structured draft + drafts table.** `story_drafts`
       migration + `/api/structure-draft` + minimal `DraftCanvas` +
       save/resume.
+- [ ] **Week 2.5 (parallel with Week 3): Voice profile + paywall.**
+      `voice_corpus` + `voice_profile` migration; `CorpusUpload` +
+      `ProfileViewer` + `ProfileSettings` components;
+      `/api/voice-corpus` + `/api/voice-profile/regenerate` +
+      `/api/voice-profile` routes; subscription middleware on all
+      voice / AI-co-edit endpoints; `PaywallGate` component; voice
+      profile injection in `structure-draft` + `refine-paragraph`
+      prompts. **Optional for MVP** but redeems the "keeps your
+      voice" promise and unlocks the conversion funnel (paywall is
+      the conversion trigger).
 - [ ] **Week 3: Paragraph co-edit.** `ParagraphAssist` +
       `/api/refine-paragraph` + edit-history tracking. The qualitative
       differentiator vs "AI writes for you" tools.
@@ -292,6 +355,13 @@ Full design rationale in chat session 2026-05-27.
 
 Replaces binary accept / reject with a graduated promotion path that
 meets authors at their current readiness.
+
+**Equal access (free vs paid):** L1 / L2 / L3 submission, the
+Prize, the anthology, and all downstream paths are open to all
+authors regardless of subscription. Free authors submit via text
+(`/submit` traditional path); paid subscribers can additionally use
+voice recording + AI co-edit + voice profile (the conversion
+trigger). **Publication itself is never gated.**
 
 #### L1 (Draft Box)
 
@@ -349,12 +419,18 @@ meets authors at their current readiness.
 - Per-submission AI cost **< $0.20** (Whisper $0.03–0.06 + Haiku
   suggestions $0.01–0.015 + ~3 Sonnet calls $0.15). At 1000 / mo:
   ~$200 / mo total LLM spend; covered by single-digit subscribers.
+- **Voice profile (one-time per user):** ~$0.30 initial analysis +
+  ~$0.10 per regeneration. Negligible vs per-submission cost;
+  amortised across all the user's future voice pieces.
 - Track post-launch:
   - "Start recording" CTR (target 5%+ of readers)
   - Recording completion at >3 min (target 60%+)
   - Structured-draft acceptance rate (target 70%+)
   - End-to-end completion record → submit (target 80%+)
   - Median total time record → submit (target <40 min)
+  - **PaywallGate → subscription conversion rate** (target 8–15%
+    immediate, 25–40% within 30 days — Substack benchmark for
+    premium-feature paywalls)
 
 ### Open product questions
 
@@ -366,6 +442,15 @@ meets authors at their current readiness.
       auth first? Trades onboarding friction for storage / abuse risk.
 - [ ] **L1 visibility default.** Author-page-only vs visible to logged-in
       subscribers. Affects whether early writers feel seen.
+- [ ] **Auto-enroll published pieces into voice corpus.** Toggle in
+      `ProfileSettings`: when a user's L2 / L3 piece is published,
+      auto-append it to their `voice_corpus`. Default on or off? On
+      = stronger compounding (the more you write, the better AI
+      understands you); off = stricter consent / privacy default.
+- [x] **Voice trial mechanism.** *Resolved 2026-05-27: Option A
+      (hard paywall, no demo).* Trades discoverability for clearer
+      conversion signal; revisit at 3-month retro if conversion
+      < 5%.
 
 ---
 
@@ -680,8 +765,16 @@ economics. Eight streams, ordered by Year-1 contribution.
 
 ### Stream 1: Subscriptions (primary anchor, Year-1+)
 
-Reader-paid monthly / annual. Pricing tiers (carry-over from Reader
-acquisition Action 6; requires confirmation before /subscribe ships):
+Reader-paid monthly / annual. **Core paid feature: voice-to-fiction
+recording + AI co-edit + voice profile** (decided 2026-05-27). Free
+readers retain full access to traditional `/submit` text path; the
+voice / AI-scaffold paradigm is the conversion trigger via
+`PaywallGate`. See Voice-to-fiction onboarding for gating detail.
+Equal access to publication, Prize, anthology, and downstream — only
+the writing *tools* differ between free and paid.
+
+Pricing tiers (carry-over from Reader acquisition Action 6; requires
+confirmation before /subscribe ships):
 
 - **Standard:** $10/mo or $99/yr — NA / EU adults
 - **Regional:** $4/mo — LatAm / SEA / India
