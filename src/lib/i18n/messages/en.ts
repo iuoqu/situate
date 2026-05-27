@@ -47,6 +47,21 @@ export const messages = {
     scene_event_date: "Event date (optional)",
     scene_word_count: "{count} words",
     total_words_line: "Total: {count} words. Required range 800–2,500.",
+    // Hook selector (AI story-idea generator, free-tier surface)
+    hooks_button_label: "✨ Need ideas? Generate five from your pin(s).",
+    hooks_button_help:
+      "Free for everyone. We&rsquo;ll suggest five different angles into the places you&rsquo;ve pinned. Pick one to seed your title and abstract, or just keep writing.",
+    hooks_button_loading: "Generating ideas…",
+    hooks_button_regenerate: "Regenerate five new ideas",
+    hooks_pick_drop_pin_first: "Drop at least one pin on the map first.",
+    hooks_label_kicker: "Five possible angles",
+    hooks_label_hint:
+      "Pick one to pre-fill your title and abstract — or close this and write your own.",
+    hooks_label_write_own: "I&rsquo;ll write my own.",
+    hooks_label_loading:
+      "Generating five ideas from your pin(s)…",
+    hooks_error_generic:
+      "Couldn&rsquo;t generate ideas right now. Please try again in a moment.",
     field_relocation_test: "Why these places, in this order? (the relocation test)",
     field_relocation_test_hint:
       "At least 50 words (currently {count}). What would break if the route were moved or reshuffled? Cite specific local features — geography, transit, language, ritual — not the mood of the city.",
