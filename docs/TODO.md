@@ -171,6 +171,14 @@ Full design rationale in chat session 2026-05-27.
 - [ ] **Migration `drizzle/0006_story_drafts.sql`**. Hand-written to
       preserve PostGIS SRID modifier (drizzle-kit 0.31 bug — same
       pattern as `0002_fix_geometry_srid.sql`).
+- [ ] **`story_votes` table** for L1 → L2 community promotion. Columns:
+      `story_id`, `voter_id`, `created_at`. Unique
+      (`story_id`, `voter_id`). Migration `drizzle/0007_story_votes.sql`.
+- [ ] **`publication_tier` column or status enum extension** on
+      `submissions`. Decide: extend `submissionStatus` enum to add
+      `published_l1` / `published_l2` / `published_l3`, OR add a
+      separate `publication_tier` column. **Must resolve before Week
+      5 submission handoff lands.**
 
 ### API routes (under `src/app/api/`)
 
@@ -192,6 +200,18 @@ Full design rationale in chat session 2026-05-27.
 - [ ] **`POST /api/disclosure-chat`** — Claude Sonnet, multi-turn.
       Walks author through F1–F7 conversationally; pre-fills from
       story content; only asks what it can't infer.
+- [ ] **`POST /api/prompt-suggestions`** (Week 0) — Claude Sonnet.
+      Given coordinates + 30-char place description (+ optional
+      Wikipedia / Maps snippet), returns 5 story hooks the author
+      can pick from. ~$0.03 / call.
+- [ ] **`POST /api/drafts/[id]/submit`** (Week 5) — handoff endpoint.
+      Copies `story_drafts` fields into `submissions`, triggers AI
+      editor pipeline (P1–P11 + triage scoring), notifies author.
+      Returns submission id + estimated review window.
+- [ ] **`POST /api/stories/[id]/vote`** (Week 6) — L1 → L2 promotion
+      vote. Authenticated subscribers only; idempotent per
+      voter-story pair; rejects self-votes. On 5th unique vote within
+      30 days, promotes story tier + notifies author.
 
 ### Components
 
@@ -215,34 +235,114 @@ Full design rationale in chat session 2026-05-27.
       a place you know? Write your own story."* Click → `/submit`
       with voice-first entry pre-selected. This is the reader →
       author funnel entry point.
+- [ ] **`src/components/voice/EntryChoice.tsx`** (Week 0) — 3-option
+      entry screen: Speak it / Type it / Use a prompt. Default
+      selection driven by `?mode=` query param from
+      `WriteYourOwnPrompt` or direct navigation.
+- [ ] **`src/components/voice/PlacePicker.tsx`** (Week 0) — Mapbox
+      click-to-pin + 30-char place description input. Shares Mapbox
+      style with existing `/explore` map.
+- [ ] **`src/components/voice/HookSelector.tsx`** (Week 0) — displays
+      5 AI-generated hooks from `/api/prompt-suggestions` + "write
+      your own" option. User's choice seeds `VoiceRecorder`'s initial
+      AI prompt context.
+- [ ] **`src/components/community/UpvoteButton.tsx`** (Week 6) —
+      single-click vote on L1 stories; shows current count; promotes
+      to L2 at threshold. Logged-in subscribers only; self-votes
+      blocked.
+- [ ] **`src/components/admin/EditorL2Queue.tsx`** (Week 6) — admin
+      dashboard panel showing L2-tier stories ranked by composite
+      signal (community votes + AI quality score + editorial
+      bookmarks + recency). Editor picks candidates for L3 promotion.
+      Behind Supabase Auth.
 
 ### Implementation sequence
 
+- [ ] **Week 0: Pre-voice entry.** `EntryChoice` + `PlacePicker` +
+      `HookSelector` + `/api/prompt-suggestions`. Wire from
+      `WriteYourOwnPrompt` and from a new `/submit?mode=voice` route.
+      Ship state: user lands from Reading → Writing trigger, picks a
+      place, picks a hook, arrives at `VoiceRecorder` ready to record.
 - [ ] **Week 1: Voice capture.** `VoiceRecorder` + `LiveTranscript` +
       `/api/transcribe` + `/api/transcribe/suggest`. Ship state: user
       records 5–10 min, sees streamed transcript with periodic AI
       prompts.
-- [ ] **Week 2: Structured draft + drafts table.** Migration +
-      `/api/structure-draft` + minimal `DraftCanvas` + save/resume.
-      **MVP cut point — ship this if Week 3–4 slip and launch with
-      manual editing only.**
+- [ ] **Week 2: Structured draft + drafts table.** `story_drafts`
+      migration + `/api/structure-draft` + minimal `DraftCanvas` +
+      save/resume.
 - [ ] **Week 3: Paragraph co-edit.** `ParagraphAssist` +
       `/api/refine-paragraph` + edit-history tracking. The qualitative
       differentiator vs "AI writes for you" tools.
-- [ ] **Week 4: Conversational disclosure + submission handoff.**
-      `DisclosureChat` + `/api/disclosure-chat` + map draft fields to
-      existing `submissions` insert + three-tier publish UI.
+- [ ] **Week 4: Conversational disclosure.** `DisclosureChat` +
+      `/api/disclosure-chat`. End state: full author flow except
+      submission handoff.
+- [ ] **Week 5: Submission handoff.** `/api/drafts/[id]/submit` +
+      `story_drafts` → `submissions` data copy + trigger AI editor
+      pipeline (P1–P11 + triage) + author acknowledgement screen.
+      **MVP cut point — ship Week 0+1+2+5 with manual editing
+      (skip 3+4) if launch is tight.** Without this week, voice
+      drafts cannot enter the editorial pipeline at all.
+- [ ] **Week 6: Tier promotion mechanism.** `UpvoteButton` +
+      `/api/stories/[id]/vote` + L1 → L2 promotion logic +
+      `/community` page + `EditorL2Queue` for L2 → L3 editor pulls +
+      `story_votes` migration. Can slip to Year-1 month 2-3 if
+      launch is tight; L1 + L3 can ship without L2 community.
 
-### Three-tier publication (depends on Week 4 ship)
+### Three-tier publication (depends on Week 5–6 ship)
 
-- [ ] **L1 / L2 / L3 path** — replaces binary accept/reject:
-  - L1 (Draft Box): AI editorial pass only; author-page visible; not
-    in main feed.
-  - L2 (Community Featured): AI pass + 5 community upvotes; community
-    section visible; still not main feed.
-  - L3 (Situate Editions): full editorial review (current bar).
-  - DB: add `publication_tier` column or extend `submissions.status`
-    enum.
+Replaces binary accept / reject with a graduated promotion path that
+meets authors at their current readiness.
+
+#### L1 (Draft Box)
+
+- **Requirement:** AI editorial pass only — P1–P11 checkers run; no
+  auto-rejections at this tier; flag-or-better required for P3 + P4
+  + P5.
+- **Visibility:** on `/by/[author_id]` (author page); NOT in main
+  `/explore` feed; NOT promoted by Situate channels.
+- **Author downstream:** proof of work + first publication. No
+  payment.
+
+#### L2 (Community Featured)
+
+- **Requirement:** L1 + 5 unique community upvotes within 30 days,
+  OR editor manual promotion.
+- **Visibility:** on `/community` section page; NOT in main
+  `/explore` feed; can be linked from Situate social channels.
+- **Author downstream:** small token payment (TBD; see Author
+  downstream Money section). Eligible for First Story cohort showcase.
+
+#### L1 → L2 promotion mechanism
+
+- [ ] **Voting UI.** `UpvoteButton` on author-page story view.
+- [ ] **Voter eligibility.** Logged-in subscribers only; authors
+      cannot vote on their own work.
+- [ ] **Promotion logic.** 5th unique upvote within 30 days triggers
+      tier change → email author → appearance in `/community`.
+- [ ] **Anti-gaming.** Track voter → author social graph; flag
+      voting rings for editor review.
+
+#### L3 (Situate Editions)
+
+- **Requirement:** editor manual selection from L2 candidates, OR
+  direct L3 submission with full editorial review.
+- **Visibility:** main `/explore` feed; edition assignment;
+  anthology candidate.
+- **Author downstream:** full author revenue share (per Author
+  downstream Money section, decision pending), Prize eligibility,
+  translation fanout to all 39 languages.
+
+#### L2 → L3 promotion mechanism
+
+- [ ] **Editor dashboard.** `EditorL2Queue` shows L2 stories ranked
+      by composite signal: community vote count + AI quality score +
+      editorial bookmarks + recency.
+- [ ] **Editor decision UI.** Promote to L3 (triggers full P1–P11
+      review + translation fanout — see Post-publication pipeline)
+      OR hold / reject with reason cited.
+- [ ] **Author notification.** "Your story is being considered for
+      Situate Editions" → editor review window (target 14 days) →
+      decision notification.
 
 ### Cost & metric targets
 
@@ -266,6 +366,105 @@ Full design rationale in chat session 2026-05-27.
       auth first? Trades onboarding friction for storage / abuse risk.
 - [ ] **L1 visibility default.** Author-page-only vs visible to logged-in
       subscribers. Affects whether early writers feel seen.
+
+---
+
+## Post-publication pipeline (depends on three-tier promotion)
+
+What happens to a story after it crosses an editorial bar. Existing
+schema supports the data model (translation tables, moderation log,
+edition assignment) but the workflows are not yet wired. Without
+this section, an L3 story sits in the database without a translation
+fanout, an author never gets notified, and there's no place for the
+author to see their own work — voice-to-fiction's promise is broken
+at the finish line.
+
+### Multilingual workflow
+
+Author submits in their language → AI auto-translates to English for
+editorial review → if approved at L3, AI fans out to all 39 other
+languages → premium-tier human polish for top stories.
+
+- [ ] **Source-language → English bridge.** When submission language
+      is not `en`, auto-generate English translation (Claude Sonnet,
+      prompt-cached system) at submission time. Stored with
+      `translationMethod = 'ai'`, `translationStatus = 'in_review'`.
+      Editor sees both original + English bridge in admin queue.
+- [ ] **L3 approval → fanout trigger.** On `submissions.status →
+      published` with tier = L3, enqueue translation jobs for all
+      supported languages (excluding source + English bridge if
+      already done). Job queue: Supabase Edge Functions cron OR
+      pg_cron + worker. Estimate: 38 jobs × ~$0.50 = **~$19 per
+      published story for fanout**.
+- [ ] **Premium-tier human polish queue.** When a story exceeds a
+      readership threshold (e.g. 1K reads in source language),
+      auto-enqueue premium-tier translations to human polishers.
+      Budget gated by Premium-tier revenue (Revenue Stream 2).
+
+### P9 (translator workflow trigger) — detailed
+
+Existing TODO entry under Next AI editor work was a one-line
+placeholder. Full design below.
+
+- [ ] **Trigger condition.** `submissions.status` flips to
+      `published` AND `publication_tier = 'l3'`.
+- [ ] **Worker design.** Background job reads `submissions.published`
+      rows, fans out `translations` rows for each supported language,
+      kicks off AI translation calls in parallel, writes results
+      back with `translationStatus = 'ai_generated'`.
+- [ ] **Failure / retry.** Translations may fail (rate limit,
+      content flagged). Retry queue with exponential backoff;
+      editor notification if any language fails after 3 retries.
+- [ ] **Annotation handoff.** AI-generated translations flagged for
+      the human annotation editor (cross-ref Write-side TODO) —
+      annotator adds literal / transposed / explained renderings for
+      cultural spans.
+
+### Notification system (email infrastructure)
+
+Without this, authors don't know when their drafts move, when L1
+gets upvotes, when L3 is published. Currently no email infra exists.
+
+- [ ] **Email provider.** Pick one:
+      [**Resend**](https://resend.com) (recommended — dev-friendly +
+      good deliverability), Postmark (transactional-focused), Mailgun
+      (cheaper at scale). Estimated cost $20–100 / mo at early scale.
+- [ ] **Notification events.**
+  - `draft.autosaved` — silent / digest only.
+  - `submission.acknowledged` — "Your story is in review."
+  - `tier.promoted_to_l1` — "Your story is on your author page."
+  - `tier.promoted_to_l2` — "Your community noticed you."
+  - `tier.promoted_to_l3` — "Welcome to Situate Editions."
+  - `translation.completed` — "Your story is now in N languages."
+  - `prize.shortlisted` / `prize.winner` — Situate Prize lifecycle.
+  - `earnings.update` — monthly summary (once author rev-share
+    decided).
+- [ ] **Template system.** Markdown + light templating; multilingual
+      based on author's `language` field.
+- [ ] **Unsubscribe / preferences.** Per-event opt-out; required for
+      CAN-SPAM / GDPR compliance.
+
+### Author dashboard
+
+Where an author sees their universe in one place. Currently no such
+view exists.
+
+- [ ] **`/dashboard` route.** Auth-gated (Supabase Auth — cross-ref
+      Infrastructure / ops).
+- [ ] **Sections.**
+  - **Drafts** — in-progress voice-to-fiction drafts with stage
+    indicator (recording / transcribed / structured / editing /
+    disclosure / ready).
+  - **Published** — list of L1 / L2 / L3 stories with per-story
+    stats: total reads, language breakdown (translations), upvotes,
+    earnings.
+  - **Notifications** — recent events (mirror of email log).
+  - **Earnings** — if author rev-share decided yes: pending +
+    paid-out + breakdown by source (subscription share / workshop /
+    rights commission / adaptation).
+- [ ] **Public profile vs private dashboard.** `/by/[author_id]` is
+      public (anyone can view, shows L1+ stories); `/dashboard` is
+      private (only the author themselves sees drafts + earnings).
 
 ---
 
