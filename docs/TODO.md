@@ -149,6 +149,121 @@ Order from the v0 judgment project's recommended sequence:
 
 ---
 
+## Voice-to-fiction onboarding (next major scope)
+
+Reader-to-author pipeline: speak 5–10 min → AI structures → paragraph
+co-edit → conversational disclosure → submit. Target: a reader with no
+fiction-writing habit produces a publishable 1500–2500-word draft in
+~30 minutes. Differentiator: no other fiction platform (Sudowrite,
+Wattpad, 番茄作家助手, Inkitt) offers a guided voice-first scaffold.
+Full design rationale in chat session 2026-05-27.
+
+### Schema (Week 2 prerequisite)
+
+- [ ] **`story_drafts` table** in `src/db/schema.ts` — private
+      per-author draft state, separate from `submissions`. Columns:
+      `location` (geometry), `place_description`, `language`,
+      `voice_transcript`, `recording_duration_sec`, `structured_draft`,
+      `current_text`, `edit_history jsonb`, `disclosure_chat jsonb`,
+      `disclosures jsonb`, `stage`.
+- [ ] **`draft_stage` enum**: `recording` / `transcribed` /
+      `structured` / `editing` / `disclosure` / `ready`.
+- [ ] **Migration `drizzle/0006_story_drafts.sql`**. Hand-written to
+      preserve PostGIS SRID modifier (drizzle-kit 0.31 bug — same
+      pattern as `0002_fix_geometry_srid.sql`).
+
+### API routes (under `src/app/api/`)
+
+- [ ] **`POST /api/transcribe`** — streaming, proxies OpenAI Whisper.
+      $0.006/min. Browser uploads audio chunks; server streams text
+      chunks back.
+- [ ] **`POST /api/transcribe/suggest`** — Claude Haiku, mid-recording
+      follow-up prompts. Returns `{ should_interrupt, questions }`.
+      Only interrupt for missing characters / sensory detail /
+      why-it-matters; never for style.
+- [ ] **`POST /api/structure-draft`** — Claude Sonnet. Transcript +
+      place info → prose-structured draft. **Prompt-level rules:**
+      preserve speaker's voice, add no facts, mark gaps `[BRACKETED]`.
+      Ephemeral-cache the system prompt. ~$0.05/call.
+- [ ] **`POST /api/refine-paragraph`** — Claude Sonnet. Paragraph +
+      action (`tighten` / `add_detail` / `rewrite`) → 3 alternatives
+      with rationales. ~$0.01/call. Must not "literary-ify" the
+      author's voice — pass a `voice_sample` to anchor style.
+- [ ] **`POST /api/disclosure-chat`** — Claude Sonnet, multi-turn.
+      Walks author through F1–F7 conversationally; pre-fills from
+      story content; only asks what it can't infer.
+
+### Components
+
+- [ ] **`src/components/voice/VoiceRecorder.tsx`** — browser
+      MediaRecorder, pause / resume / timer, 10-min cap, auto-save
+      every 30s.
+- [ ] **`src/components/voice/LiveTranscript.tsx`** — streaming text
+      display + AI-prompt side panel that surfaces suggestions from
+      `/api/transcribe/suggest`.
+- [ ] **`src/components/draft/DraftCanvas.tsx`** — paragraph-level
+      editor; left panel raw transcript (collapsible), right panel
+      structured draft.
+- [ ] **`src/components/draft/ParagraphAssist.tsx`** — hover-revealed
+      buttons (`✂️ tighten` / `➕ add detail` / `🔄 rewrite`) → popup
+      with 3 alternatives; writes accepted choice to `edit_history`.
+- [ ] **`src/components/draft/DisclosureChat.tsx`** — conversational
+      F1–F7 walkthrough; one question per turn with quick-pick options
+      + free-text fallback.
+
+### Implementation sequence
+
+- [ ] **Week 1: Voice capture.** `VoiceRecorder` + `LiveTranscript` +
+      `/api/transcribe` + `/api/transcribe/suggest`. Ship state: user
+      records 5–10 min, sees streamed transcript with periodic AI
+      prompts.
+- [ ] **Week 2: Structured draft + drafts table.** Migration +
+      `/api/structure-draft` + minimal `DraftCanvas` + save/resume.
+      **MVP cut point — ship this if Week 3–4 slip and launch with
+      manual editing only.**
+- [ ] **Week 3: Paragraph co-edit.** `ParagraphAssist` +
+      `/api/refine-paragraph` + edit-history tracking. The qualitative
+      differentiator vs "AI writes for you" tools.
+- [ ] **Week 4: Conversational disclosure + submission handoff.**
+      `DisclosureChat` + `/api/disclosure-chat` + map draft fields to
+      existing `submissions` insert + three-tier publish UI.
+
+### Three-tier publication (depends on Week 4 ship)
+
+- [ ] **L1 / L2 / L3 path** — replaces binary accept/reject:
+  - L1 (Draft Box): AI editorial pass only; author-page visible; not
+    in main feed.
+  - L2 (Community Featured): AI pass + 5 community upvotes; community
+    section visible; still not main feed.
+  - L3 (Situate Editions): full editorial review (current bar).
+  - DB: add `publication_tier` column or extend `submissions.status`
+    enum.
+
+### Cost & metric targets
+
+- Per-submission AI cost **< $0.20** (Whisper $0.03–0.06 + Haiku
+  suggestions $0.01–0.015 + ~3 Sonnet calls $0.15). At 1000 / mo:
+  ~$200 / mo total LLM spend; covered by single-digit subscribers.
+- Track post-launch:
+  - "Start recording" CTR (target 5%+ of readers)
+  - Recording completion at >3 min (target 60%+)
+  - Structured-draft acceptance rate (target 70%+)
+  - End-to-end completion record → submit (target 80%+)
+  - Median total time record → submit (target <40 min)
+
+### Open product questions
+
+- [ ] **Voice language detection.** Whisper auto-detects but is
+      unreliable on code-switching. Ask up front or auto-detect?
+- [ ] **Mobile vs desktop entry.** Voice fits mobile; paragraph editing
+      fits desktop. Where does the "speak" entry point live? Both?
+- [ ] **Anonymous drafts.** Allow anon record-then-signup, or require
+      auth first? Trades onboarding friction for storage / abuse risk.
+- [ ] **L1 visibility default.** Author-page-only vs visible to logged-in
+      subscribers. Affects whether early writers feel seen.
+
+---
+
 ## Infrastructure / ops
 
 - [ ] **Supabase Auth.** Once admin/submit need real identity. Email
