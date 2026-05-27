@@ -210,6 +210,11 @@ Full design rationale in chat session 2026-05-27.
 - [ ] **`src/components/draft/DisclosureChat.tsx`** — conversational
       F1–F7 walkthrough; one question per turn with quick-pick options
       + free-text fallback.
+- [ ] **`src/components/reading/WriteYourOwnPrompt.tsx`** — appears on
+      `/stories/[id]` after a reader finishes their 5th story: *"Have
+      a place you know? Write your own story."* Click → `/submit`
+      with voice-first entry pre-selected. This is the reader →
+      author funnel entry point.
 
 ### Implementation sequence
 
@@ -534,6 +539,10 @@ Author training as revenue + supply-side onramp.
       submission-ready story per participant.
 - [ ] **Advanced craft workshops** — $200–500 / 4-week course, led
       by Situate-published authors as a fellowship.
+- [ ] **Instructor compensation model.** Default proposal: 50% of
+      workshop tuition to author-instructor, 50% to platform; or
+      fixed fellowship $1–2K / workshop. Confirm before recruiting
+      first instructor; cross-ref Author downstream Money section.
 - Y2 target: 2–3 cohorts × 20 × $50 = $2–3K (validation)
 - Y3 target: 4–6 cohorts × 20 × $100 = $8–12K
 - Y5 target: 200–500 participants / yr at $150 avg = $30–75K
@@ -643,6 +652,73 @@ Three scenarios, using $6 / mo blended sub Y2+:
 
 ---
 
+## Author downstream (consolidated index)
+
+What an author gets from publishing on Situate, beyond being read.
+This is the supply-side recruitment narrative — what we tell a
+writer when they ask "why come here vs. Granta / Substack / Wattpad?"
+Most items are detailed elsewhere; this section is the index plus
+the items not yet anchored.
+
+### Recognition
+
+- **Situate Prize** — Year-1 priority Action 3.
+- **Annual anthology inclusion** — Revenue Stream 3.
+- **Sister-magazine reprints** — Year-1 priority Action 4.
+
+### Money
+
+- [ ] **Author revenue-share model** (CRITICAL undecided) — see
+      Decisions pending. Affects /submit contract, supply-side
+      narrative, cost structure.
+- **Workshop instructor fees** — Revenue Stream 4 (50/50 split
+      proposal).
+- **Translation rights commission to author** — Revenue Stream 5
+      (author retains 75–85%; Situate 15–25%).
+- **Adaptation option fees + back-end** — Revenue Stream 6
+      (author retains 85–90%; Situate 10–15% as agent).
+
+### Career paths
+
+- **Multi-language reach (40 languages)** — core product
+      differentiator; no other lit platform offers this at scale.
+- **Translation rights brokerage** — Revenue Stream 5.
+- **Film / TV / podcast adaptation pipeline** — Revenue Stream 6.
+- [ ] **Audio podcast partnership** — Year-1+. Find an audio-fiction
+      podcast partner (Selected Shorts, LeVar Burton Reads,
+      The Penguin Podcast, etc.); establish "Situate Stories Read
+      Aloud" weekly or biweekly cadence. Author $200–500 / piece.
+      Platform cost $20–30K / yr. Builds discovery + small income.
+
+### Time / space
+
+- [ ] **Residency program** — Year-2+. Partner with one residency
+      per year tied to a Situate location (e.g. a literary residency
+      in Lisbon, Mexico City, Kyoto). Writer spends 1–2 weeks on-site
+      + produces one Situate piece. $2–5K stipend + housing.
+      Reinforces the geo-anchored brand and creates supply-side
+      "I went there for Situate" narrative.
+
+### Skill development
+
+- **AI editor feedback (constitutional checkers)** — every submission
+      gets editorial feedback even if rejected. See Voice-to-fiction
+      onboarding + Next AI editor work.
+- **First Story 4-week cohort** — Revenue Stream 4.
+- **Peer review (community-featured L2 tier)** — Voice-to-fiction
+      three-tier publication.
+
+### Speculative (Year-3+, deferred)
+
+- AI animation / 漫剧 adaptation pipeline — earlier chat identified
+  as nascent market; decide in Year-2 once brand exists.
+- Educational licensing — universities using Situate stories in
+  creative-writing curricula, paid per use. Defer to Year-3+.
+- Author peer network / mentorship beyond First Story cohort —
+  form unclear; defer.
+
+---
+
 ## Decisions pending (need a human to pick)
 
 - [ ] **`ai_post_edited` quota policy.** Schema says "metered" tier;
@@ -657,6 +733,18 @@ Three scenarios, using $6 / mo blended sub Y2+:
 - [ ] **Custom domain.** `situate-zeta.vercel.app` is fine for
       development; for press it should be `situateeditions.com` or
       similar. Buy / point DNS when ready.
+- [ ] **Author revenue-share model.** Critical and currently
+      undefined. Options: flat per-piece fee ($100–500); ongoing %
+      rev-share (Substack-style 70–90% to author); tiered by
+      publication level (L1 free / L2 small / L3 paid); or hybrid.
+      Affects /submit contract template, cost structure, and the
+      supply-side recruitment narrative. **Must confirm before
+      opening L3 submissions.** Cross-ref Author downstream Money
+      section.
+- [ ] **Constitution P14: sponsored-content disclosure.** Required
+      before Revenue Stream 8 (brand partnerships) goes live. Modeled
+      on Atlas Obscura's editorial-firewall disclosure pattern.
+      Candidate for Constitution v0.3.
 
 ---
 
