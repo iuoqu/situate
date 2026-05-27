@@ -190,6 +190,24 @@ Full design rationale in chat session 2026-05-27.
       sentence patterns / topic preferences / 3–5 sample fragments),
       `generated_at`, `last_refreshed_at`, `status`
       (`computing` / `ready` / `stale`). Same migration as above.
+- [ ] **`story_drafts.template_id`** text column — references
+      template registry (see `src/lib/templates/`). Year 1 ships
+      one template (`situate-spine`); column exists Day 1 to allow
+      Year-2+ multi-template without migration.
+- [ ] **`story_drafts.sections`** jsonb array — replaces the single
+      `location` + `place_description` columns as the canonical
+      structure. Each entry:
+      `{ index, section_id, content, location (geometry|null),
+      place_description, section_metadata (hook choice, etc.) }`.
+      When `location` is `null`, that section inherits the previous
+      section's place. Primary `location` column kept on the parent
+      row as `sections[].location` first-non-null (for map indexing).
+- [ ] **Template registry directory** `src/lib/templates/` —
+      file-based registry. Year-1: `registry.ts` + `situate-spine.ts`
+      only. Adding a Year-2 template = add a file + register; no
+      schema migration, no UI rewrite. Each template exports
+      `{ id, name, description, sections: [{ id, label, prompt,
+      wordRange, hookOptions?, canHaveOwnLocation }] }`.
 
 ### API routes (under `src/app/api/`)
 
@@ -245,6 +263,15 @@ Full design rationale in chat session 2026-05-27.
       user has a `ready` voice profile, include its key fields in
       the system prompt as style constraints. Fall back to default
       behaviour when no profile exists.
+- [ ] **`GET /api/story-templates`** (Week 1.5) — returns registry
+      metadata: `[{ id, name, description, sectionCount }]`. Used
+      by `EntryChoice` (currently filters to `situate-spine` only;
+      Year-2+ exposes more).
+- [ ] **`POST /api/drafts/[id]/restructure-suggestions`** (Week 3+,
+      **paid**) — Claude Sonnet given current section content,
+      returns 2–3 alternative orderings (e.g. 倒叙 / reverse
+      chronology, frame story, cross-cut) with rewritten transition
+      sentences. Author picks one or keeps original. ~$0.05 / call.
 
 ### Components
 
@@ -269,9 +296,15 @@ Full design rationale in chat session 2026-05-27.
       with voice-first entry pre-selected. This is the reader →
       author funnel entry point.
 - [ ] **`src/components/voice/EntryChoice.tsx`** (Week 0) — 3-option
-      entry screen: Speak it / Type it / Use a prompt. Default
-      selection driven by `?mode=` query param from
-      `WriteYourOwnPrompt` or direct navigation.
+      entry screen:
+      (1) **🎤 Speak it (Premium)** → `VoiceRecorder` flow;
+      (2) **⌨️ Write it (Free, Recommended)** → `StoryTemplate`
+          guided 5-section flow (default template `situate-spine`);
+      (3) **📝 Quick form (Free, Advanced)** → existing `/submit`
+          form for experienced writers.
+      Default selection driven by `?mode=` query param from
+      `WriteYourOwnPrompt` or direct navigation. Non-subscriber
+      click on (1) → `PaywallGate`.
 - [ ] **`src/components/voice/PlacePicker.tsx`** (Week 0) — Mapbox
       click-to-pin + 30-char place description input. Shares Mapbox
       style with existing `/explore` map.
@@ -308,6 +341,37 @@ Full design rationale in chat session 2026-05-27.
       (Week 2.5) — list uploaded samples; delete; toggle "Auto-enroll
       my published Situate pieces into corpus" (see Open product
       questions); manual regenerate button.
+- [ ] **`src/components/template/StoryTemplate.tsx`** (Week 1.5,
+      **free**) — template-agnostic UI; loads template definition
+      via `/api/story-templates`, then renders sequential
+      `SectionPrompt` steps. Reads `PlacePicker` + `HookSelector`
+      context as initial input to Section 1.
+- [ ] **`src/components/template/SectionPrompt.tsx`** (Week 1.5,
+      **free**) — single-section UI; reads section definition (label,
+      prompt, wordRange, optional hookOptions, canHaveOwnLocation);
+      renders prompt + example-from-library + textarea with live
+      word count. If `canHaveOwnLocation`, includes inline
+      `MultiLocationPicker`. Section 1 includes the 6-hook
+      `HookOption` chooser.
+- [ ] **`src/components/template/MultiLocationPicker.tsx`** (Week
+      1.5, **free**) — Mapbox UI for assigning a location to the
+      current section. Default: inherit from previous section
+      (visualised by a small "same as Section X" indicator + "change
+      location" button). Stores into `sections[].location`.
+- [ ] **`src/components/template/AssemblyView.tsx`** (Week 1.5,
+      **free**) — preview all sections combined as the assembled
+      draft; single-textarea fallback for whole-draft edits before
+      submission.
+- [ ] **`src/components/template/SectionRearranger.tsx`** (Week 3+,
+      **free**) — drag-and-drop reorder of `sections[]` after initial
+      draft. Live preview with transition warnings (e.g. "Section 4
+      now opens — consider rewriting its first sentence").
+- [ ] **`src/components/template/AIRestructureSuggester.tsx`**
+      (Week 3+, **paid**, gated by `PaywallGate`) — calls
+      `/api/drafts/[id]/restructure-suggestions`; shows 2–3
+      AI-proposed alternative orderings (倒叙 / frame / cross-cut)
+      with rewritten transitions; author picks one or keeps
+      original.
 
 ### Implementation sequence
 
@@ -320,9 +384,21 @@ Full design rationale in chat session 2026-05-27.
       `/api/transcribe` + `/api/transcribe/suggest`. Ship state: user
       records 5–10 min, sees streamed transcript with periodic AI
       prompts.
+- [ ] **Week 1.5 (parallel with Week 1): Story Template path
+      (free).** Template registry (`src/lib/templates/registry.ts` +
+      `situate-spine.ts`) + `/api/story-templates` + `StoryTemplate`
+      + `SectionPrompt` + `MultiLocationPicker` + `AssemblyView`.
+      `story_drafts.template_id` + `sections jsonb` schema (lands
+      with Week 2 migration). Ship state: user from `EntryChoice`
+      → "Write it" gets the guided 5-section Situate Spine flow
+      with multi-location support; can save / resume; assembles to
+      a unified draft.
 - [ ] **Week 2: Structured draft + drafts table.** `story_drafts`
-      migration + `/api/structure-draft` + minimal `DraftCanvas` +
-      save/resume.
+      migration (includes `template_id` + `sections jsonb` from
+      Week 1.5) + `/api/structure-draft` + minimal `DraftCanvas` +
+      save/resume. Voice path produces a single-section draft
+      (template_id = `null` OR a special `voice-freeform` template);
+      template path produces a multi-section draft.
 - [ ] **Week 2.5 (parallel with Week 3): Voice profile + paywall.**
       `voice_corpus` + `voice_profile` migration; `CorpusUpload` +
       `ProfileViewer` + `ProfileSettings` components;
@@ -333,9 +409,15 @@ Full design rationale in chat session 2026-05-27.
       prompts. **Optional for MVP** but redeems the "keeps your
       voice" promise and unlocks the conversion funnel (paywall is
       the conversion trigger).
-- [ ] **Week 3: Paragraph co-edit.** `ParagraphAssist` +
-      `/api/refine-paragraph` + edit-history tracking. The qualitative
-      differentiator vs "AI writes for you" tools.
+- [ ] **Week 3: Paragraph co-edit + restructure.**
+      `ParagraphAssist` + `/api/refine-paragraph` + edit-history
+      tracking (the qualitative differentiator vs "AI writes for
+      you" tools). Plus `SectionRearranger` (free, drag-drop reorder
+      of `sections[]`) and `AIRestructureSuggester` (paid,
+      `/api/drafts/[id]/restructure-suggestions` for AI-proposed
+      orderings like 倒叙). Restructure surfaces are available for
+      both voice-path drafts (after manual section splitting if
+      single-section) and template-path drafts (native multi-section).
 - [ ] **Week 4: Conversational disclosure.** `DisclosureChat` +
       `/api/disclosure-chat`. End state: full author flow except
       submission handoff.
@@ -451,6 +533,28 @@ trigger). **Publication itself is never gated.**
       (hard paywall, no demo).* Trades discoverability for clearer
       conversion signal; revisit at 3-month retro if conversion
       < 5%.
+- [x] **Template count Year 1.** *Resolved 2026-05-27: ship one
+      template (`situate-spine`).* Framework allows Year-2+ additions
+      (vignette / incident / encounter / echo) by adding a file in
+      `src/lib/templates/`. No code change in `StoryTemplate.tsx`.
+- [x] **Multi-location & section reorder access.** *Resolved
+      2026-05-27: multi-location FREE; drag-drop reorder FREE;
+      AI-suggested restructure (倒叙 etc.) PAID.* Structural choices
+      stay free; AI suggestions are gated.
+- [ ] **Curate Situate Spine example library.** Year-1 editorial
+      task: from existing + new publications, label which paragraphs
+      exemplify Section 1 / 2 / 3 / 4 / 5. `SectionPrompt` pulls one
+      example per section per visit. Target: 5 examples per section
+      by 3-month retro.
+- [ ] **Y2+ template candidates.** Track via 3-month + 6-month
+      retro: which alternative templates (vignette / incident /
+      encounter / echo / others) do users ask for? Decide top-2
+      to ship Y2 based on signal.
+- [ ] **Section-level Mapbox flyover.** Post-publication, the
+      reading-mode flyover (existing `story-map.tsx`) flies between
+      `sections[].location` when present. Already supported by the
+      schema; needs UI wiring in `story-map.tsx`. Cross-ref Map
+      polish section.
 
 ---
 
