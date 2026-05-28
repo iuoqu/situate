@@ -1,5 +1,8 @@
+import { redirect } from "next/navigation";
+
 import { getActivePrinciples } from "@/app/actions";
 import { getReaderPrefs } from "@/lib/reader-prefs";
+import { getServerSupabase } from "@/lib/supabase/server";
 
 import { SubmitForm } from "./submit-form";
 
@@ -13,6 +16,15 @@ export default async function SubmitPage({
   searchParams: Search;
 }) {
   const sp = await searchParams;
+
+  // Closed-beta gate. The /submit form is treated as a "feature" per the
+  // invite-only policy — read-side pages stay public.
+  const supabase = await getServerSupabase();
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+  if (!user) redirect(`/auth/login?reason=auth_required&next=/submit`);
+
   const { language } = await getReaderPrefs({ langParam: sp.lang });
 
   // Fetch active principles for the F7 attestation — the legal-attestation

@@ -42,6 +42,18 @@ export const messages: DeepPartial<MessageDictionary> = {
     scene_event_date: "事件时间(可选)",
     scene_word_count: "{count} 字",
     total_words_line: "总计: {count} 字。范围 800–2,500。",
+    // 故事钩子(AI 故事点子生成器,免费功能)
+    hooks_button_label: "✨ 没思路?让我们基于你的坐标生成 5 个角度。",
+    hooks_button_help:
+      "对所有人免费。我们会根据你钉的地点生成 5 个不同的切入角度。选一个用来预填标题和摘要,也可以直接继续写。",
+    hooks_button_loading: "正在生成…",
+    hooks_button_regenerate: "再换 5 个新点子",
+    hooks_pick_drop_pin_first: "先在地图上钉至少一个点。",
+    hooks_label_kicker: "五个可选角度",
+    hooks_label_hint: "选一个预填标题和摘要——或者关掉它,自己写。",
+    hooks_label_write_own: "我自己写。",
+    hooks_label_loading: "正在为你的坐标生成 5 个点子…",
+    hooks_error_generic: "暂时生成不出来。稍后再试。",
     field_relocation_test: "为什么是这些地点、按这个顺序?(搬迁测试)",
     field_relocation_test_hint:
       "至少 50 字(目前 {count} 字)。如果把这条路线挪走或打乱,故事会怎样?引用具体的地方特征——地理、交通、语言、仪俗——而不是「这座城市的氛围」。",

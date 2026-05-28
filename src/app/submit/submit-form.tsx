@@ -5,7 +5,13 @@ import { useRouter } from "next/navigation";
 import { useEffect, useRef, useState } from "react";
 
 import { submitFromForm, type SubmitFormPayload } from "@/app/actions";
+import type {
+  PromptSuggestionHook,
+  PromptSuggestionsRequest,
+  PromptSuggestionsResponse,
+} from "@/app/api/prompt-suggestions/route";
 import { LangSwitch } from "@/components/lang-switch";
+import { HookSelector } from "@/components/voice/HookSelector";
 import type {
   AiUsageLabel,
   AuthorRelationship,
@@ -106,6 +112,55 @@ export function SubmitForm({
 
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
+
+  // ── AI hook generation (free-tier surface) ─────────────────────────────
+  // Generates 5 story angles based on the dropped pins via POST
+  // /api/prompt-suggestions. Picking a hook pre-fills the title + abstract;
+  // we never overwrite the scene content (that's the author's voice).
+  const [hooks, setHooks] = useState<PromptSuggestionHook[]>([]);
+  const [hooksLoading, setHooksLoading] = useState(false);
+  const [hooksError, setHooksError] = useState<string | null>(null);
+  const [hooksOpen, setHooksOpen] = useState(false);
+
+  async function generateHooks() {
+    if (scenes.length === 0) return;
+    setHooksLoading(true);
+    setHooksError(null);
+    setHooksOpen(true);
+    try {
+      const payload: PromptSuggestionsRequest = {
+        coordinates: scenes.map((s) => ({
+          longitude: s.longitude,
+          latitude: s.latitude,
+        })),
+        language,
+      };
+      const res = await fetch("/api/prompt-suggestions", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(payload),
+      });
+      if (!res.ok) {
+        const detail = await res.text();
+        throw new Error(detail);
+      }
+      const data = (await res.json()) as PromptSuggestionsResponse;
+      setHooks(data.hooks);
+    } catch {
+      // We don't surface the upstream error verbatim — it's English / Anthropic
+      // and not useful to the author. Show a localized generic message.
+      setHooksError(t(locale, "submit.hooks_error_generic"));
+      setHooks([]);
+    } finally {
+      setHooksLoading(false);
+    }
+  }
+
+  function applyHook(hook: PromptSuggestionHook) {
+    setTitle(hook.title);
+    setAbstract(hook.premise);
+    setHooksOpen(false);
+  }
 
   const totalWords = scenes.reduce((sum, s) => sum + countWordsClient(s.content), 0);
   const relocationWords = countWordsClient(relocationTest);
@@ -373,6 +428,55 @@ export function SubmitForm({
             <div style={{ position: "absolute", top: 12, right: 12, padding: "6px 10px", background: "rgba(255,255,255,.92)", borderRadius: 3, fontFamily: "system-ui", fontSize: 11, color: "#555" }}>
               {t(locale, "submit.pins_indicator", { current: scenes.length })}
             </div>
+          </div>
+
+          {/* AI hook generator — free-tier surface. Activates once at least
+              one pin is on the map. */}
+          <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
+            <div style={{ display: "flex", gap: 12, alignItems: "center", flexWrap: "wrap" }}>
+              <button
+                type="button"
+                onClick={generateHooks}
+                disabled={scenes.length === 0 || hooksLoading}
+                style={{
+                  ...smallButtonStyle,
+                  padding: "8px 14px",
+                  fontSize: 13,
+                  background: scenes.length === 0 ? "#f4f1ea" : "white",
+                  color: scenes.length === 0 ? "#aaa" : "#1a1a1a",
+                  cursor:
+                    scenes.length === 0 || hooksLoading
+                      ? "not-allowed"
+                      : "pointer",
+                }}
+              >
+                {hooksLoading
+                  ? t(locale, "submit.hooks_button_loading")
+                  : hooks.length > 0
+                    ? t(locale, "submit.hooks_button_regenerate")
+                    : t(locale, "submit.hooks_button_label")}
+              </button>
+              <span style={{ ...mutedStyle, flex: 1, minWidth: 220 }}>
+                {scenes.length === 0
+                  ? t(locale, "submit.hooks_pick_drop_pin_first")
+                  : t(locale, "submit.hooks_button_help")}
+              </span>
+            </div>
+            {hooksOpen && (
+              <HookSelector
+                hooks={hooks}
+                loading={hooksLoading}
+                error={hooksError}
+                onSelect={applyHook}
+                onWriteOwn={() => setHooksOpen(false)}
+                labels={{
+                  kicker: t(locale, "submit.hooks_label_kicker"),
+                  hint: t(locale, "submit.hooks_label_hint"),
+                  writeOwn: t(locale, "submit.hooks_label_write_own"),
+                  loadingText: t(locale, "submit.hooks_label_loading"),
+                }}
+              />
+            )}
           </div>
 
           {scenes.length === 0 ? (
