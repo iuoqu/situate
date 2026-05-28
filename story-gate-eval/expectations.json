@@ -1,0 +1,5 @@
+{
+  "01_mood_piece.txt": {"is_story": false, "type": "随笔"},
+  "02_micro_story.txt": {"is_story": true, "type": null},
+  "03_process.txt": {"is_story": false, "type": "说明"}
+}
