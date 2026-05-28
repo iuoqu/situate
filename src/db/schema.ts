@@ -23,6 +23,15 @@ export const submissionStatus = pgEnum("status", [
   "ai_review",
   "human_review",
   "published",
+  // Added in 0010: post-review tiered states + lifecycle terminal states.
+  // Legacy `published` is kept so existing rows don't break, but new
+  // editorial flow uses the tiered variants (L1/L2/L3) below.
+  "revisions_requested",
+  "accepted_pending_publish",
+  "published_l1",
+  "published_l2",
+  "published_l3",
+  "withdrawn",
 ]);
 
 export const editionStatus = pgEnum("edition_status", [
@@ -104,6 +113,8 @@ export const draftStage = pgEnum("draft_stage", [
   "editing", // user is editing paragraphs / sections (default for template path)
   "disclosure", // DisclosureChat in progress
   "ready", // ready to submit
+  "submitted", // handed off to a submission row; editor flow takes over
+  "trashed", // soft-deleted; recoverable from /my Trash tab
 ]);
 
 // ─── Submission form enums (per the public submission spec) ─────────────────
@@ -313,6 +324,19 @@ export const submissions = pgTable(
       "editorial_priority_evaluated_at",
       { withTimezone: true },
     ),
+
+    // Back-link to the story_drafts row this submission was created from.
+    // NULL for legacy /submit-form submissions that pre-date the
+    // template-write path. The reverse direction (draft_id on the draft
+    // pointing here) is intentionally not modelled — querying
+    // submissions filtered by draft_id is rare enough that the FK alone
+    // is sufficient.
+    draftId: uuid("draft_id"),
+    // Clean Supabase auth FK for the dashboard's "Submitted" /
+    // "Published" tabs. Backfilled from author_email at migration time;
+    // new rows set this directly from the signed-in user. NULL allowed
+    // for legacy rows whose email didn't match an auth.users entry.
+    authorUserId: uuid("author_user_id"),
 
     createdAt: timestamp("created_at", { withTimezone: true })
       .notNull()

@@ -13,7 +13,9 @@ import {
   narrativeBlocks,
   principleJudgments,
   reports,
+  storyDrafts,
   submissions,
+  type DraftSection,
   type AiUsageLabel,
   type AuthorRelationship,
   type BlockTranslation,
@@ -1007,6 +1009,207 @@ export async function submitFromForm(
     .where(eq(submissions.id, submissionId))
     .limit(1);
 
+  return { submissionId, report, status: post?.status ?? "ai_review" };
+}
+
+// ─── Draft → submission handoff (template / voice write path) ──────────────
+
+export interface SubmitDraftPayload {
+  draftId: string;
+  userId: string;
+  /** Caller-provided author email (defaults to auth user's email upstream). */
+  authorEmail: string;
+  /** Display name on the submission. We don't enforce uniqueness or
+   *  policy here — the editor flow handles that. */
+  authorPenName: string;
+  /** Single coordinate for the story (Slice-1 minimum; Slice-4
+   *  upgrades to per-section coordinates). All narrative_blocks created
+   *  from the draft's sections share this coordinate until then. */
+  longitude: number;
+  latitude: number;
+  /** F1.b — required by submissions table at ≥50 words. We surface the
+   *  same field on the AssemblyView so the template path produces a
+   *  submission that the existing editorial pipeline can consume. */
+  relocationTest: string;
+  /** F7 — required to be true. */
+  legalAttestation: boolean;
+}
+
+export interface SubmitDraftResult {
+  submissionId: string;
+  report: SubmissionReport;
+  status: SubmissionStatus;
+}
+
+/**
+ * Hand a `story_drafts` row off to the editorial pipeline.
+ *
+ *   1. Validate the draft is owned by `userId` and in a submittable
+ *      stage (anything except already-submitted / trashed).
+ *   2. Validate the caller-supplied fields the draft doesn't store
+ *      (coordinate, relocation test, attestation).
+ *   3. Concatenate sections[].content into a single submission_form
+ *      snapshot AND into a per-section narrative_block stream.
+ *   4. In one transaction: insert the submission, insert one
+ *      narrative_block + original block_translation per non-empty
+ *      section, mark the draft `stage='submitted'` and set its
+ *      `submission_id` analogue via submissions.draft_id.
+ *   5. Run the AI editor outside the transaction (slow Anthropic call;
+ *      same pattern as `submitFromForm`).
+ *
+ * Word-count rule is the same as /submit: 800–2500. The relocation
+ * test minimum (50 words) is also identical — keeps both write paths
+ * landing in the same editorial constraints.
+ */
+export async function submitFromDraft(
+  input: SubmitDraftPayload,
+): Promise<SubmitDraftResult> {
+  if (!Number.isFinite(input.longitude) || input.longitude < -180 || input.longitude > 180)
+    throw new Error("longitude out of range");
+  if (!Number.isFinite(input.latitude) || input.latitude < -90 || input.latitude > 90)
+    throw new Error("latitude out of range");
+  if (countWords(input.relocationTest) < 50)
+    throw new Error("relocation test must be at least 50 words");
+  if (!input.legalAttestation)
+    throw new Error("legal attestation must be accepted");
+  if (!isValidEmail(input.authorEmail))
+    throw new Error("invalid author email");
+
+  const [draft] = await db
+    .select()
+    .from(storyDrafts)
+    .where(and(eq(storyDrafts.id, input.draftId), eq(storyDrafts.userId, input.userId)))
+    .limit(1);
+  if (!draft) throw new Error("draft not found");
+  if (draft.stage === "submitted")
+    throw new Error("draft already submitted");
+  if (draft.stage === "trashed")
+    throw new Error("draft is in trash");
+
+  // Section content is the authoritative source for the prose. We trust
+  // the per-section validation done at edit time; here we just slim it
+  // down to non-empty sections (so an unfinished section doesn't become
+  // an empty narrative_block).
+  const sections = (draft.sections as DraftSection[]).filter(
+    (s) => typeof s?.content === "string" && s.content.trim().length > 0,
+  );
+  if (sections.length === 0) throw new Error("draft has no content");
+
+  // Total word count across all sections. Same 800–2500 envelope as
+  // /submit. We use the shared countWords helper so CJK + Latin scripts
+  // are counted consistently.
+  const totalWords = sections.reduce(
+    (acc, s) => acc + countWords(s.content),
+    0,
+  );
+  if (totalWords < 800 || totalWords > 2500)
+    throw new Error("word_count must be between 800 and 2500");
+
+  const title =
+    typeof draft.title === "string" && draft.title.trim().length > 0
+      ? draft.title.trim()
+      : "Untitled";
+
+  // submission_form is an audit-trail snapshot — capture both the draft
+  // shape AND the final form payload so editors can replay what was
+  // submitted even if we change the draft format later.
+  const submissionFormSnapshot = {
+    source: "template" as const,
+    templateId: draft.templateId,
+    draftId: draft.id,
+    title,
+    sections,
+    longitude: input.longitude,
+    latitude: input.latitude,
+    relocationTest: input.relocationTest,
+    authorEmail: input.authorEmail,
+    authorPenName: input.authorPenName,
+    legalAttestation: input.legalAttestation,
+    capturedAt: new Date().toISOString(),
+  };
+
+  const submissionId = await db.transaction(async (tx) => {
+    const [submission] = await tx
+      .insert(submissions)
+      .values({
+        authorId: input.userId, // Keep the existing string field populated.
+        authorUserId: input.userId,
+        draftId: draft.id,
+        title,
+        sourceLanguage: draft.language,
+        status: "ai_review",
+        submissionForm: submissionFormSnapshot,
+        wordCount: totalWords,
+        authorEmail: input.authorEmail,
+        authorPenName: input.authorPenName,
+        legalAttestation: true,
+        relocationTest: input.relocationTest,
+        // Defaults for fields the template path doesn't yet collect.
+        // Editors / future slices will surface these; for now we ship
+        // the most conservative values so AI editor + moderation
+        // pipeline has something to work with.
+        contentFlags: {
+          realPlaces: [],
+          realPersons: [],
+          realOrgs: [],
+          conflictZone: false,
+        },
+        authorAffiliations: [],
+        satireDisclosure: false,
+        sensitivityWarnings: [],
+        consentStatus: "not_applicable",
+      })
+      .returning({ id: submissions.id });
+
+    for (const [idx, section] of sections.entries()) {
+      // Per-section coordinate override (Slice-4 will populate
+      // section.longitude/.latitude via MultiLocationPicker). For now
+      // every block falls back to the global pick.
+      const lon =
+        typeof section.longitude === "number" && Number.isFinite(section.longitude)
+          ? section.longitude
+          : input.longitude;
+      const lat =
+        typeof section.latitude === "number" && Number.isFinite(section.latitude)
+          ? section.latitude
+          : input.latitude;
+      const [block] = await tx
+        .insert(narrativeBlocks)
+        .values({
+          submissionId: submission.id,
+          location: { x: lon, y: lat },
+          eventDate: null,
+        })
+        .returning({ id: narrativeBlocks.id });
+      await tx.insert(blockTranslations).values({
+        blockId: block.id,
+        language: draft.language,
+        method: "original",
+        status: "draft",
+        accessTier: "free",
+        content: section.content,
+        annotations: [],
+      });
+      // sequence_number is a serial column on narrative_blocks; idx is
+      // only used here for the (future) per-section coordinate fallback.
+      void idx;
+    }
+
+    await tx
+      .update(storyDrafts)
+      .set({ stage: "submitted" })
+      .where(eq(storyDrafts.id, draft.id));
+
+    return submission.id;
+  });
+
+  // AI review runs outside the transaction.
+  const report = await runAiReviewInternal(submissionId);
+  const [post] = await db
+    .select({ status: submissions.status })
+    .from(submissions)
+    .where(eq(submissions.id, submissionId))
+    .limit(1);
   return { submissionId, report, status: post?.status ?? "ai_review" };
 }
 

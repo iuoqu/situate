@@ -323,9 +323,30 @@ export function TemplateEditor({
 
       <footer style={footerStyle}>
         <p style={footerNoteStyle}>
-          Continuing to disclosures + submission lands in a follow-up
-          milestone. For now: write freely, your draft saves automatically.
+          When you&rsquo;re ready, continue to review &amp; submit —
+          we&rsquo;ll show the assembled draft, ask where it&rsquo;s
+          set, and send it to the editorial pipeline.
         </p>
+        <Link
+          href={`/write/template/${draftId}/review`}
+          style={
+            totalWords >= 800
+              ? continueButtonStyle
+              : continueButtonDisabledStyle
+          }
+          aria-disabled={totalWords < 800}
+          onClick={(e) => {
+            if (totalWords < 800) e.preventDefault();
+          }}
+        >
+          Continue to review →
+        </Link>
+        {totalWords < 800 && (
+          <p style={continueHintStyle}>
+            Need at least 800 words across all sections before you can
+            submit. You have {totalWords}.
+          </p>
+        )}
       </footer>
     </main>
   );
@@ -513,12 +534,37 @@ const footerStyle: React.CSSProperties = {
   marginTop: 64,
   paddingTop: 18,
   borderTop: "1px solid #e8e3d8",
+  display: "flex",
+  flexDirection: "column",
+  gap: 14,
+  alignItems: "flex-start",
 };
 const footerNoteStyle: React.CSSProperties = {
   margin: 0,
   fontSize: 13,
   color: "#888",
   lineHeight: 1.6,
+};
+const continueButtonStyle: React.CSSProperties = {
+  padding: "12px 20px",
+  background: "#1a1a1a",
+  color: "white",
+  border: "none",
+  borderRadius: 3,
+  fontSize: 14,
+  letterSpacing: 0.4,
+  cursor: "pointer",
+  textDecoration: "none",
+};
+const continueButtonDisabledStyle: React.CSSProperties = {
+  ...continueButtonStyle,
+  background: "#c5beac",
+  cursor: "not-allowed",
+};
+const continueHintStyle: React.CSSProperties = {
+  margin: 0,
+  fontSize: 12,
+  color: "#9b8a6b",
 };
 const indicatorMutedStyle: React.CSSProperties = {
   fontSize: 12,
