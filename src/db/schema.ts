@@ -589,6 +589,29 @@ export const inviteCodeUses = pgTable(
   }),
 );
 
+// Landing-page "request an invite" form drops rows here. An admin reviews
+// the queue, issues a code via `npm run invite:issue`, and emails it.
+// Closed-beta deliberately: no auto-issuance.
+export const waitlistRequests = pgTable(
+  "waitlist_requests",
+  {
+    id: serial("id").primaryKey(),
+    email: text("email").notNull(),
+    note: text("note"),
+    source: text("source"),
+    createdAt: timestamp("created_at", { withTimezone: true })
+      .notNull()
+      .default(sql`now()`),
+    invitedAt: timestamp("invited_at", { withTimezone: true }),
+    invitedCode: text("invited_code").references(() => inviteCodes.code, {
+      onDelete: "set null",
+    }),
+  },
+  (t) => ({
+    createdAtIdx: index("waitlist_created_at_idx").on(t.createdAt),
+  }),
+);
+
 // ─── Inferred types ─────────────────────────────────────────────────────────
 
 export type Edition = typeof editions.$inferSelect;
@@ -611,6 +634,8 @@ export type InviteCode = typeof inviteCodes.$inferSelect;
 export type NewInviteCode = typeof inviteCodes.$inferInsert;
 export type InviteCodeUse = typeof inviteCodeUses.$inferSelect;
 export type NewInviteCodeUse = typeof inviteCodeUses.$inferInsert;
+export type WaitlistRequest = typeof waitlistRequests.$inferSelect;
+export type NewWaitlistRequest = typeof waitlistRequests.$inferInsert;
 
 export type StoryType = (typeof storyType.enumValues)[number];
 export type AuthorRelationship = (typeof authorRelationship.enumValues)[number];
