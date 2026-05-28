@@ -13,25 +13,128 @@ per-section locations, author dashboard).
 Ordered by what most unlocks product value. Each item links to the
 section below with the detailed scope.
 
-1. **DisclosureChat** — close the loop on P5/P6/P7 author-side disclosure
-   before submit. Highest impact for editorial sanity. ([details](#1-disclosurechat))
-2. **Editor queue (`/editor/queue`)** — internal surface to triage and
-   process submissions. Right now editors have no UI; the queue lives
-   in the DB only. ([details](#2-editor-queue))
-3. **Paragraph co-edit** — editor edits a paragraph, author sees the
-   diff, accepts/rejects. The interactive surface implied by the
-   "human review" status. ([details](#3-paragraph-co-edit))
-4. **Voice path** — `/write?mode=voice` + `POST /api/structure-draft`.
-   The Premium tier promise; currently a `coming-soon` placeholder. ([details](#4-voice-path))
-5. **Tier publishing (L1/L2/L3) finalize flow** — schema is ready
-   (status enum has the values), editor flow to actually mark a piece
-   as L1/L2/L3 doesn't exist. ([details](#5-tier-publishing))
+1. **Milestone B — Story Bible + Coaching + Pearls** ([details](#1-milestone-b))
+   The next major direction: a structured "brain" captured during
+   writing that drives translation, diagnostics, and growth. Includes
+   the Pearls (遗珠) carveout for non-place-anchored fiction.
+2. **DisclosureChat** — folded INTO Milestone B (the Story Bible
+   replaces the chat as the disclosure-capture mechanism). Kept here
+   as a name for reference.
+3. **Editor queue (`/editor/queue`)** — internal triage surface;
+   prerequisite for the Pearls workflow (editors move P3-failing
+   submissions to Pearls consideration). ([details](#2-editor-queue))
+4. **Paragraph co-edit** — editor edits, author accept/reject. ([details](#3-paragraph-co-edit))
+5. **Voice path** — `/write?mode=voice`. Premium tier promise. ([details](#4-voice-path))
+6. **Tier publishing (L1/L2/L3) finalize flow** — enum exists; UI
+   doesn't. ([details](#5-tier-publishing))
 
 ---
 
 ## Detailed scope per priority
 
-### 1. DisclosureChat
+### 1. Milestone B
+
+The next major direction. Frames Situate not just as a publication but
+as a writing platform whose structured data drives three things:
+**writing (coaching), translation (multilingual rendering), teaching
+(growth path)** — all sharing one brain.
+
+**Key positioning decisions** (locked):
+
+- **Stay flash-only for now.** AI editorial doesn't scale to long form.
+  Schema kept flash-shaped (no `works → scenes → blocks` reshape).
+- **Stay literary-only for now.** Tradition profiles ship as flash
+  variants only (`flash_situate_anchored`, `flash_situate_pearls`,
+  `literary_minimalism`, etc.) — no genre fiction profiles
+  (升级流 / 言情 / 推理 / 惊悚).
+- **Single brand (Situate).** Writing tool and magazine are one
+  product. Preserves a future pivot to long-form or genre if real
+  demand appears (e.g. a wave of 玄幻 submissions).
+- **Pearls (遗珠) carveout for non-place-anchored fiction.**
+  Hemingway "Hills Like White Elephants" type work. P3 bypassed in
+  this section; every other principle applies.
+
+**Pearls (遗珠) operational rules** (locked):
+
+- 5% rate cap is a **soft metric** — quarterly review, not enforced.
+- Pearls **without** a coordinate display on the map at `(0, 0)` —
+  in the Gulf of Guinea. Distinct visual from real pins (different
+  shape / colour). Multiple clusters at exact 0,0 expand on click.
+- Pearls **may** still tag a coordinate (the railway station in
+  "Hills" has a station, just not a generative one). Authors tag
+  freely; readers see what the author chose to surface.
+- Pearls use the **same Situate Spine template**, but **sections are
+  deletable** (1-5 sections allowed, not always 5). The template is
+  a scaffold, not a contract.
+- Pearls are surfaced **only by editorial discretion** — authors do
+  not self-route. P3-failing submissions get routed by editors at
+  triage time.
+- Constitution v0.3 (adds P14 — Pearls) ships **later**, after 2-3
+  real cases through the carveout. Until then, P14 lives only in
+  this TODO. See "Constitution v0.3 candidate" below.
+
+**Slicing plan** (recommended order; each is shippable on its own):
+
+- **B.1 — Pearls minimum viable**
+  - Migration: `submissions.publication_section enum('main', 'pearls')`,
+    default `'main'`. `submissions.publication_tier numeric(1)`
+    nullable (L1/L2/L3 — fills in B.6).
+  - Migration: `story_drafts.tradition_profile_id text`,
+    default `'flash_situate_anchored'`.
+  - File-based traditions registry: `src/lib/traditions/registry.ts`
+    + `flash-situate-anchored.ts` + `flash-situate-pearls.ts`.
+  - `/write` adds a tradition selector (or quiet default for v1;
+    accessible via "Advanced ▾" toggle).
+  - TemplateEditor: section delete button (X) when tradition allows.
+    Pearls allows; anchored doesn't.
+  - Review page: tradition-aware gating. Pearls skips "Section 1
+    must have a coord" check.
+  - `/explore`: Pearls markers — pin at exact 0,0 if no coord, at
+    the tagged coord otherwise; different marker style.
+  - `/editions/[slug]`: subsection for Pearls in the issue TOC.
+  - `/editor/queue` (later) gets the "Route to Pearls" action.
+- **B.2 — Story Bible data layer**
+  - Tables: `entities`, `entity_name_renderings`, `relationships`,
+    `postures`, `elisions`, `story_units`.
+  - All FK to `story_drafts.id`; bible travels with draft.
+  - Submit handoff: serialise the bible into
+    `submissions.submission_form` jsonb snapshot (audit trail).
+- **B.3 — Inline capture UI**
+  - On every autosave, run an entity + relationship extraction pass
+    (async, Claude tool-call). Surface results as 2-suggestion-max
+    chips in the editor margin.
+  - Author confirms / edits / rejects each. Updates bible tables.
+  - Story Bible sidebar shows live bible state.
+- **B.4 — Story unit gate per section**
+  - Per-section card showing S0 / D / T / S1 / K slots + 3
+    predicate indicators (transformed / causal / stakes).
+  - AI fills slots as a *suggestion* once a section has 200+ words.
+  - Author confirms / edits. Failure type (descriptive / essayistic
+    / expository) surfaces as a single Socratic coach question, never
+    red-pen.
+- **B.5 — Coaching engine v1**
+  - File-based diagnoser registry:
+    `src/lib/coach/diagnosers/*.ts`.
+  - Each diagnoser: signature `(draft, bible, tradition) => Finding[]`.
+  - One coaching event surfaces at a time (highest leverage).
+  - `coaching_events` table logs everything (surfaced or not).
+  - Tradition profile's `diagnostic_set` field picks which diagnosers
+    run for that profile (e.g. Pearls disables place-related ones).
+- **B.6 — Multilingual rendering driven by bible**
+  - Translation generation reads `entity_name_renderings` and
+    `relationships.register_overrides` instead of free-text translating.
+  - Reader UI surfaces register choices ("polite / casual") where
+    bible has multiple. Click-through to bible entry for any name.
+  - L1/L2/L3 tier publication can finally finalize: tier decides
+    how much translation polish each piece gets (L1 = raw AI, L2 =
+    AI + light human pass, L3 = full human polish).
+
+Each slice is ~4-8h. Total ~30-40h. Run alongside the other
+priorities (B doesn't block editor queue or paragraph co-edit).
+
+---
+
+### 1.a. DisclosureChat (legacy spec — now folded into Milestone B)
 
 A chat-shaped interview between AI and author that runs after the
 draft is written but before submit. Purpose: surface unstated
@@ -269,6 +372,55 @@ v0.2.1; remaining sequence (from v0 judgment project's order):
       runtime code but applied manually via SQL Editor. Add a
       `docs/migration-runbook.md` that lists current schema HEAD so a
       new env knows which to run.
+
+---
+
+## Constitution v0.3 candidate (defer publish; capture intent here)
+
+Two pending amendments to the v0.2 constitution. We do **not** ship
+these to `docs/constitution-v0.3.md` yet — Milestone B is exercising
+the Pearls carveout in practice first, so we can revise the text
+with real cases in hand.
+
+### P14 — Pearls (new principle)
+
+Stories that do not satisfy P3 (place-generativity) may, in
+exceptional cases, be accepted into the Pearls section. Pearls
+bypass P3 only. Every other principle (P1, P2, P5, P6, P7, P10,
+P11) applies with full force.
+
+**Decision authority.** Pearls are surfaced only by editorial
+discretion. Authors do not self-submit for Pearls; an editor reading
+a P3-failing submission may, in the rare case of overwhelming craft,
+redirect it.
+
+**Rate.** Pearls are expected at roughly 5% of total publication
+volume over any rolling 12-month window. Soft metric — published
+annually but not enforced. Climbing rate indicates P3 is too lax;
+near-zero rate may indicate editors are too conservative.
+
+**Display.** Pearls are clearly labelled and grouped separately in
+the publication TOC. Their map markers are visually distinct from
+anchored stories.
+
+### P10 v0.3 — AI-coach carveout
+
+Refine the AI-composition vs AI-assistance line. Insert before the
+existing P10 text:
+
+> *Distinguished from the categories below: an **AI coach** that
+> surfaces diagnostics, asks Socratic questions, or proposes
+> structural annotations on the author's own prose does not
+> constitute AI composition. Authors using a coach disclose so
+> under "AI editing"; they are not labelled "AI-assisted" unless
+> they also accepted AI-generated text into the prose.*
+
+This codifies what Milestone B's coaching engine actually does:
+it does not write sentences, it surfaces observations and asks
+questions. Currently P10's three categories (translation / editing /
+creation) don't distinguish coaching cleanly; an author using the
+coach today would arguably need to mark "AI editing" even though
+the AI never edited anything — only diagnosed.
 
 ---
 
