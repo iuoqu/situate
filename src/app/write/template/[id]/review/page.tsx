@@ -38,12 +38,16 @@ export default async function ReviewPage({ params }: { params: RouteParams }) {
     .limit(1);
   if (!draft) notFound();
 
-  // Already-submitted drafts go to the existing thanks/status flow
-  // instead of bouncing the author back into "review" UI. Once Slice 3
-  // ships /my/submissions/[id], this redirect target will change to
-  // that page.
+  // Already-submitted drafts: redirect to the submission status page
+  // for this draft (looked up by FK).
   if (draft.stage === "submitted") {
-    redirect("/my");
+    const { submissions } = await import("@/db/schema");
+    const [linked] = await db
+      .select({ id: submissions.id })
+      .from(submissions)
+      .where(eq(submissions.draftId, draft.id))
+      .limit(1);
+    redirect(linked ? `/my/submissions/${linked.id}` : "/my");
   }
   if (draft.stage === "trashed") {
     redirect(`/write/template/${id}`);

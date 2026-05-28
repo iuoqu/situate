@@ -105,7 +105,7 @@ export async function POST(req: NextRequest, ctx: RouteCtx) {
     return NextResponse.json({
       submissionId: result.submissionId,
       status: result.status,
-      redirectTo: `/submit/thanks/${result.submissionId}`,
+      redirectTo: `/my/submissions/${result.submissionId}`,
     });
   } catch (err) {
     const message = err instanceof Error ? err.message : "submit failed";

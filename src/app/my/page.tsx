@@ -288,7 +288,7 @@ function SubmissionList({
           </div>
           <div style={rowActionsStyle}>
             <Link
-              href={`/submit/thanks/${s.id}`}
+              href={`/my/submissions/${s.id}`}
               style={primaryActionStyle}
             >
               View →
