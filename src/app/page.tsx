@@ -26,8 +26,8 @@ export const dynamic = "force-dynamic";
 
 const CURRENT_ISSUE_SLUG = "issue-1-after-midnight";
 
-// TODO: replace before public launch. Used in the editor's signature.
-const FOUNDING_EDITOR_NAME = "[YOUR NAME]";
+// Used in the editor's signature at the foot of the editorial.
+const FOUNDING_EDITOR_NAME = "Jake";
 
 export default async function LandingPage() {
   const { language } = await getReaderPrefs({});
