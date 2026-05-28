@@ -70,10 +70,13 @@ export const FULL_SCHEMA = {
         stakes_bound: gatePredicate,
         is_story: { type: "boolean" },
         if_not_story_type: {
-          type: ["string", "null"],
-          enum: ["描摹", "随笔", "说明", null],
+          type: "string",
+          // Anthropic strict mode rejects null in enum, so we use empty
+          // string as the "no failure type" sentinel and the providers
+          // map "" back to null before returning to the caller.
+          enum: ["描摹", "随笔", "说明", ""],
           description:
-            "Failure type when is_story is false. Must be null when is_story is true.",
+            "Failure type when is_story is false. Must be empty string when is_story is true.",
         },
         confidence: {
           type: "number",

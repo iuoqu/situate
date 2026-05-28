@@ -103,6 +103,7 @@ export function createAnthropicProvider(opts: {
 
       if (isFull) {
         const raw = toolUse.input as RawFullToolInput;
+        normalizeFull(raw);
         const out: FullDiagnostic = { mode: "full", ...raw, _meta: meta };
         return out;
       } else {
@@ -112,6 +113,16 @@ export function createAnthropicProvider(opts: {
       }
     },
   };
+}
+
+/**
+ * Schema uses empty string as the "no failure type" sentinel (Anthropic
+ * strict mode rejects null in enum). Downstream code expects null.
+ */
+function normalizeFull(raw: RawFullToolInput): void {
+  if (raw.gate && (raw.gate.if_not_story_type as unknown as string) === "") {
+    raw.gate.if_not_story_type = null;
+  }
 }
 
 // The default provider — what /api/diagnose and /api/dev/diagnose-by-path
