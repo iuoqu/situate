@@ -95,6 +95,17 @@ export const reportStatus = pgEnum("report_status", [
   "dismissed",
 ]);
 
+// Per the voice-to-fiction onboarding pipeline. Drafts move through this
+// state machine before becoming a `submissions` row at handoff time.
+export const draftStage = pgEnum("draft_stage", [
+  "recording", // voice path: user is actively dictating
+  "transcribed", // voice path: have a transcript, no prose yet
+  "structured", // either path: prose draft exists
+  "editing", // user is editing paragraphs / sections (default for template path)
+  "disclosure", // DisclosureChat in progress
+  "ready", // ready to submit
+]);
+
 // ─── Submission form enums (per the public submission spec) ─────────────────
 
 export const storyType = pgEnum("story_type", [
@@ -592,6 +603,49 @@ export const inviteCodeUses = pgTable(
 // Landing-page "request an invite" form drops rows here. An admin reviews
 // the queue, issues a code via `npm run invite:issue`, and emails it.
 // Closed-beta deliberately: no auto-issuance.
+// ─── Story drafts (private per-author working state) ──────────────────────
+//
+// Both the Voice path (record → AI structure) and the Template path
+// (5-section guided flow) land here. Submission handoff (/api/drafts/[id]
+// /submit) copies fields into `submissions` + `narrative_blocks` and
+// triggers the AI editor pipeline.
+//
+// RLS is enabled on the table itself (see drizzle/0009_story_drafts.sql);
+// our backend uses the postgres-js pool with service-role credentials, so
+// the policies are defence-in-depth. App-level checks in /api/drafts/*
+// are the real enforcement.
+export const storyDrafts = pgTable(
+  "story_drafts",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    userId: uuid("user_id").notNull(), // references auth.users(id); not a Drizzle FK because auth schema lives outside ours.
+    templateId: text("template_id"), // NULL = voice-freeform / no template
+    sections: jsonb("sections").notNull().default(sql`'[]'::jsonb`),
+    voiceTranscript: text("voice_transcript"),
+    recordingDurationSec: integer("recording_duration_sec"),
+    currentText: text("current_text"),
+    editHistory: jsonb("edit_history").notNull().default(sql`'[]'::jsonb`),
+    disclosureChat: jsonb("disclosure_chat").notNull().default(sql`'[]'::jsonb`),
+    disclosures: jsonb("disclosures").notNull().default(sql`'{}'::jsonb`),
+    language: supportedLanguage("language").notNull().default("en"),
+    title: text("title"),
+    stage: draftStage("stage").notNull().default("editing"),
+    createdAt: timestamp("created_at", { withTimezone: true })
+      .notNull()
+      .default(sql`now()`),
+    updatedAt: timestamp("updated_at", { withTimezone: true })
+      .notNull()
+      .default(sql`now()`),
+  },
+  (t) => ({
+    userIdx: index("story_drafts_user_id_idx").on(t.userId),
+    userUpdatedIdx: index("story_drafts_user_updated_idx").on(
+      t.userId,
+      t.updatedAt,
+    ),
+  }),
+);
+
 export const waitlistRequests = pgTable(
   "waitlist_requests",
   {
@@ -644,6 +698,22 @@ export type InviteCodeUse = typeof inviteCodeUses.$inferSelect;
 export type NewInviteCodeUse = typeof inviteCodeUses.$inferInsert;
 export type WaitlistRequest = typeof waitlistRequests.$inferSelect;
 export type NewWaitlistRequest = typeof waitlistRequests.$inferInsert;
+export type StoryDraft = typeof storyDrafts.$inferSelect;
+export type NewStoryDraft = typeof storyDrafts.$inferInsert;
+export type DraftStage = (typeof draftStage.enumValues)[number];
+
+// Shape of each entry in `story_drafts.sections` jsonb. Keep in lockstep
+// with the template registry's section definitions and with the migration
+// header comment in drizzle/0009_story_drafts.sql.
+export interface DraftSection {
+  index: number;
+  section_id: string;
+  content: string;
+  longitude?: number | null;
+  latitude?: number | null;
+  place_description?: string | null;
+  section_metadata?: Record<string, unknown>;
+}
 
 export type StoryType = (typeof storyType.enumValues)[number];
 export type AuthorRelationship = (typeof authorRelationship.enumValues)[number];
