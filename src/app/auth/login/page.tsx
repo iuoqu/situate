@@ -6,7 +6,7 @@ import { LoginForm } from "./login-form";
 
 export const metadata = {
   title: "Sign in · Situate Editions",
-  description: "Sign in to Situate Editions with a magic link.",
+  description: "Sign in to Situate Editions with a magic link or password.",
 };
 
 export default async function LoginPage({
@@ -30,7 +30,8 @@ export default async function LoginPage({
         <p style={kickerStyle}>Situate Editions</p>
         <h1 style={h1Style}>Sign in</h1>
         <p style={leadStyle}>
-          We&rsquo;ll email you a one-time link. No password needed.
+          Use a one-time email link, or sign in with a password if
+          you&rsquo;ve set one.
         </p>
         {reason === "auth_required" && (
           <p style={noteStyle}>You need to be signed in to use that page.</p>

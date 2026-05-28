@@ -1,35 +1,44 @@
 "use client";
 
+import { useRouter } from "next/navigation";
 import { useState } from "react";
 
 /**
- * Two-mode login form:
+ * Three sign-in paths under one form:
  *
- *   1. Default: email only. Hits `/api/auth/request-login` which calls
- *      `signInWithOtp({shouldCreateUser: false})`. If the email is already
- *      a Supabase user → magic link sent. If not → server returns
- *      `needs_invite` and we flip to mode 2.
+ *   - Magic link · email only (default). Hits /api/auth/request-login.
+ *     If the email is registered → Supabase mails a one-time link.
+ *     If not → server returns `needs_invite` and we surface an invite
+ *     code field.
  *
- *   2. Invite mode: email + invite code. Hits `/api/auth/invite` which
- *      validates the code against `invite_codes`, then calls the admin
- *      API to create the user + send the invite email. Server-side only
- *      (service-role key).
+ *   - Magic link · email + invite code. Hits /api/auth/invite.
+ *     Validates the code, calls the admin SDK to create the user, sends
+ *     the invite email.
  *
- * On either path the user receives an email; this form's "submitted" state
- * is a stable thank-you screen that survives a refresh (no token to lose).
+ *   - Password. Email + password. Hits /api/auth/password-login.
+ *     Cookie session set server-side; we then router.push to `next`.
+ *     If the user has never set a password we surface a hint that
+ *     points them at magic link + /auth/set-password.
+ *
+ * The Magic link / Password tabs are the top-level toggle. Within
+ * Magic link, the email → invite-code transition is automatic.
  */
 
-type Mode = "email" | "invite";
+type Method = "magic" | "password";
+type MagicMode = "email" | "invite";
 
 export function LoginForm({ next }: { next: string }) {
-  const [mode, setMode] = useState<Mode>("email");
+  const router = useRouter();
+  const [method, setMethod] = useState<Method>("magic");
+  const [magicMode, setMagicMode] = useState<MagicMode>("email");
   const [email, setEmail] = useState("");
+  const [password, setPassword] = useState("");
   const [code, setCode] = useState("");
   const [submitting, setSubmitting] = useState(false);
   const [sent, setSent] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  async function submitEmail(e: React.FormEvent) {
+  async function submitMagicEmail(e: React.FormEvent) {
     e.preventDefault();
     setSubmitting(true);
     setError(null);
@@ -48,7 +57,7 @@ export function LoginForm({ next }: { next: string }) {
       } else if (data.status === "sent") {
         setSent(true);
       } else if (data.status === "needs_invite") {
-        setMode("invite");
+        setMagicMode("invite");
       }
     } catch {
       setError("Network error — please try again.");
@@ -57,7 +66,7 @@ export function LoginForm({ next }: { next: string }) {
     }
   }
 
-  async function submitInvite(e: React.FormEvent) {
+  async function submitMagicInvite(e: React.FormEvent) {
     e.preventDefault();
     setSubmitting(true);
     setError(null);
@@ -86,6 +95,35 @@ export function LoginForm({ next }: { next: string }) {
     }
   }
 
+  async function submitPassword(e: React.FormEvent) {
+    e.preventDefault();
+    setSubmitting(true);
+    setError(null);
+    try {
+      const res = await fetch("/api/auth/password-login", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ email: email.trim(), password, next }),
+      });
+      const data = (await res.json()) as
+        | { status: "ok"; next: string }
+        | { error: string; reason?: string };
+      if ("error" in data) {
+        setError(data.error);
+      } else {
+        // Cookies are set by the server route; router.refresh() picks
+        // them up before navigation so server components see the new
+        // session on the destination page.
+        router.refresh();
+        router.push(data.next || "/");
+      }
+    } catch {
+      setError("Network error — please try again.");
+    } finally {
+      setSubmitting(false);
+    }
+  }
+
   if (sent) {
     return (
       <section style={panelStyle}>
@@ -95,85 +133,161 @@ export function LoginForm({ next }: { next: string }) {
           works for an hour, then expires. If it doesn&rsquo;t arrive in a
           minute or two, check your spam folder.
         </p>
+        <p style={panelHintStyle}>
+          Once you&rsquo;re in, visit{" "}
+          <a href="/auth/set-password" style={inlineLinkStyle}>
+            /auth/set-password
+          </a>{" "}
+          to set a password — you can use the Password tab from then on
+          instead of waiting for email.
+        </p>
       </section>
     );
   }
 
-  if (mode === "invite") {
-    return (
-      <form onSubmit={submitInvite} style={formStyle}>
-        <p style={modeNoteStyle}>
-          We don&rsquo;t recognise <strong>{email}</strong> yet. Add an
-          invite code to continue.
-        </p>
-        <Field label="Email">
-          <input
-            type="email"
-            required
-            value={email}
-            onChange={(e) => setEmail(e.target.value)}
-            style={inputStyle}
-            disabled={submitting}
-          />
-        </Field>
-        <Field
-          label="Invite code"
-          hint="A short string a Situate editor sent you. Case-insensitive."
+  return (
+    <>
+      <div style={tabsStyle} role="tablist" aria-label="Sign-in method">
+        <button
+          type="button"
+          role="tab"
+          aria-selected={method === "magic"}
+          onClick={() => {
+            setMethod("magic");
+            setError(null);
+          }}
+          style={method === "magic" ? activeTabStyle : tabStyle}
         >
-          <input
-            type="text"
-            required
-            value={code}
-            onChange={(e) => setCode(e.target.value)}
-            style={{
-              ...inputStyle,
-              fontFamily: "ui-monospace, SFMono-Regular, monospace",
-              letterSpacing: 1.5,
-              textTransform: "uppercase",
-            }}
-            disabled={submitting}
-            autoCapitalize="characters"
-            spellCheck={false}
-            maxLength={32}
-          />
-        </Field>
-        {error && <ErrorBox text={error} />}
-        <button type="submit" disabled={submitting} style={primaryButtonStyle}>
-          {submitting ? "Sending…" : "Redeem code & sign in"}
+          Magic link
         </button>
         <button
           type="button"
+          role="tab"
+          aria-selected={method === "password"}
           onClick={() => {
-            setMode("email");
+            setMethod("password");
             setError(null);
+            setMagicMode("email");
           }}
-          style={textButtonStyle}
+          style={method === "password" ? activeTabStyle : tabStyle}
         >
-          Use a different email
+          Password
         </button>
-      </form>
-    );
-  }
+      </div>
 
-  return (
-    <form onSubmit={submitEmail} style={formStyle}>
-      <Field label="Email">
-        <input
-          type="email"
-          required
-          autoFocus
-          value={email}
-          onChange={(e) => setEmail(e.target.value)}
-          style={inputStyle}
-          disabled={submitting}
-          placeholder="you@example.com"
-        />
-      </Field>
-      {error && <ErrorBox text={error} />}
-      <button type="submit" disabled={submitting} style={primaryButtonStyle}>
-        {submitting ? "Sending…" : "Email me a sign-in link"}
-      </button>
-    </form>
+      {method === "password" ? (
+        <form onSubmit={submitPassword} style={formStyle}>
+          <Field label="Email">
+            <input
+              type="email"
+              required
+              autoFocus
+              autoComplete="email"
+              value={email}
+              onChange={(e) => setEmail(e.target.value)}
+              style={inputStyle}
+              disabled={submitting}
+              placeholder="you@example.com"
+            />
+          </Field>
+          <Field label="Password">
+            <input
+              type="password"
+              required
+              autoComplete="current-password"
+              value={password}
+              onChange={(e) => setPassword(e.target.value)}
+              style={inputStyle}
+              disabled={submitting}
+            />
+          </Field>
+          {error && <ErrorBox text={error} />}
+          <button type="submit" disabled={submitting} style={primaryButtonStyle}>
+            {submitting ? "Signing in…" : "Sign in"}
+          </button>
+          <p style={hintStyle}>
+            First time? Use the <strong>Magic link</strong> tab, then set
+            a password from{" "}
+            <a href="/auth/set-password" style={inlineLinkStyle}>
+              your account
+            </a>
+            .
+          </p>
+        </form>
+      ) : magicMode === "invite" ? (
+        <form onSubmit={submitMagicInvite} style={formStyle}>
+          <p style={modeNoteStyle}>
+            We don&rsquo;t recognise <strong>{email}</strong> yet. Add an
+            invite code to continue.
+          </p>
+          <Field label="Email">
+            <input
+              type="email"
+              required
+              value={email}
+              onChange={(e) => setEmail(e.target.value)}
+              style={inputStyle}
+              disabled={submitting}
+            />
+          </Field>
+          <Field
+            label="Invite code"
+            hint="A short string a Situate editor sent you. Case-insensitive."
+          >
+            <input
+              type="text"
+              required
+              value={code}
+              onChange={(e) => setCode(e.target.value)}
+              style={{
+                ...inputStyle,
+                fontFamily: "ui-monospace, SFMono-Regular, monospace",
+                letterSpacing: 1.5,
+                textTransform: "uppercase",
+              }}
+              disabled={submitting}
+              autoCapitalize="characters"
+              spellCheck={false}
+              maxLength={32}
+            />
+          </Field>
+          {error && <ErrorBox text={error} />}
+          <button type="submit" disabled={submitting} style={primaryButtonStyle}>
+            {submitting ? "Sending…" : "Redeem code & sign in"}
+          </button>
+          <button
+            type="button"
+            onClick={() => {
+              setMagicMode("email");
+              setError(null);
+            }}
+            style={textButtonStyle}
+          >
+            Use a different email
+          </button>
+        </form>
+      ) : (
+        <form onSubmit={submitMagicEmail} style={formStyle}>
+          <Field label="Email">
+            <input
+              type="email"
+              required
+              autoFocus
+              autoComplete="email"
+              value={email}
+              onChange={(e) => setEmail(e.target.value)}
+              style={inputStyle}
+              disabled={submitting}
+              placeholder="you@example.com"
+            />
+          </Field>
+          {error && <ErrorBox text={error} />}
+          <button type="submit" disabled={submitting} style={primaryButtonStyle}>
+            {submitting ? "Sending…" : "Email me a sign-in link"}
+          </button>
+        </form>
+      )}
+    </>
   );
 }
 
@@ -218,6 +332,28 @@ function ErrorBox({ text }: { text: string }) {
   );
 }
 
+const tabsStyle: React.CSSProperties = {
+  display: "flex",
+  gap: 4,
+  borderBottom: "1px solid #e8e3d8",
+  marginBottom: 22,
+};
+const tabStyle: React.CSSProperties = {
+  padding: "10px 14px",
+  background: "transparent",
+  border: "none",
+  borderBottom: "2px solid transparent",
+  marginBottom: -1,
+  fontSize: 13,
+  letterSpacing: 0.4,
+  color: "#888",
+  cursor: "pointer",
+};
+const activeTabStyle: React.CSSProperties = {
+  ...tabStyle,
+  color: "#1a1a1a",
+  borderBottomColor: "#1a1a1a",
+};
 const formStyle: React.CSSProperties = {
   display: "flex",
   flexDirection: "column",
@@ -244,6 +380,7 @@ const hintStyle: React.CSSProperties = {
   fontSize: 12,
   color: "#888",
   marginBottom: 6,
+  lineHeight: 1.55,
 };
 const inputStyle: React.CSSProperties = {
   display: "block",
@@ -295,6 +432,16 @@ const panelBodyStyle: React.CSSProperties = {
   fontSize: 14,
   color: "#555",
   lineHeight: 1.6,
+};
+const panelHintStyle: React.CSSProperties = {
+  marginTop: 14,
+  fontSize: 12,
+  color: "#888",
+  lineHeight: 1.55,
+};
+const inlineLinkStyle: React.CSSProperties = {
+  color: "#1a1a1a",
+  textDecoration: "underline",
 };
 const errorBoxStyle: React.CSSProperties = {
   padding: 12,
