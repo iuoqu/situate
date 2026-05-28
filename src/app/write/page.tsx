@@ -1,6 +1,9 @@
+import { and, desc, eq, inArray } from "drizzle-orm";
 import Link from "next/link";
 import { redirect } from "next/navigation";
 
+import { db } from "@/db";
+import { storyDrafts, type DraftSection } from "@/db/schema";
 import { DEFAULT_TEMPLATE_ID } from "@/lib/templates/registry";
 import { getServerSupabase } from "@/lib/supabase/server";
 
@@ -32,6 +35,33 @@ export default async function WritePage() {
   } = await supabase.auth.getUser();
   if (!user) redirect("/auth/login?reason=auth_required&next=/write");
 
+  // Find the most recent in-progress draft. If there is one, surface a
+  // "Continue your draft" panel above the three-card chooser so the
+  // author doesn't accidentally spawn a parallel ghost draft. We exclude
+  // `ready` so a draft explicitly marked "ready to submit" doesn't
+  // ambush the author with a resume prompt — they probably came back to
+  // start something new.
+  const [lastDraft] = await db
+    .select()
+    .from(storyDrafts)
+    .where(
+      and(
+        eq(storyDrafts.userId, user.id),
+        inArray(storyDrafts.stage, ["editing", "disclosure", "structured"]),
+      ),
+    )
+    .orderBy(desc(storyDrafts.updatedAt))
+    .limit(1);
+
+  const lastDraftWordCount = lastDraft
+    ? ((Array.isArray(lastDraft.sections)
+        ? (lastDraft.sections as DraftSection[])
+        : []) as DraftSection[]).reduce(
+        (acc, s) => acc + countWords(s?.content ?? ""),
+        0,
+      )
+    : 0;
+
   return (
     <main style={mainStyle}>
       <header style={{ marginBottom: 36 }}>
@@ -42,6 +72,33 @@ export default async function WritePage() {
           you choose how to get there.
         </p>
       </header>
+
+      {lastDraft && (
+        <section style={resumePanelStyle} aria-label="Continue your draft">
+          <div style={resumeMainStyle}>
+            <p style={resumeKickerStyle}>You have a draft in progress</p>
+            <h2 style={resumeTitleStyle}>
+              {lastDraft.title?.trim() || "Untitled story"}
+            </h2>
+            <p style={resumeMetaStyle}>
+              {lastDraftWordCount} words · edited{" "}
+              {formatAgo(lastDraft.updatedAt)}
+            </p>
+          </div>
+          <Link
+            href={`/write/template/${lastDraft.id}`}
+            style={resumeButtonStyle}
+          >
+            Continue →
+          </Link>
+        </section>
+      )}
+
+      {lastDraft && (
+        <p style={startFreshHintStyle}>
+          Or start something new:
+        </p>
+      )}
 
       <ol style={listStyle}>
         <li style={cardStyle}>
@@ -94,8 +151,33 @@ export default async function WritePage() {
         all writers are eligible for the Prize and the anthology — only
         the writing tools differ.
       </p>
+
+      <p style={dashboardLinkStyle}>
+        <Link href="/my" style={inlineLinkStyle}>
+          See all your drafts &amp; submissions →
+        </Link>
+      </p>
     </main>
   );
+}
+
+function countWords(s: string): number {
+  const trimmed = s.trim();
+  if (!trimmed) return 0;
+  const latin = trimmed
+    .split(/\s+/)
+    .filter((w) => /[A-Za-zÀ-ÿ]/.test(w)).length;
+  const cjk = (trimmed.match(/[一-鿿぀-ヿ가-힯]/g) ?? []).length;
+  return latin + cjk;
+}
+
+function formatAgo(ts: Date | null): string {
+  if (!ts) return "never";
+  const seconds = Math.floor((Date.now() - new Date(ts).getTime()) / 1000);
+  if (seconds < 60) return "just now";
+  if (seconds < 3600) return `${Math.floor(seconds / 60)}m ago`;
+  if (seconds < 86_400) return `${Math.floor(seconds / 3600)}h ago`;
+  return `${Math.floor(seconds / 86_400)}d ago`;
 }
 
 const mainStyle: React.CSSProperties = {
@@ -208,4 +290,63 @@ const footerNoteStyle: React.CSSProperties = {
   fontSize: 13,
   color: "#666",
   lineHeight: 1.6,
+};
+const resumePanelStyle: React.CSSProperties = {
+  display: "flex",
+  gap: 16,
+  alignItems: "center",
+  marginBottom: 18,
+  padding: 18,
+  background: "#fef3c7",
+  border: "1px solid #d97706",
+  borderRadius: 3,
+};
+const resumeMainStyle: React.CSSProperties = {
+  flex: 1,
+  minWidth: 0,
+};
+const resumeKickerStyle: React.CSSProperties = {
+  margin: 0,
+  fontSize: 11,
+  letterSpacing: 1.5,
+  textTransform: "uppercase",
+  color: "#92400e",
+};
+const resumeTitleStyle: React.CSSProperties = {
+  margin: "4px 0",
+  fontFamily: 'Georgia, "Times New Roman", serif',
+  fontSize: 20,
+  fontWeight: 400,
+  color: "#1a1a1a",
+};
+const resumeMetaStyle: React.CSSProperties = {
+  margin: 0,
+  fontSize: 12,
+  color: "#7c2d12",
+};
+const resumeButtonStyle: React.CSSProperties = {
+  padding: "10px 18px",
+  background: "#1a1a1a",
+  color: "white",
+  textDecoration: "none",
+  borderRadius: 3,
+  fontSize: 14,
+  letterSpacing: 0.3,
+  flexShrink: 0,
+};
+const startFreshHintStyle: React.CSSProperties = {
+  margin: "0 0 12px",
+  fontSize: 12,
+  letterSpacing: 0.5,
+  textTransform: "uppercase",
+  color: "#888",
+};
+const dashboardLinkStyle: React.CSSProperties = {
+  marginTop: 22,
+  textAlign: "center",
+  fontSize: 13,
+};
+const inlineLinkStyle: React.CSSProperties = {
+  color: "#1a1a1a",
+  textDecoration: "underline",
 };
