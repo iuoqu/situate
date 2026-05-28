@@ -13,7 +13,7 @@ const nextConfig: NextConfig = {
       "./story-gate-eval/specimens/**/*",
       "./story-gate-eval/expectations.json",
     ],
-    "/api/dev/run-eval": [
+    "/api/dev/diagnose-by-path": [
       "./story-gate-eval/specimens/**/*",
       "./story-gate-eval/expectations.json",
     ],

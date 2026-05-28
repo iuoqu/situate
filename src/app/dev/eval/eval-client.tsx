@@ -39,57 +39,76 @@ interface DoneEvent {
   by_bucket: Record<Bucket, { passed: number; total: number }>;
 }
 
-// ─── SSE consumption ────────────────────────────────────────────────────────
+// ─── Client-side fan-out ────────────────────────────────────────────────────
+// Earlier this module ran the eval via a single SSE streaming call to
+// /api/dev/run-eval. That broke on Vercel — long-lived streams get cut by
+// the edge layer with net::ERR_CONNECTION_CLOSED. Solution: orchestrate
+// from the browser, hit /api/dev/diagnose-by-path once per specimen with
+// a small worker pool. Each request is 5-10s, well under any plan's
+// function timeout.
 
-async function streamSSE(
-  url: string,
-  body: unknown,
-  handlers: {
-    onEvent: (event: string, data: unknown) => void;
-    onError?: (err: unknown) => void;
-  },
-): Promise<void> {
-  const resp = await fetch(url, {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify(body),
-    credentials: "same-origin",
-  });
-  if (!resp.ok) {
-    const text = await resp.text();
-    throw new Error(`HTTP ${resp.status}: ${text.slice(0, 200)}`);
+async function diagnoseOne(spec: SpecimenInfo): Promise<ResultEvent> {
+  const mode = spec.bucket === "partial" ? "partial" : "full";
+  try {
+    const resp = await fetch("/api/dev/diagnose-by-path", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ path: spec.path, mode }),
+      credentials: "same-origin",
+    });
+    if (!resp.ok) {
+      const text = await resp.text();
+      return {
+        path: spec.path,
+        bucket: spec.bucket,
+        run_mode: mode,
+        error: `HTTP ${resp.status}: ${text.slice(0, 160)}`,
+        diagnostic: null,
+        check: { ok: false, fails: ["http_error"] },
+        primary_engine: "-",
+        confidence: null,
+        expectation: spec.expectation,
+      };
+    }
+    const data = (await resp.json()) as ResultEvent & { error?: string };
+    return { ...data, error: data.error ?? null };
+  } catch (e) {
+    return {
+      path: spec.path,
+      bucket: spec.bucket,
+      run_mode: mode,
+      error: e instanceof Error ? e.message : String(e),
+      diagnostic: null,
+      check: { ok: false, fails: ["fetch_error"] },
+      primary_engine: "-",
+      confidence: null,
+      expectation: spec.expectation,
+    };
   }
-  if (!resp.body) throw new Error("response has no body");
+}
 
-  const reader = resp.body.getReader();
-  const decoder = new TextDecoder();
-  let buf = "";
-  while (true) {
-    const { value, done } = await reader.read();
-    if (done) break;
-    buf += decoder.decode(value, { stream: true });
-    let nlnl = buf.indexOf("\n\n");
-    while (nlnl >= 0) {
-      const chunk = buf.slice(0, nlnl);
-      buf = buf.slice(nlnl + 2);
-      const lines = chunk.split("\n");
-      let event = "message";
-      const dataParts: string[] = [];
-      for (const line of lines) {
-        if (line.startsWith("event:")) event = line.slice(6).trim();
-        else if (line.startsWith("data:")) dataParts.push(line.slice(5).trim());
-      }
-      const dataStr = dataParts.join("\n");
-      if (dataStr) {
-        try {
-          handlers.onEvent(event, JSON.parse(dataStr));
-        } catch (e) {
-          handlers.onError?.(e);
-        }
-      }
-      nlnl = buf.indexOf("\n\n");
+async function fanOut(
+  targets: SpecimenInfo[],
+  concurrency: number,
+  onResult: (r: ResultEvent) => void,
+  onProgress: (completed: number, total: number) => void,
+): Promise<void> {
+  const queue = [...targets];
+  let completed = 0;
+  const total = targets.length;
+  async function worker(): Promise<void> {
+    while (queue.length > 0) {
+      const spec = queue.shift();
+      if (!spec) return;
+      const result = await diagnoseOne(spec);
+      onResult(result);
+      completed += 1;
+      onProgress(completed, total);
     }
   }
+  await Promise.allSettled(
+    Array.from({ length: Math.min(concurrency, total) }, () => worker()),
+  );
 }
 
 // ─── Auth panel ─────────────────────────────────────────────────────────────
@@ -186,12 +205,14 @@ function TokenPanel({
 
 function EvalSection({
   active,
+  specimens,
   results,
   setResults,
   summary,
   setSummary,
 }: {
   active: boolean;
+  specimens: SpecimenInfo[];
   results: Record<string, ResultEvent>;
   setResults: (r: Record<string, ResultEvent>) => void;
   summary: DoneEvent | null;
@@ -208,28 +229,41 @@ function EvalSection({
     setRunning(true);
     setProgress(null);
     setSummary(null);
-    const local: Record<string, ResultEvent> = {};
     setResults({});
 
+    const targets = specimens.filter((s) => {
+      if (mode === "full") return s.bucket !== "partial";
+      if (mode === "partial") return s.bucket === "partial";
+      return true;
+    });
+
+    const local: Record<string, ResultEvent> = {};
     try {
-      await streamSSE(
-        "/api/dev/run-eval",
-        { mode, concurrency },
-        {
-          onEvent: (event, data) => {
-            if (event === "result") {
-              const r = data as ResultEvent;
-              local[r.path] = r;
-              setResults({ ...local });
-            } else if (event === "progress") {
-              setProgress(data as ProgressEvent);
-            } else if (event === "done") {
-              setSummary(data as DoneEvent);
-            }
-          },
-          onError: (e) => setError(e instanceof Error ? e.message : String(e)),
+      await fanOut(
+        targets,
+        concurrency,
+        (r) => {
+          local[r.path] = r;
+          setResults({ ...local });
         },
+        (completed, total) => setProgress({ completed, total }),
       );
+
+      // Compute summary client-side from the results we accumulated
+      const byBucket: Record<Bucket, { passed: number; total: number }> = {
+        train: { passed: 0, total: 0 },
+        holdout: { passed: 0, total: 0 },
+        partial: { passed: 0, total: 0 },
+      };
+      let passed = 0;
+      for (const r of Object.values(local)) {
+        byBucket[r.bucket].total += 1;
+        if (r.check.ok) {
+          byBucket[r.bucket].passed += 1;
+          passed += 1;
+        }
+      }
+      setSummary({ total: targets.length, passed, by_bucket: byBucket });
     } catch (e) {
       setError(e instanceof Error ? e.message : String(e));
     } finally {
@@ -728,6 +762,7 @@ export function EvalClient({ initialTokenSet }: { initialTokenSet: boolean }) {
 
       <EvalSection
         active={tokenSet && !!specimens}
+        specimens={specimens ?? []}
         results={results}
         setResults={setResults}
         summary={summary}
