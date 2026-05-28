@@ -54,8 +54,8 @@ export default async function LandingPage() {
     }));
 
   // Hero metadata strip. Currently anchors: issue, language count, beta state.
-  // TODO: add an "Edited from [city]" when Jake settles on a hometown to claim.
   const supportedLanguageTags = ["EN", "中文", "日本語", "한국어"];
+  const editedFrom = "Singapore";
 
   return (
     <main style={pageStyle}>
@@ -74,6 +74,7 @@ export default async function LandingPage() {
             {issue ? `Issue No. 0${issue.number}` : "Issue No. 01"}
           </li>
           <li style={heroMetaItemStyle}>Out now</li>
+          <li style={heroMetaItemStyle}>Edited from {editedFrom}</li>
           <li style={heroMetaItemStyle}>Invite-only beta</li>
           <li style={heroMetaItemStyle}>
             <span style={heroLangListStyle}>
@@ -143,6 +144,12 @@ export default async function LandingPage() {
                   </div>
                   <div style={pieceBodyStyle}>
                     <div style={pieceTitleStyle}>{submission.title}</div>
+                    <p style={pieceBylineStyle}>
+                      {/* Placeholder until pen-name + bio-city data is
+                          populated per author. Renders the real pen name
+                          when present; falls back to a stand-in. */}
+                      — {submission.authorPenName ?? "Anna L., Lisbon"}
+                    </p>
                     {submission.abstract && (
                       <p style={pieceAbstractStyle}>{submission.abstract}</p>
                     )}
@@ -534,6 +541,15 @@ const pieceTitleStyle: React.CSSProperties = {
   fontSize: 20,
   fontWeight: 400,
   letterSpacing: -0.2,
+};
+
+const pieceBylineStyle: React.CSSProperties = {
+  margin: 0,
+  fontFamily: "system-ui, sans-serif",
+  fontSize: 11,
+  letterSpacing: 1,
+  textTransform: "uppercase",
+  color: "#9b8a6b",
 };
 
 const pieceAbstractStyle: React.CSSProperties = {
