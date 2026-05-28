@@ -32,6 +32,7 @@ interface ResultEvent {
   path: string;
   bucket: Bucket;
   run_mode: "full" | "partial";
+  provider: string;
   error: string | null;
   diagnostic: unknown;
   check: { ok: boolean; fails: string[] };
@@ -45,6 +46,14 @@ interface DoneEvent {
   passed: number;
   by_bucket: Record<Bucket, { passed: number; total: number }>;
 }
+
+// path → providerId → result
+type ResultsByPath = Record<string, Record<string, ResultEvent>>;
+
+type ProviderStats = Record<
+  string,
+  { total: number; passed: number; errored: number; byBucket: Record<Bucket, { passed: number; total: number }> }
+>;
 
 // ─── Client-side fan-out ────────────────────────────────────────────────────
 // Earlier this module ran the eval via a single SSE streaming call to
@@ -82,14 +91,12 @@ async function diagnoseOne(
       });
       if (resp.ok) {
         const data = (await resp.json()) as ResultEvent & { error?: string };
-        return { ...data, error: data.error ?? null };
+        return { ...data, provider: providerId, error: data.error ?? null };
       }
-      // 4xx is permanent (bad token, bad path) — don't retry
-      // 5xx is retryable (server overload, cold start)
       const text = await resp.text();
       const errMsg = `HTTP ${resp.status}: ${text.slice(0, 160)}`;
       if (resp.status < 500) {
-        return errorRow(spec, mode, errMsg, "http_error");
+        return errorRow(spec, providerId, mode, errMsg, "http_error");
       }
       lastError = errMsg;
     } catch (e) {
@@ -98,6 +105,7 @@ async function diagnoseOne(
   }
   return errorRow(
     spec,
+    providerId,
     mode,
     `${lastError} (${FETCH_RETRY_ATTEMPTS} attempts)`,
     "fetch_error",
@@ -106,6 +114,7 @@ async function diagnoseOne(
 
 function errorRow(
   spec: SpecimenInfo,
+  providerId: string,
   mode: "full" | "partial",
   message: string,
   failTag: string,
@@ -114,6 +123,7 @@ function errorRow(
     path: spec.path,
     bucket: spec.bucket,
     run_mode: mode,
+    provider: providerId,
     error: message,
     diagnostic: null,
     check: { ok: false, fails: [failTag] },
@@ -123,21 +133,29 @@ function errorRow(
   };
 }
 
-async function fanOut(
+// Cartesian product worker pool. Each work item is one (specimen × provider)
+// pair. Concurrency is global — total in-flight requests across all
+// providers, not per-provider.
+async function fanOutMulti(
   targets: SpecimenInfo[],
+  providerIds: string[],
   concurrency: number,
-  providerId: string,
   onResult: (r: ResultEvent) => void,
   onProgress: (completed: number, total: number) => void,
 ): Promise<void> {
-  const queue = [...targets];
+  const queue: Array<{ spec: SpecimenInfo; providerId: string }> = [];
+  for (const spec of targets) {
+    for (const providerId of providerIds) {
+      queue.push({ spec, providerId });
+    }
+  }
   let completed = 0;
-  const total = targets.length;
+  const total = queue.length;
   async function worker(): Promise<void> {
     while (queue.length > 0) {
-      const spec = queue.shift();
-      if (!spec) return;
-      const result = await diagnoseOne(spec, providerId);
+      const item = queue.shift();
+      if (!item) return;
+      const result = await diagnoseOne(item.spec, item.providerId);
       onResult(result);
       completed += 1;
       onProgress(completed, total);
@@ -247,47 +265,56 @@ function EvalSection({
   defaultProviderId,
   results,
   setResults,
-  summary,
-  setSummary,
-  lastRunProviderId,
-  setLastRunProviderId,
+  runProviderIds,
+  setRunProviderIds,
 }: {
   active: boolean;
   specimens: SpecimenInfo[];
   providers: ProviderInfo[];
   defaultProviderId: string | null;
-  results: Record<string, ResultEvent>;
-  setResults: (r: Record<string, ResultEvent>) => void;
-  summary: DoneEvent | null;
-  setSummary: (s: DoneEvent | null) => void;
-  lastRunProviderId: string | null;
-  setLastRunProviderId: (id: string | null) => void;
+  results: ResultsByPath;
+  setResults: (r: ResultsByPath) => void;
+  runProviderIds: string[];
+  setRunProviderIds: (ids: string[]) => void;
 }) {
   const [mode, setMode] = useState<"full" | "partial" | "both">("both");
   const [concurrency, setConcurrency] = useState(2);
-  const [providerId, setProviderId] = useState<string>(
-    defaultProviderId ?? providers[0]?.id ?? "anthropic:claude-sonnet-4-6",
-  );
+  const [selectedIds, setSelectedIds] = useState<string[]>([]);
   const [running, setRunning] = useState(false);
   const [progress, setProgress] = useState<ProgressEvent | null>(null);
   const [error, setError] = useState<string | null>(null);
 
-  // Reset to default once providers load (initial state ran before fetch)
+  // Initialize selection to whichever providers are available, defaulting to
+  // the canonical Anthropic one if all keys are configured.
   useEffect(() => {
-    if (defaultProviderId && !providers.find((p) => p.id === providerId)) {
-      setProviderId(defaultProviderId);
+    if (selectedIds.length === 0 && providers.length > 0) {
+      const available = providers.filter((p) => p.available).map((p) => p.id);
+      if (available.length === 0) return;
+      const initial = defaultProviderId && available.includes(defaultProviderId)
+        ? [defaultProviderId]
+        : [available[0]];
+      setSelectedIds(initial);
     }
-  }, [defaultProviderId, providers, providerId]);
+  }, [providers, defaultProviderId, selectedIds.length]);
 
-  const selectedProvider = providers.find((p) => p.id === providerId);
+  function toggleProvider(id: string) {
+    setSelectedIds((prev) =>
+      prev.includes(id) ? prev.filter((x) => x !== id) : [...prev, id],
+    );
+  }
+  function selectAll() {
+    setSelectedIds(providers.filter((p) => p.available).map((p) => p.id));
+  }
+  function selectNone() {
+    setSelectedIds([]);
+  }
 
   async function run() {
     setError(null);
     setRunning(true);
     setProgress(null);
-    setSummary(null);
     setResults({});
-    setLastRunProviderId(providerId);
+    setRunProviderIds(selectedIds);
 
     const targets = specimens.filter((s) => {
       if (mode === "full") return s.bucket !== "partial";
@@ -295,34 +322,19 @@ function EvalSection({
       return true;
     });
 
-    const local: Record<string, ResultEvent> = {};
+    const local: ResultsByPath = {};
     try {
-      await fanOut(
+      await fanOutMulti(
         targets,
+        selectedIds,
         concurrency,
-        providerId,
         (r) => {
-          local[r.path] = r;
+          if (!local[r.path]) local[r.path] = {};
+          local[r.path][r.provider] = r;
           setResults({ ...local });
         },
         (completed, total) => setProgress({ completed, total }),
       );
-
-      // Compute summary client-side from the results we accumulated
-      const byBucket: Record<Bucket, { passed: number; total: number }> = {
-        train: { passed: 0, total: 0 },
-        holdout: { passed: 0, total: 0 },
-        partial: { passed: 0, total: 0 },
-      };
-      let passed = 0;
-      for (const r of Object.values(local)) {
-        byBucket[r.bucket].total += 1;
-        if (r.check.ok) {
-          byBucket[r.bucket].passed += 1;
-          passed += 1;
-        }
-      }
-      setSummary({ total: targets.length, passed, by_bucket: byBucket });
     } catch (e) {
       setError(e instanceof Error ? e.message : String(e));
     } finally {
@@ -330,28 +342,57 @@ function EvalSection({
     }
   }
 
-  const sortedResults = useMemo(
-    () => Object.values(results).sort((a, b) => a.path.localeCompare(b.path)),
-    [results],
-  );
+  const totalCalls = selectedIds.length *
+    specimens.filter((s) => {
+      if (mode === "full") return s.bucket !== "partial";
+      if (mode === "partial") return s.bucket === "partial";
+      return true;
+    }).length;
 
   return (
     <Section title="Run eval" disabled={!active}>
+      <div style={{ marginBottom: 14 }}>
+        <div style={{ display: "flex", gap: 10, alignItems: "baseline", marginBottom: 8 }}>
+          <span style={{ fontSize: 11, textTransform: "uppercase", letterSpacing: 1.2, color: "#665" }}>
+            models
+          </span>
+          <button type="button" onClick={selectAll} style={btnSubtle} disabled={running}>all available</button>
+          <button type="button" onClick={selectNone} style={btnSubtle} disabled={running}>none</button>
+          <span style={{ fontSize: 11, color: "#888" }}>
+            {selectedIds.length} selected · {totalCalls} calls/run
+          </span>
+        </div>
+        <div style={{ display: "flex", flexDirection: "column", gap: 4 }}>
+          {providers.map((p) => (
+            <label
+              key={p.id}
+              style={{
+                display: "flex",
+                alignItems: "center",
+                gap: 8,
+                fontSize: 13,
+                color: p.available ? "#1a1a1a" : "#999",
+                cursor: p.available && !running ? "pointer" : "not-allowed",
+              }}
+            >
+              <input
+                type="checkbox"
+                checked={selectedIds.includes(p.id)}
+                onChange={() => toggleProvider(p.id)}
+                disabled={!p.available || running}
+              />
+              <span style={{ fontFamily: "monospace", fontSize: 11.5, color: "#666", minWidth: 220 }}>
+                {p.id}
+              </span>
+              <span style={{ minWidth: 160 }}>{p.displayName}</span>
+              <span style={{ fontSize: 11, color: "#888" }}>{p.costNote}</span>
+              {!p.available && <span style={{ fontSize: 11, color: "#a05300" }}>(no key)</span>}
+            </label>
+          ))}
+        </div>
+      </div>
+
       <div style={{ display: "flex", gap: 12, flexWrap: "wrap", alignItems: "flex-end", marginBottom: 14 }}>
-        <Field label="model">
-          <select
-            value={providerId}
-            onChange={(e) => setProviderId(e.target.value)}
-            style={{ ...inputStyle, minWidth: 220 }}
-            disabled={running}
-          >
-            {providers.map((p) => (
-              <option key={p.id} value={p.id} disabled={!p.available}>
-                {p.displayName} {p.available ? "" : "(no key)"} — {p.costNote}
-              </option>
-            ))}
-          </select>
-        </Field>
         <Field label="mode">
           <select value={mode} onChange={(e) => setMode(e.target.value as typeof mode)} style={inputStyle} disabled={running}>
             <option value="both">both</option>
@@ -372,16 +413,11 @@ function EvalSection({
         </Field>
         <button
           onClick={run}
-          disabled={!active || running || (selectedProvider !== undefined && !selectedProvider.available)}
+          disabled={!active || running || selectedIds.length === 0}
           style={btnPrimary}
         >
-          {running ? "running…" : "run eval"}
+          {running ? "running…" : `run eval (${selectedIds.length})`}
         </button>
-        {lastRunProviderId && (
-          <span style={{ fontSize: 12, color: "#888" }}>
-            results from {providers.find((p) => p.id === lastRunProviderId)?.displayName ?? lastRunProviderId}
-          </span>
-        )}
         {progress && (
           <span style={{ fontSize: 13, color: "#555" }}>
             {progress.completed} / {progress.total} done
@@ -391,19 +427,62 @@ function EvalSection({
 
       {error && <ErrorBox text={error} />}
 
-      {summary && <SummaryBlock summary={summary} />}
+      {runProviderIds.length > 0 && (
+        <PerProviderSummary
+          results={results}
+          providers={providers}
+          providerIds={runProviderIds}
+        />
+      )}
 
-      {sortedResults.length > 0 && <ResultsTable results={sortedResults} />}
+      {Object.keys(results).length > 0 && (
+        <ComparisonTable
+          results={results}
+          providers={providers}
+          providerIds={runProviderIds}
+        />
+      )}
     </Section>
   );
 }
 
-function SummaryBlock({ summary }: { summary: DoneEvent }) {
-  const { by_bucket } = summary;
-  const trainPct = by_bucket.train.total ? (by_bucket.train.passed / by_bucket.train.total) * 100 : 0;
-  const holdoutPct = by_bucket.holdout.total ? (by_bucket.holdout.passed / by_bucket.holdout.total) * 100 : 0;
-  const delta = trainPct - holdoutPct;
-  const overfit = delta > 15;
+function PerProviderSummary({
+  results,
+  providers,
+  providerIds,
+}: {
+  results: ResultsByPath;
+  providers: ProviderInfo[];
+  providerIds: string[];
+}) {
+  const stats: ProviderStats = {};
+  for (const pid of providerIds) {
+    stats[pid] = {
+      total: 0,
+      passed: 0,
+      errored: 0,
+      byBucket: {
+        train: { passed: 0, total: 0 },
+        holdout: { passed: 0, total: 0 },
+        partial: { passed: 0, total: 0 },
+      },
+    };
+  }
+  for (const byProvider of Object.values(results)) {
+    for (const pid of providerIds) {
+      const r = byProvider[pid];
+      if (!r) continue;
+      stats[pid].total += 1;
+      stats[pid].byBucket[r.bucket].total += 1;
+      if (r.error) {
+        stats[pid].errored += 1;
+      } else if (r.check.ok) {
+        stats[pid].passed += 1;
+        stats[pid].byBucket[r.bucket].passed += 1;
+      }
+    }
+  }
+
   return (
     <div
       style={{
@@ -413,25 +492,101 @@ function SummaryBlock({ summary }: { summary: DoneEvent }) {
         borderRadius: 4,
         marginBottom: 16,
         display: "flex",
-        flexWrap: "wrap",
-        gap: 18,
+        flexDirection: "column",
+        gap: 8,
         fontSize: 13,
       }}
     >
-      <div><strong>total</strong> {summary.passed}/{summary.total} ({summary.total ? Math.round((summary.passed / summary.total) * 100) : 0}%)</div>
-      <div>train {by_bucket.train.passed}/{by_bucket.train.total} ({Math.round(trainPct)}%)</div>
-      <div>holdout {by_bucket.holdout.passed}/{by_bucket.holdout.total} ({Math.round(holdoutPct)}%)</div>
-      <div>partial {by_bucket.partial.passed}/{by_bucket.partial.total}</div>
-      {overfit && (
-        <div style={{ color: "#a05300", fontWeight: 600 }}>
-          ⚠ train − holdout = {delta.toFixed(0)}% → possible overfit
-        </div>
-      )}
+      {providerIds.map((pid) => {
+        const s = stats[pid];
+        const p = providers.find((x) => x.id === pid);
+        if (!p || !s) return null;
+        const pct = s.total ? Math.round((s.passed / s.total) * 100) : 0;
+        const trainPct = s.byBucket.train.total
+          ? (s.byBucket.train.passed / s.byBucket.train.total) * 100
+          : 0;
+        const holdoutPct = s.byBucket.holdout.total
+          ? (s.byBucket.holdout.passed / s.byBucket.holdout.total) * 100
+          : 0;
+        const delta = trainPct - holdoutPct;
+        const overfit = delta > 15;
+        return (
+          <div key={pid} style={{ display: "flex", flexWrap: "wrap", gap: 14, alignItems: "baseline" }}>
+            <span style={{ fontWeight: 600, minWidth: 160 }}>{p.displayName}</span>
+            <span><strong>{s.passed}/{s.total}</strong> ({pct}%)</span>
+            <span style={{ color: "#666" }}>
+              train {s.byBucket.train.passed}/{s.byBucket.train.total} · holdout{" "}
+              {s.byBucket.holdout.passed}/{s.byBucket.holdout.total} · partial{" "}
+              {s.byBucket.partial.passed}/{s.byBucket.partial.total}
+            </span>
+            {s.errored > 0 && (
+              <span style={{ color: "#a05300" }}>{s.errored} err</span>
+            )}
+            {overfit && (
+              <span style={{ color: "#a05300", fontWeight: 600 }}>
+                ⚠ train−holdout {delta.toFixed(0)}%
+              </span>
+            )}
+          </div>
+        );
+      })}
     </div>
   );
 }
 
-function ResultsTable({ results }: { results: ResultEvent[] }) {
+function shortProviderName(pid: string, providers: ProviderInfo[]): string {
+  const p = providers.find((x) => x.id === pid);
+  if (!p) return pid;
+  // Last word of displayName is usually enough — e.g. "Sonnet 4.6"
+  const parts = p.displayName.split(/\s+/);
+  return parts.slice(-2).join(" ");
+}
+
+function ComparisonTable({
+  results,
+  providers,
+  providerIds,
+}: {
+  results: ResultsByPath;
+  providers: ProviderInfo[];
+  providerIds: string[];
+}) {
+  const sortedPaths = Object.keys(results).sort();
+
+  function cellFor(r: ResultEvent | undefined): React.ReactNode {
+    if (!r) return <span style={{ color: "#bbb" }}>—</span>;
+    const verdict = r.error ? "ERR" : r.check.ok ? "PASS" : "FAIL";
+    const color = r.error ? "#a05300" : r.check.ok ? "#2a5230" : "#b00020";
+    const conf = r.confidence == null ? "" : r.confidence.toFixed(2);
+    const tip = r.error
+      ? r.error
+      : r.check.fails.length > 0
+        ? r.check.fails.join(", ")
+        : "ok";
+    return (
+      <div
+        title={tip}
+        style={{ color, fontWeight: 600, fontSize: 11.5 }}
+      >
+        {verdict}
+        {conf && <span style={{ color: "#666", fontWeight: 400, marginLeft: 4 }}>{conf}</span>}
+      </div>
+    );
+  }
+
+  function agreementBadge(byProvider: Record<string, ResultEvent>): React.ReactNode {
+    const verdicts = providerIds
+      .map((pid) => byProvider[pid])
+      .filter((r): r is ResultEvent => r != null && !r.error)
+      .map((r) => r.check.ok);
+    if (verdicts.length === 0) return <span style={{ color: "#bbb" }}>—</span>;
+    const allPass = verdicts.every((v) => v);
+    const allFail = verdicts.every((v) => !v);
+    if (allPass) return <span style={{ color: "#2a5230" }}>✓ all</span>;
+    if (allFail) return <span style={{ color: "#b00020" }}>✗ all</span>;
+    return <span style={{ color: "#a05300", fontWeight: 600 }}>split</span>;
+  }
+
   return (
     <div style={{ overflowX: "auto" }}>
       <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 12.5 }}>
@@ -439,29 +594,27 @@ function ResultsTable({ results }: { results: ResultEvent[] }) {
           <tr style={{ borderBottom: "2px solid #ddd", textAlign: "left", color: "#666" }}>
             <th style={th}>path</th>
             <th style={th}>bucket</th>
-            <th style={th}>mode</th>
-            <th style={th}>engine</th>
-            <th style={th}>conf</th>
-            <th style={th}>verdict</th>
-            <th style={th}>fails / error</th>
+            {providerIds.map((pid) => (
+              <th key={pid} style={th}>{shortProviderName(pid, providers)}</th>
+            ))}
+            <th style={th}>agree</th>
           </tr>
         </thead>
         <tbody>
-          {results.map((r) => (
-            <tr key={r.path} style={{ borderBottom: "1px solid #f0ecdf" }}>
-              <td style={{ ...td, fontFamily: "monospace", fontSize: 11.5 }}>{r.path}</td>
-              <td style={td}>{r.bucket}</td>
-              <td style={td}>{r.run_mode}</td>
-              <td style={td}>{r.primary_engine}</td>
-              <td style={td}>{r.confidence == null ? "-" : r.confidence.toFixed(2)}</td>
-              <td style={{ ...td, color: r.error ? "#a05300" : r.check.ok ? "#2a5230" : "#b00020", fontWeight: 600 }}>
-                {r.error ? "ERR" : r.check.ok ? "PASS" : "FAIL"}
-              </td>
-              <td style={{ ...td, color: "#7c2020", fontSize: 11.5, maxWidth: 280 }}>
-                {r.error ?? r.check.fails.join(", ")}
-              </td>
-            </tr>
-          ))}
+          {sortedPaths.map((path) => {
+            const byProvider = results[path] ?? {};
+            const anyR = Object.values(byProvider)[0];
+            return (
+              <tr key={path} style={{ borderBottom: "1px solid #f0ecdf" }}>
+                <td style={{ ...td, fontFamily: "monospace", fontSize: 11.5 }}>{path}</td>
+                <td style={td}>{anyR?.bucket ?? "-"}</td>
+                {providerIds.map((pid) => (
+                  <td key={pid} style={td}>{cellFor(byProvider[pid])}</td>
+                ))}
+                <td style={td}>{agreementBadge(byProvider)}</td>
+              </tr>
+            );
+          })}
         </tbody>
       </table>
     </div>
@@ -497,25 +650,40 @@ function ReviseSection({
   active,
   results,
   haveResults,
+  runProviderIds,
+  providers,
 }: {
   active: boolean;
-  results: Record<string, ResultEvent>;
+  results: ResultsByPath;
   haveResults: boolean;
+  runProviderIds: string[];
+  providers: ProviderInfo[];
 }) {
   const [mode, setMode] = useState<"full" | "partial">("full");
   const [includeHoldout, setIncludeHoldout] = useState(false);
+  const [sourceProviderId, setSourceProviderId] = useState<string>("");
   const [running, setRunning] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [response, setResponse] = useState<ReviseResponse | null>(null);
+
+  // Default the source provider to whichever ran most recently (first in
+  // the list) once we have results.
+  useEffect(() => {
+    if (!sourceProviderId && runProviderIds.length > 0) {
+      setSourceProviderId(runProviderIds[0]);
+    }
+  }, [sourceProviderId, runProviderIds]);
 
   async function run() {
     setError(null);
     setResponse(null);
     setRunning(true);
     try {
-      // Only send results matching the rubric mode (full vs partial)
+      // Only send results matching the rubric mode AND from the chosen provider
       const filtered: Record<string, unknown> = {};
-      for (const [path, r] of Object.entries(results)) {
+      for (const [path, byProvider] of Object.entries(results)) {
+        const r = byProvider[sourceProviderId];
+        if (!r) continue;
         if ((mode === "partial") === (r.run_mode === "partial") && r.diagnostic && !r.error) {
           filtered[path] = r.diagnostic;
         }
@@ -544,18 +712,36 @@ function ReviseSection({
       {!haveResults && (
         <p style={mutedStyle}>Run an eval first — revisions are computed from the most recent diagnostics.</p>
       )}
-      <div style={{ display: "flex", gap: 12, alignItems: "flex-end", marginBottom: 14 }}>
+      <div style={{ display: "flex", gap: 12, alignItems: "flex-end", marginBottom: 14, flexWrap: "wrap" }}>
         <Field label="target rubric">
           <select value={mode} onChange={(e) => setMode(e.target.value as typeof mode)} style={inputStyle} disabled={running}>
             <option value="full">RUBRIC_FULL</option>
             <option value="partial">RUBRIC_PARTIAL</option>
           </select>
         </Field>
+        <Field label="based on results from">
+          <select
+            value={sourceProviderId}
+            onChange={(e) => setSourceProviderId(e.target.value)}
+            style={{ ...inputStyle, minWidth: 220 }}
+            disabled={running || runProviderIds.length === 0}
+          >
+            {runProviderIds.length === 0 && <option value="">(no results yet)</option>}
+            {runProviderIds.map((pid) => {
+              const p = providers.find((x) => x.id === pid);
+              return (
+                <option key={pid} value={pid}>
+                  {p?.displayName ?? pid}
+                </option>
+              );
+            })}
+          </select>
+        </Field>
         <label style={{ fontSize: 13, display: "flex", gap: 6, alignItems: "center", paddingBottom: 9 }}>
           <input type="checkbox" checked={includeHoldout} onChange={(e) => setIncludeHoldout(e.target.checked)} disabled={running} />
           include holdout (final check only)
         </label>
-        <button onClick={run} disabled={!active || !haveResults || running} style={btnPrimary}>
+        <button onClick={run} disabled={!active || !haveResults || running || !sourceProviderId} style={btnPrimary}>
           {running ? "thinking…" : "propose"}
         </button>
       </div>
@@ -806,9 +992,8 @@ export function EvalClient({ initialTokenSet }: { initialTokenSet: boolean }) {
   const [specimensError, setSpecimensError] = useState<string | null>(null);
   const [providers, setProviders] = useState<ProviderInfo[]>([]);
   const [defaultProviderId, setDefaultProviderId] = useState<string | null>(null);
-  const [results, setResults] = useState<Record<string, ResultEvent>>({});
-  const [summary, setSummary] = useState<DoneEvent | null>(null);
-  const [lastRunProviderId, setLastRunProviderId] = useState<string | null>(null);
+  const [results, setResults] = useState<ResultsByPath>({});
+  const [runProviderIds, setRunProviderIds] = useState<string[]>([]);
 
   const refresh = useCallback(async () => {
     setSpecimensError(null);
@@ -865,15 +1050,15 @@ export function EvalClient({ initialTokenSet }: { initialTokenSet: boolean }) {
         defaultProviderId={defaultProviderId}
         results={results}
         setResults={setResults}
-        summary={summary}
-        setSummary={setSummary}
-        lastRunProviderId={lastRunProviderId}
-        setLastRunProviderId={setLastRunProviderId}
+        runProviderIds={runProviderIds}
+        setRunProviderIds={setRunProviderIds}
       />
       <ReviseSection
         active={tokenSet && !!specimens}
         results={results}
         haveResults={Object.keys(results).length > 0}
+        runProviderIds={runProviderIds}
+        providers={providers}
       />
       <GenerateSection active={tokenSet && !!specimens} specimens={specimens ?? []} />
     </>
