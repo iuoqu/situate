@@ -7,10 +7,21 @@ import { getServerSupabase } from "@/lib/supabase/server";
  * the root layout. Stays out of the way visually — top-right corner.
  */
 export async function AuthStatus() {
-  const supabase = await getServerSupabase();
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
+  // Defensive: the landing page is public, so AuthStatus failing must NOT
+  // break it. Supabase env vars can legitimately be absent on a fresh
+  // deploy where Auth hasn't been configured yet — in that case we render
+  // nothing rather than 500-ing the whole site. Real auth-required pages
+  // still throw loudly on missing env vars (good — they're broken anyway).
+  let user: { email: string | null } | null = null;
+  try {
+    const supabase = await getServerSupabase();
+    const { data } = await supabase.auth.getUser();
+    user = data.user
+      ? { email: data.user.email ?? null }
+      : null;
+  } catch {
+    return null;
+  }
 
   if (!user) {
     return (

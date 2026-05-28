@@ -17,26 +17,30 @@ import { NextResponse, type NextRequest } from "next/server";
 export async function updateSession(request: NextRequest) {
   let response = NextResponse.next({ request });
 
-  const supabase = createServerClient(
-    process.env.NEXT_PUBLIC_SUPABASE_URL!,
-    process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
-    {
-      cookies: {
-        getAll() {
-          return request.cookies.getAll();
-        },
-        setAll(toSet) {
-          for (const { name, value } of toSet) {
-            request.cookies.set(name, value);
-          }
-          response = NextResponse.next({ request });
-          for (const { name, value, options } of toSet) {
-            response.cookies.set(name, value, options);
-          }
-        },
+  // Same defensive degrade as `AuthStatus`: if Supabase env vars are
+  // missing the middleware skips its work rather than 500-ing every
+  // request. Public routes keep working; auth-required pages still throw
+  // when they try to call `getServerSupabase()` themselves.
+  const url = process.env.NEXT_PUBLIC_SUPABASE_URL;
+  const anon = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
+  if (!url || !anon) return response;
+
+  const supabase = createServerClient(url, anon, {
+    cookies: {
+      getAll() {
+        return request.cookies.getAll();
+      },
+      setAll(toSet) {
+        for (const { name, value } of toSet) {
+          request.cookies.set(name, value);
+        }
+        response = NextResponse.next({ request });
+        for (const { name, value, options } of toSet) {
+          response.cookies.set(name, value, options);
+        }
       },
     },
-  );
+  });
 
   // Triggers a token refresh if the access token is past its halfway point.
   // The returned user is also useful if we ever want to add request-level
