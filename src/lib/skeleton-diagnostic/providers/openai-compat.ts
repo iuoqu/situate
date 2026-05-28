@@ -195,9 +195,11 @@ export const DEEPSEEK_PROVIDER = createOpenAICompatProvider({
 });
 
 /**
- * Alibaba Qwen via DashScope international (compatible-mode endpoint).
- * Mainland users may need to switch baseURL to
- * https://dashscope.aliyuncs.com/compatible-mode/v1.
+ * Alibaba Qwen via DashScope mainland (compatible-mode endpoint). This is
+ * the right endpoint for keys minted at https://dashscope.console.aliyun.com.
+ * If you have an international Aliyun account, swap baseURL to
+ * https://dashscope-intl.aliyuncs.com/compatible-mode/v1 — the two are not
+ * cross-authenticated (a mainland key returns 401 on intl and vice versa).
  * env: DASHSCOPE_API_KEY.
  * ~$1.6 / $6.4 per 1M for qwen-max (varies by region/release).
  */
@@ -206,6 +208,6 @@ export const QWEN_PROVIDER = createOpenAICompatProvider({
   displayName: "Qwen3 Max",
   costNote: "$1.6 / $6.4 per 1M",
   apiKeyEnv: "DASHSCOPE_API_KEY",
-  baseURL: "https://dashscope-intl.aliyuncs.com/compatible-mode/v1",
+  baseURL: "https://dashscope.aliyuncs.com/compatible-mode/v1",
   model: "qwen-max",
 });

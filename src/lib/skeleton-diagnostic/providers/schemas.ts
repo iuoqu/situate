@@ -3,6 +3,13 @@
  * Anthropic and OpenAI-compatible providers — both transports accept this
  * same shape (Anthropic wraps it in `Tool.input_schema`, OpenAI in
  * `function.parameters`).
+ *
+ * Anthropic strict mode requires:
+ *   - `additionalProperties: false` on every object — without this the call
+ *     returns 400 invalid_request_error.
+ *   - Every property must appear in `required`.
+ * OpenAI-compatible providers (DeepSeek, Qwen) ignore the extra constraint
+ * harmlessly, so it's safe to keep one schema for both transports.
  */
 
 export const FULL_TOOL_NAME = "submit_full_diagnostic";
@@ -15,6 +22,7 @@ export const PARTIAL_TOOL_DESCRIPTION =
 
 const gatePredicate = {
   type: "object",
+  additionalProperties: false,
   properties: {
     verdict: { type: "boolean" },
     why: { type: "string" },
@@ -24,6 +32,7 @@ const gatePredicate = {
 
 const axisObservation = {
   type: "object",
+  additionalProperties: false,
   properties: {
     status: { type: "string", enum: ["present", "hinted", "not_yet"] },
     note: { type: "string" },
@@ -33,10 +42,12 @@ const axisObservation = {
 
 export const FULL_SCHEMA = {
   type: "object",
+  additionalProperties: false,
   properties: {
     title_or_first_line: { type: "string" },
     skeleton: {
       type: "object",
+      additionalProperties: false,
       properties: {
         S0: { type: "string", description: "Equilibrium / starting state" },
         D: { type: "string", description: "Disturbance" },
@@ -52,6 +63,7 @@ export const FULL_SCHEMA = {
     },
     gate: {
       type: "object",
+      additionalProperties: false,
       properties: {
         transformed: gatePredicate,
         causal: gatePredicate,
@@ -86,6 +98,7 @@ export const FULL_SCHEMA = {
       type: "array",
       items: {
         type: "object",
+        additionalProperties: false,
         properties: {
           engine: {
             type: "string",
@@ -103,6 +116,7 @@ export const FULL_SCHEMA = {
       type: "array",
       items: {
         type: "object",
+        additionalProperties: false,
         properties: {
           id: {
             type: "string",
@@ -133,10 +147,12 @@ export const FULL_SCHEMA = {
 
 export const PARTIAL_SCHEMA = {
   type: "object",
+  additionalProperties: false,
   properties: {
     title_or_first_line: { type: "string" },
     skeleton_status: {
       type: "object",
+      additionalProperties: false,
       properties: {
         S0: axisObservation,
         D: axisObservation,
@@ -154,6 +170,7 @@ export const PARTIAL_SCHEMA = {
       type: "array",
       items: {
         type: "object",
+        additionalProperties: false,
         properties: {
           engine: {
             type: "string",
@@ -175,6 +192,7 @@ export const PARTIAL_SCHEMA = {
       type: "array",
       items: {
         type: "object",
+        additionalProperties: false,
         properties: {
           id: { type: "string", enum: ["causal_spine", "economy"] },
           finding: { type: "string" },
