@@ -15,6 +15,11 @@ const FULL_TOOL: Anthropic.Tool = {
   name: "submit_full_diagnostic",
   description:
     "Submit the structural diagnostic for a completed draft. Mandatory output channel for the full-draft analyser.",
+  // strict: true enforces schema at the API level. Without it, sonnet
+  // sometimes calls the tool with partial input (e.g. engines populated
+  // but gate missing) and Anthropic lets it through — which then surfaces
+  // downstream as is_story(undefined≠...) check failures.
+  strict: true,
   input_schema: {
     type: "object",
     properties: {
@@ -120,6 +125,7 @@ const PARTIAL_TOOL: Anthropic.Tool = {
   name: "submit_partial_diagnostic",
   description:
     "Submit the observation for an in-progress draft. Mandatory output channel for the partial-draft analyser.",
+  strict: true,
   input_schema: {
     type: "object",
     properties: {
@@ -213,7 +219,7 @@ function axisObservation() {
   } as const;
 }
 
-const MAX_TOKENS = 4096;
+const MAX_TOKENS = 8192;
 
 export async function diagnoseSkeleton(
   text: string,
