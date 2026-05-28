@@ -27,6 +27,7 @@ export const dynamic = "force-dynamic";
 interface Body {
   path: string;
   mode?: "full" | "partial";
+  provider?: string;
 }
 
 function parseBody(raw: unknown): Body | string {
@@ -37,7 +38,11 @@ function parseBody(raw: unknown): Body | string {
   if (mode !== undefined && mode !== "full" && mode !== "partial") {
     return "mode must be full | partial when provided";
   }
-  return { path: obj.path, mode };
+  const provider = obj.provider;
+  if (provider !== undefined && typeof provider !== "string") {
+    return "provider must be a string when provided";
+  }
+  return { path: obj.path, mode, provider };
 }
 
 export async function POST(req: NextRequest) {
@@ -64,7 +69,7 @@ export async function POST(req: NextRequest) {
   const bucket = spec.is_partial ? "partial" : spec.is_holdout ? "holdout" : "train";
 
   try {
-    const diagnostic = await diagnoseSkeleton(spec.text, runMode);
+    const diagnostic = await diagnoseSkeleton(spec.text, runMode, parsed.provider);
     const checkResult = spec.expectation
       ? check(diagnostic, spec.expectation)
       : { ok: false, fails: ["no_expectation"] };
@@ -72,6 +77,7 @@ export async function POST(req: NextRequest) {
       path: spec.path,
       bucket,
       run_mode: runMode,
+      provider: parsed.provider ?? null,
       expectation: spec.expectation,
       diagnostic,
       check: checkResult,
@@ -85,6 +91,7 @@ export async function POST(req: NextRequest) {
         path: spec.path,
         bucket,
         run_mode: runMode,
+        provider: parsed.provider ?? null,
         expectation: spec.expectation,
         diagnostic: null,
         check: { ok: false, fails: ["api_error"] },

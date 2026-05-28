@@ -16,6 +16,13 @@ interface SpecimenInfo {
   expectation: Record<string, unknown> | null;
 }
 
+interface ProviderInfo {
+  id: string;
+  displayName: string;
+  costNote: string;
+  available: boolean;
+}
+
 interface ProgressEvent {
   completed: number;
   total: number;
@@ -55,7 +62,10 @@ interface DoneEvent {
 const FETCH_RETRY_ATTEMPTS = 3;
 const FETCH_RETRY_BACKOFF_MS = [1000, 2500, 5000]; // before attempt 1, 2, 3
 
-async function diagnoseOne(spec: SpecimenInfo): Promise<ResultEvent> {
+async function diagnoseOne(
+  spec: SpecimenInfo,
+  providerId: string,
+): Promise<ResultEvent> {
   const mode = spec.bucket === "partial" ? "partial" : "full";
   let lastError = "no attempts made";
 
@@ -67,7 +77,7 @@ async function diagnoseOne(spec: SpecimenInfo): Promise<ResultEvent> {
       const resp = await fetch("/api/dev/diagnose-by-path", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ path: spec.path, mode }),
+        body: JSON.stringify({ path: spec.path, mode, provider: providerId }),
         credentials: "same-origin",
       });
       if (resp.ok) {
@@ -116,6 +126,7 @@ function errorRow(
 async function fanOut(
   targets: SpecimenInfo[],
   concurrency: number,
+  providerId: string,
   onResult: (r: ResultEvent) => void,
   onProgress: (completed: number, total: number) => void,
 ): Promise<void> {
@@ -126,7 +137,7 @@ async function fanOut(
     while (queue.length > 0) {
       const spec = queue.shift();
       if (!spec) return;
-      const result = await diagnoseOne(spec);
+      const result = await diagnoseOne(spec, providerId);
       onResult(result);
       completed += 1;
       onProgress(completed, total);
@@ -232,23 +243,43 @@ function TokenPanel({
 function EvalSection({
   active,
   specimens,
+  providers,
+  defaultProviderId,
   results,
   setResults,
   summary,
   setSummary,
+  lastRunProviderId,
+  setLastRunProviderId,
 }: {
   active: boolean;
   specimens: SpecimenInfo[];
+  providers: ProviderInfo[];
+  defaultProviderId: string | null;
   results: Record<string, ResultEvent>;
   setResults: (r: Record<string, ResultEvent>) => void;
   summary: DoneEvent | null;
   setSummary: (s: DoneEvent | null) => void;
+  lastRunProviderId: string | null;
+  setLastRunProviderId: (id: string | null) => void;
 }) {
   const [mode, setMode] = useState<"full" | "partial" | "both">("both");
   const [concurrency, setConcurrency] = useState(2);
+  const [providerId, setProviderId] = useState<string>(
+    defaultProviderId ?? providers[0]?.id ?? "anthropic:claude-sonnet-4-6",
+  );
   const [running, setRunning] = useState(false);
   const [progress, setProgress] = useState<ProgressEvent | null>(null);
   const [error, setError] = useState<string | null>(null);
+
+  // Reset to default once providers load (initial state ran before fetch)
+  useEffect(() => {
+    if (defaultProviderId && !providers.find((p) => p.id === providerId)) {
+      setProviderId(defaultProviderId);
+    }
+  }, [defaultProviderId, providers, providerId]);
+
+  const selectedProvider = providers.find((p) => p.id === providerId);
 
   async function run() {
     setError(null);
@@ -256,6 +287,7 @@ function EvalSection({
     setProgress(null);
     setSummary(null);
     setResults({});
+    setLastRunProviderId(providerId);
 
     const targets = specimens.filter((s) => {
       if (mode === "full") return s.bucket !== "partial";
@@ -268,6 +300,7 @@ function EvalSection({
       await fanOut(
         targets,
         concurrency,
+        providerId,
         (r) => {
           local[r.path] = r;
           setResults({ ...local });
@@ -305,6 +338,20 @@ function EvalSection({
   return (
     <Section title="Run eval" disabled={!active}>
       <div style={{ display: "flex", gap: 12, flexWrap: "wrap", alignItems: "flex-end", marginBottom: 14 }}>
+        <Field label="model">
+          <select
+            value={providerId}
+            onChange={(e) => setProviderId(e.target.value)}
+            style={{ ...inputStyle, minWidth: 220 }}
+            disabled={running}
+          >
+            {providers.map((p) => (
+              <option key={p.id} value={p.id} disabled={!p.available}>
+                {p.displayName} {p.available ? "" : "(no key)"} — {p.costNote}
+              </option>
+            ))}
+          </select>
+        </Field>
         <Field label="mode">
           <select value={mode} onChange={(e) => setMode(e.target.value as typeof mode)} style={inputStyle} disabled={running}>
             <option value="both">both</option>
@@ -323,9 +370,18 @@ function EvalSection({
             disabled={running}
           />
         </Field>
-        <button onClick={run} disabled={!active || running} style={btnPrimary}>
+        <button
+          onClick={run}
+          disabled={!active || running || (selectedProvider !== undefined && !selectedProvider.available)}
+          style={btnPrimary}
+        >
           {running ? "running…" : "run eval"}
         </button>
+        {lastRunProviderId && (
+          <span style={{ fontSize: 12, color: "#888" }}>
+            results from {providers.find((p) => p.id === lastRunProviderId)?.displayName ?? lastRunProviderId}
+          </span>
+        )}
         {progress && (
           <span style={{ fontSize: 13, color: "#555" }}>
             {progress.completed} / {progress.total} done
@@ -748,29 +804,43 @@ export function EvalClient({ initialTokenSet }: { initialTokenSet: boolean }) {
   const [tokenSet, setTokenSet] = useState(initialTokenSet);
   const [specimens, setSpecimens] = useState<SpecimenInfo[] | null>(null);
   const [specimensError, setSpecimensError] = useState<string | null>(null);
+  const [providers, setProviders] = useState<ProviderInfo[]>([]);
+  const [defaultProviderId, setDefaultProviderId] = useState<string | null>(null);
   const [results, setResults] = useState<Record<string, ResultEvent>>({});
   const [summary, setSummary] = useState<DoneEvent | null>(null);
+  const [lastRunProviderId, setLastRunProviderId] = useState<string | null>(null);
 
-  const refreshSpecimens = useCallback(async () => {
+  const refresh = useCallback(async () => {
     setSpecimensError(null);
     try {
-      const resp = await fetch("/api/dev/specimens", { credentials: "same-origin" });
-      if (resp.status === 401) {
+      const [specResp, provResp] = await Promise.all([
+        fetch("/api/dev/specimens", { credentials: "same-origin" }),
+        fetch("/api/dev/providers", { credentials: "same-origin" }),
+      ]);
+      if (specResp.status === 401 || provResp.status === 401) {
         setSpecimens(null);
+        setProviders([]);
         setSpecimensError("token rejected by server");
         return;
       }
-      if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
-      const data = (await resp.json()) as { specimens: SpecimenInfo[] };
-      setSpecimens(data.specimens);
+      if (!specResp.ok) throw new Error(`specimens HTTP ${specResp.status}`);
+      if (!provResp.ok) throw new Error(`providers HTTP ${provResp.status}`);
+      const specData = (await specResp.json()) as { specimens: SpecimenInfo[] };
+      const provData = (await provResp.json()) as {
+        default: string;
+        providers: ProviderInfo[];
+      };
+      setSpecimens(specData.specimens);
+      setProviders(provData.providers);
+      setDefaultProviderId(provData.default);
     } catch (e) {
       setSpecimensError(e instanceof Error ? e.message : String(e));
     }
   }, []);
 
   useEffect(() => {
-    if (tokenSet) void refreshSpecimens();
-  }, [tokenSet, refreshSpecimens]);
+    if (tokenSet) void refresh();
+  }, [tokenSet, refresh]);
 
   return (
     <>
@@ -782,17 +852,23 @@ export function EvalClient({ initialTokenSet }: { initialTokenSet: boolean }) {
           {specimens.filter((s) => s.bucket === "train").length} train,{" "}
           {specimens.filter((s) => s.bucket === "holdout").length} holdout,{" "}
           {specimens.filter((s) => s.bucket === "partial").length} partial
+          {" · "}
+          {providers.filter((p) => p.available).length}/{providers.length} model providers configured
         </div>
       )}
       {tokenSet && specimensError && <ErrorBox text={specimensError} />}
 
       <EvalSection
-        active={tokenSet && !!specimens}
+        active={tokenSet && !!specimens && providers.length > 0}
         specimens={specimens ?? []}
+        providers={providers}
+        defaultProviderId={defaultProviderId}
         results={results}
         setResults={setResults}
         summary={summary}
         setSummary={setSummary}
+        lastRunProviderId={lastRunProviderId}
+        setLastRunProviderId={setLastRunProviderId}
       />
       <ReviseSection
         active={tokenSet && !!specimens}
