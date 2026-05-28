@@ -601,7 +601,7 @@ function ComparisonTable({
         ? r.check.fails.join(", ")
         : "";
     return (
-      <div title={tip} style={{ minWidth: 140 }}>
+      <div title={tip} style={{ minWidth: 220, maxWidth: 360 }}>
         <div style={{ color, fontWeight: 600, fontSize: 11.5 }}>
           {verdict}
           {conf && (
@@ -616,12 +616,15 @@ function ComparisonTable({
               fontSize: 10.5,
               color: r.error ? "#a05300" : "#7c2020",
               marginTop: 2,
-              maxWidth: 260,
               wordBreak: "break-word",
-              lineHeight: 1.3,
+              whiteSpace: "pre-wrap",
+              lineHeight: 1.35,
+              fontFamily: r.error
+                ? 'ui-monospace, "SF Mono", Menlo, monospace'
+                : "inherit",
             }}
           >
-            {inline.length > 110 ? `${inline.slice(0, 110)}…` : inline}
+            {inline}
           </div>
         )}
       </div>

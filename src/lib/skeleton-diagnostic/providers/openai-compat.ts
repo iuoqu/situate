@@ -143,10 +143,19 @@ export function createOpenAICompatProvider(opts: OpenAICompatOpts): Provider {
       let raw: Record<string, unknown>;
       try {
         raw = JSON.parse(argsStr);
-      } catch (e) {
-        throw new Error(
-          `${displayName} returned malformed JSON in tool call: ${e instanceof Error ? e.message : e}`,
-        );
+      } catch {
+        // Some non-OpenAI providers (notably Qwen) produce valid JSON
+        // followed by stray non-whitespace garbage. Try to recover by
+        // slicing at the first matching close brace of the leading
+        // object, then re-parse. If that still fails we surface the
+        // original argsStr's tail so the user can see what came back.
+        try {
+          raw = JSON.parse(extractFirstJsonObject(argsStr));
+        } catch (e2) {
+          throw new Error(
+            `${displayName} returned malformed JSON in tool call: ${e2 instanceof Error ? e2.message : e2}; tail=${argsStr.slice(-120)}`,
+          );
+        }
       }
 
       const meta = {
@@ -161,11 +170,12 @@ export function createOpenAICompatProvider(opts: OpenAICompatOpts): Provider {
       } as const;
 
       if (isFull) {
-        return {
-          mode: "full",
-          ...(raw as unknown as RawFullToolInput),
-          _meta: meta,
-        };
+        const rawFull = raw as unknown as RawFullToolInput;
+        // Map "" → null for the same strict-mode reason as anthropic.ts.
+        if (rawFull.gate && (rawFull.gate.if_not_story_type as unknown as string) === "") {
+          rawFull.gate.if_not_story_type = null;
+        }
+        return { mode: "full", ...rawFull, _meta: meta };
       }
       return {
         mode: "partial",
@@ -174,6 +184,41 @@ export function createOpenAICompatProvider(opts: OpenAICompatOpts): Provider {
       };
     },
   };
+}
+
+/**
+ * Find the leading JSON object in a string and return just that substring,
+ * even if the string has trailing garbage. Counts braces honoring string
+ * literals and escape sequences. Throws on no `{` or unterminated object.
+ */
+function extractFirstJsonObject(s: string): string {
+  const start = s.indexOf("{");
+  if (start < 0) throw new Error("no JSON object in response");
+  let depth = 0;
+  let inString = false;
+  let escape = false;
+  for (let i = start; i < s.length; i++) {
+    const c = s[i];
+    if (escape) {
+      escape = false;
+      continue;
+    }
+    if (c === "\\") {
+      escape = true;
+      continue;
+    }
+    if (c === '"') {
+      inString = !inString;
+      continue;
+    }
+    if (inString) continue;
+    if (c === "{") depth++;
+    else if (c === "}") {
+      depth--;
+      if (depth === 0) return s.slice(start, i + 1);
+    }
+  }
+  throw new Error("unterminated JSON object");
 }
 
 // ─── Pre-configured providers ──────────────────────────────────────────────
