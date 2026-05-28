@@ -77,9 +77,59 @@ specimens/
 2. 在 `expectations.json` 加一条
 3. 重跑 `python run_eval.py`
 
-**用 Claude 自己作为放大器**：要把样本量从几十扩到几百，可以让 Claude 基于一个种子
-specimen 产新变体（"把这篇改成 inevitability 引擎而不是 revelation"），人工审后入库。
-这条管线（`generate_variations.py`）会在 Phase 3 实现，但接口已经预留了。
+### 用 Claude 自己当样本生成器（generate_variations.py）
+
+把 36 篇种子集放大到几百篇的现实路径。两种调用：
+
+**单次**：
+```bash
+export ANTHROPIC_API_KEY=sk-ant-...
+python generate_variations.py \
+  --seed specimens/synthetic/faqtiao/02_revelation.txt \
+  --transform "把引擎改成 inevitability，保持 understanding 维度" \
+  --out specimens/synthetic/faqtiao/04b_inevitability_v2.txt
+```
+
+**批量**（推荐）：用一份 JSON manifest 一次产十几篇，见 `variations.example.json`：
+```bash
+python generate_variations.py --manifest variations.example.json
+```
+
+每篇产物会同时写出 `<out>.txt` 和 `<out>.expectation.json`，后者是带 `_generated/
+_seed/_transform/_design_notes` 溯源字段的草案。**人审是不可省的**——review
+.txt 看读起来对不对，把 .expectation.json 内容合并进 expectations.json，删 sidecar
+文件，重跑 run_eval.py。
+
+模型默认 `claude-sonnet-4-6`（写作够用、便宜）；加 `--strict` 切到 `claude-opus-4-7`
+（贵 5x 但结构更稳定，做正式扩样本时用）。
+
+### 看到结果之后让 Claude 提 RUBRIC 修改建议（revise_rubric.py）
+
+`run_eval.py` 跑完之后，把翻车 + borderline 案例自动喂给 opus-4-7（开 adaptive
+thinking），让它给外科式修改建议：
+
+```bash
+python revise_rubric.py             # 改 RUBRIC_FULL，默认不算 holdout（防过拟合）
+python revise_rubric.py --mode partial            # 改 RUBRIC_PARTIAL
+python revise_rubric.py --include-holdout         # 终验：把 holdout 也算进来
+```
+
+输出：
+- 控制台：DIAGNOSIS（失败聚类 + 根因分类：rubric_wording / skeleton_model /
+  confidence_calibration / expectation_wrong） + PROPOSED EDITS（before/after
+  snippet + 预计修复 + 预计破坏）+ 骨架级问题 + overall
+- 文件：`revision_proposals/<mode>_<timestamp>.json` 完整 JSON，可追溯
+
+**这个工具能解决什么、不能解决什么**：
+
+| 能 | 不能 |
+|---|---|
+| RUBRIC 措辞模糊导致的误判 | 骨架本身覆盖不到某类文学（要扩 S0/D/T/S1/K 或显式 out_of_scope） |
+| confidence 系统性偏高/偏低 | 模型本身能力不够（换 opus-4-7 在 analyze 里跑） |
+| 引擎描述互相重叠 | 标注本身有争议（看 skeleton_questions 字段，工具会显式问出来） |
+
+工具不会自动 apply 修改——人审之后再改 `analyze.py::RUBRIC_FULL` 或
+`src/lib/skeleton-diagnostic/rubric.ts`。
 
 ## RUBRIC 在哪里改
 
