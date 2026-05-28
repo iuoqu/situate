@@ -41,18 +41,28 @@ as a writing platform whose structured data drives three things:
 
 **Key positioning decisions** (locked):
 
-- **Stay flash-only for now.** AI editorial doesn't scale to long form.
-  Schema kept flash-shaped (no `works → scenes → blocks` reshape).
-- **Stay literary-only for now.** Tradition profiles ship as flash
-  variants only (`flash_situate_anchored`, `flash_situate_pearls`,
-  `literary_minimalism`, etc.) — no genre fiction profiles
-  (升级流 / 言情 / 推理 / 惊悚).
+- **Stay flash-only for now.** AI editorial doesn't scale to long form
+  (length constraint, not a content constraint). Schema kept flash-
+  shaped (no `works → scenes → blocks` reshape).
+- **Tradition-agnostic on submission; tradition-aware on coaching.**
+  Tradition profiles are *coaching lenses*, not publication gates.
+  Every submission — wuxia, detective, romance, literary, 升级流, etc.
+  — is judged by P1–P13 on its own merits. A wuxia short set at real
+  Wudang Mountain passes P3 the same way a literary piece set in
+  Outram Singapore does. The constitution's P2 (specificity over
+  category) applies here too: we don't decline whole genres.
+  Tradition profiles ship across the obvious literary + genre lenses
+  (`flash_situate_anchored`, `flash_situate_pearls`, `wuxia`,
+  `detective`, `romance`, `xianxia`, `thriller`, `literary_minimalism`,
+  `literary_lyric`, etc.) — what each one does is configure which
+  diagnostics, pacing norms, and prose conventions the coach uses.
 - **Single brand (Situate).** Writing tool and magazine are one
-  product. Preserves a future pivot to long-form or genre if real
-  demand appears (e.g. a wave of 玄幻 submissions).
+  product. Preserves a future pivot to long-form if real demand
+  appears.
 - **Pearls (遗珠) carveout for non-place-anchored fiction.**
-  Hemingway "Hills Like White Elephants" type work. P3 bypassed in
-  this section; every other principle applies.
+  Hemingway "Hills Like White Elephants" type work, OR submissions
+  from any tradition that don't satisfy P3 but otherwise pass the
+  principles. Editor discretion only.
 
 **Pearls (遗珠) operational rules** (locked):
 
