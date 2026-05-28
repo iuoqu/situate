@@ -6,27 +6,24 @@ import { useRouter } from "next/navigation";
 import { useEffect, useMemo, useRef, useState } from "react";
 
 /**
- * Review & Submit — the Slice-1 minimum AssemblyView.
+ * Review & Submit — final pre-handoff page (Slice 4 multi-location
+ * version).
  *
- * Three things on one page:
+ * Locations are owned by the editor (per-section pins). This page is
+ * pure display + submit:
  *
- *   1. The assembled draft: 5 sections stitched into continuous prose,
- *      shown the way it'll appear after editorial. Read-only — to edit,
- *      use the "Back to editing" link, which preserves autosaved state.
+ *   1. Multi-pin map at the top showing every section with its own
+ *      coordinate, numbered 01-05. Sections without their own coord
+ *      don't get a marker; they inherit from upstream silently.
  *
- *   2. A single map picker. One pin for the whole story. (Slice-4 will
- *      replace this with the per-section MultiLocationPicker; the submit
- *      handoff already supports per-section coords falling back to the
- *      global one.)
+ *   2. Assembled prose — each section preview gets a location chip
+ *      that says either "📍 Outram, Singapore" (own coord) or
+ *      "↑ same as 01" (inherited).
  *
- *   3. The submission-form gating fields: relocation-test prose (≥50
- *      words — same rule as /submit), pen name (defaults to email
- *      local-part), legal attestation checkbox.
- *
- * Posts to /api/drafts/[id]/submit. On success, server returns
- * {redirectTo} pointing at /submit/thanks/[submissionId] — the existing
- * thank-you page covers the post-submit landing for now; Slice 3 will
- * replace it with /my/submissions/[id].
+ *   3. Submit panel: relocation-test prose (≥50 words), pen name,
+ *      legal attestation. No global pin picker anymore; if Section 1
+ *      doesn't have a coord we surface a gate ("Go back and set a
+ *      location") and disable submit.
  */
 
 const MAPBOX_TOKEN = process.env.NEXT_PUBLIC_MAPBOX_TOKEN ?? "";
@@ -34,17 +31,23 @@ if (MAPBOX_TOKEN) {
   mapboxgl.accessToken = MAPBOX_TOKEN;
 }
 
-interface SectionView {
+export interface SectionReviewView {
   index: number;
   section_id: string;
   content: string;
   label: string;
+  ownLongitude: number | null;
+  ownLatitude: number | null;
+  resolvedLongitude: number | null;
+  resolvedLatitude: number | null;
+  resolvedPlaceDescription: string | null;
+  hasOwnCoord: boolean;
 }
 
 interface Props {
   draftId: string;
   title: string;
-  sections: SectionView[];
+  sections: SectionReviewView[];
   authorEmail: string;
 }
 
@@ -55,8 +58,6 @@ export function ReviewAndSubmit({
   authorEmail,
 }: Props) {
   const router = useRouter();
-  const [lng, setLng] = useState<number | null>(null);
-  const [lat, setLat] = useState<number | null>(null);
   const [relocationTest, setRelocationTest] = useState("");
   const [authorPenName, setAuthorPenName] = useState(
     authorEmail.split("@")[0] ?? "",
@@ -67,9 +68,8 @@ export function ReviewAndSubmit({
 
   const mapContainer = useRef<HTMLDivElement>(null);
   const mapRef = useRef<mapboxgl.Map | null>(null);
-  const markerRef = useRef<mapboxgl.Marker | null>(null);
+  const markersRef = useRef<mapboxgl.Marker[]>([]);
 
-  // Word counts — Latin + CJK characters, same rule as the editor.
   const sectionWordCounts = useMemo(
     () => sections.map((s) => countWords(s.content)),
     [sections],
@@ -80,20 +80,28 @@ export function ReviewAndSubmit({
     [relocationTest],
   );
 
-  // Gates: identical envelope to /submit so editorial logic doesn't
-  // diverge between paths.
+  // Only sections that own their coord become map markers. Inherited
+  // sections share a marker visually with whichever earlier section
+  // they inherit from.
+  const ownPins = useMemo(
+    () => sections.filter((s) => s.hasOwnCoord),
+    [sections],
+  );
+
+  const section1HasCoord =
+    sections[0]?.ownLongitude !== null && sections[0]?.ownLatitude !== null;
+
   const wordsInRange = totalWords >= 800 && totalWords <= 2500;
   const relocationOk = relocationWords >= 50;
-  const hasCoord = lng !== null && lat !== null;
   const canSubmit =
     wordsInRange &&
     relocationOk &&
-    hasCoord &&
+    section1HasCoord &&
     attestation &&
     authorPenName.trim().length > 0 &&
     !submitting;
 
-  // Init the map once. Click drops/moves the pin.
+  // Initialise the map once.
   useEffect(() => {
     if (!mapContainer.current || mapRef.current || !MAPBOX_TOKEN) return;
     const map = new mapboxgl.Map({
@@ -101,45 +109,50 @@ export function ReviewAndSubmit({
       style: "mapbox://styles/mapbox/light-v11",
       center: [0, 20],
       zoom: 1.5,
+      interactive: true,
     });
     map.addControl(new mapboxgl.NavigationControl({ showCompass: false }));
-    map.on("click", (e) => {
-      setLng(e.lngLat.lng);
-      setLat(e.lngLat.lat);
-    });
     mapRef.current = map;
     return () => {
       map.remove();
       mapRef.current = null;
+      markersRef.current = [];
     };
   }, []);
 
-  // Reconcile single marker.
+  // Reconcile markers from `ownPins`.
   useEffect(() => {
     if (!mapRef.current) return;
-    if (lng === null || lat === null) {
-      if (markerRef.current) {
-        markerRef.current.remove();
-        markerRef.current = null;
-      }
-      return;
-    }
-    if (!markerRef.current) {
+    for (const m of markersRef.current) m.remove();
+    markersRef.current = [];
+    if (ownPins.length === 0) return;
+    const lngs: number[] = [];
+    const lats: number[] = [];
+    for (const s of ownPins) {
       const el = document.createElement("div");
       el.style.cssText =
-        "width:24px;height:24px;border-radius:50%;background:#1a1a1a;border:2px solid white;box-shadow:0 2px 6px rgba(0,0,0,.3);cursor:grab";
-      markerRef.current = new mapboxgl.Marker({ element: el, draggable: true })
-        .setLngLat([lng, lat])
+        "width:26px;height:26px;border-radius:50%;background:#1a1a1a;color:white;border:2px solid white;display:flex;align-items:center;justify-content:center;font-family:system-ui;font-size:12px;font-weight:700;box-shadow:0 2px 6px rgba(0,0,0,.3)";
+      el.textContent = String(s.index + 1).padStart(2, "0");
+      const marker = new mapboxgl.Marker({ element: el })
+        .setLngLat([s.ownLongitude!, s.ownLatitude!])
         .addTo(mapRef.current);
-      markerRef.current.on("dragend", () => {
-        const m = markerRef.current!.getLngLat();
-        setLng(m.lng);
-        setLat(m.lat);
-      });
-    } else {
-      markerRef.current.setLngLat([lng, lat]);
+      markersRef.current.push(marker);
+      lngs.push(s.ownLongitude!);
+      lats.push(s.ownLatitude!);
     }
-  }, [lng, lat]);
+    // Auto-fit to the spread of all pins, with a sensible single-pin
+    // zoom when there's only one.
+    if (ownPins.length === 1) {
+      mapRef.current.setCenter([lngs[0], lats[0]]);
+      mapRef.current.setZoom(10);
+    } else {
+      const bounds = new mapboxgl.LngLatBounds(
+        [Math.min(...lngs), Math.min(...lats)],
+        [Math.max(...lngs), Math.max(...lats)],
+      );
+      mapRef.current.fitBounds(bounds, { padding: 60, duration: 0, maxZoom: 12 });
+    }
+  }, [ownPins]);
 
   async function submit() {
     if (!canSubmit) return;
@@ -150,8 +163,6 @@ export function ReviewAndSubmit({
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          longitude: lng,
-          latitude: lat,
           relocationTest: relocationTest.trim(),
           legalAttestation: attestation,
           authorPenName: authorPenName.trim(),
@@ -165,8 +176,6 @@ export function ReviewAndSubmit({
         setSubmitting(false);
         return;
       }
-      // Surface the AI-editor latency briefly via the in-flight state,
-      // then jump to the thanks page (which already shows the AI report).
       router.push(data.redirectTo);
     } catch {
       setError("Network error — please try again.");
@@ -194,47 +203,81 @@ export function ReviewAndSubmit({
         </p>
       </header>
 
+      <section style={mapPanelStyle} aria-label="Story map">
+        <div ref={mapContainer} style={mapStyle} />
+        <p style={mapHintStyle}>
+          {ownPins.length === 0
+            ? "No section has a location yet. Go back to the editor and drop a pin on Section 1 — Arrival."
+            : ownPins.length === 1
+              ? `1 location set — all sections will be filed under "${ownPins[0].resolvedPlaceDescription ?? formatCoord(ownPins[0].ownLongitude!, ownPins[0].ownLatitude!)}".`
+              : `${ownPins.length} sections at distinct locations; the rest inherit.`}
+        </p>
+      </section>
+
       <section style={previewStyle} aria-label="Assembled draft">
-        {sections.map((s, idx) => (
-          <article key={s.section_id} style={sectionPreviewStyle}>
-            <header style={sectionPreviewHeaderStyle}>
-              <span style={sectionOrdinalStyle}>
-                {String(idx + 1).padStart(2, "0")}
-              </span>
-              <span style={sectionLabelStyle}>{s.label}</span>
-              <span style={sectionWordsStyle}>
-                {sectionWordCounts[idx]} words
-              </span>
-            </header>
-            {s.content.trim() ? (
-              <div style={proseStyle}>
-                {s.content.split(/\n+/).map((para, i) => (
-                  <p key={i} style={paraStyle}>
-                    {para}
-                  </p>
-                ))}
-              </div>
-            ) : (
-              <p style={emptySectionStyle}>(empty)</p>
-            )}
-          </article>
-        ))}
+        {sections.map((s, idx) => {
+          const chip = s.hasOwnCoord
+            ? {
+                kind: "own" as const,
+                text:
+                  s.resolvedPlaceDescription ??
+                  formatCoord(s.ownLongitude!, s.ownLatitude!),
+              }
+            : s.resolvedLongitude !== null && s.resolvedLatitude !== null
+              ? {
+                  kind: "inherited" as const,
+                  text:
+                    s.resolvedPlaceDescription ??
+                    formatCoord(s.resolvedLongitude, s.resolvedLatitude),
+                }
+              : {
+                  kind: "missing" as const,
+                  text: "no location set",
+                };
+          return (
+            <article key={s.section_id} style={sectionPreviewStyle}>
+              <header style={sectionPreviewHeaderStyle}>
+                <span style={sectionOrdinalStyle}>
+                  {String(idx + 1).padStart(2, "0")}
+                </span>
+                <span style={sectionLabelStyle}>{s.label}</span>
+                <span
+                  style={
+                    chip.kind === "missing"
+                      ? chipMissingStyle
+                      : chip.kind === "own"
+                        ? chipOwnStyle
+                        : chipInheritedStyle
+                  }
+                >
+                  {chip.kind === "own"
+                    ? "📍"
+                    : chip.kind === "inherited"
+                      ? "↑"
+                      : "⚠"}{" "}
+                  {chip.text}
+                </span>
+                <span style={sectionWordsStyle}>
+                  {sectionWordCounts[idx]} words
+                </span>
+              </header>
+              {s.content.trim() ? (
+                <div style={proseStyle}>
+                  {s.content.split(/\n+/).map((para, i) => (
+                    <p key={i} style={paraStyle}>
+                      {para}
+                    </p>
+                  ))}
+                </div>
+              ) : (
+                <p style={emptySectionStyle}>(empty)</p>
+              )}
+            </article>
+          );
+        })}
       </section>
 
       <section style={panelStyle} aria-label="Submission details">
-        <h2 style={panelTitleStyle}>Where does this story live?</h2>
-        <p style={panelLeadStyle}>
-          Click the map to drop a pin. In Slice 4 you&rsquo;ll be able
-          to set a different pin per section; for now one coordinate
-          anchors the whole story.
-        </p>
-        <div ref={mapContainer} style={mapStyle} />
-        {lng !== null && lat !== null && (
-          <p style={coordStyle}>
-            <strong>{lat.toFixed(4)}, {lng.toFixed(4)}</strong>
-          </p>
-        )}
-
         <Label>
           Why this place, in this story?
           <Hint>
@@ -307,10 +350,10 @@ export function ReviewAndSubmit({
 
         {!canSubmit && !submitting && (
           <p style={hintStyle}>
-            {!wordsInRange
-              ? "Word count out of the 800–2,500 range."
-              : !hasCoord
-                ? "Drop a pin on the map first."
+            {!section1HasCoord
+              ? "Section 1 needs a location — go back to the editor and drop a pin."
+              : !wordsInRange
+                ? "Word count out of the 800–2,500 range."
                 : !relocationOk
                   ? "Relocation test needs at least 50 words."
                   : !attestation
@@ -333,6 +376,10 @@ function countWords(s: string): number {
     .filter((w) => /[A-Za-zÀ-ÿ]/.test(w)).length;
   const cjk = (trimmed.match(/[一-鿿぀-ヿ가-힯]/g) ?? []).length;
   return latin + cjk;
+}
+
+function formatCoord(lng: number, lat: number): string {
+  return `${lat.toFixed(3)}, ${lng.toFixed(3)}`;
 }
 
 function Label({ children }: { children: React.ReactNode }) {
@@ -394,9 +441,26 @@ const metaStyle: React.CSSProperties = {
 };
 const okStyle: React.CSSProperties = { color: "#3a6b3a" };
 const errStyle: React.CSSProperties = { color: "#7f1d1d" };
+const mapPanelStyle: React.CSSProperties = {
+  display: "flex",
+  flexDirection: "column",
+  gap: 10,
+  marginBottom: 28,
+};
+const mapStyle: React.CSSProperties = {
+  height: 320,
+  borderRadius: 3,
+  overflow: "hidden",
+  border: "1px solid #d4cfc2",
+};
+const mapHintStyle: React.CSSProperties = {
+  margin: 0,
+  fontSize: 12,
+  color: "#666",
+  fontStyle: "italic",
+};
 const previewStyle: React.CSSProperties = {
-  marginTop: 30,
-  marginBottom: 40,
+  marginBottom: 32,
   padding: 24,
   background: "white",
   border: "1px solid #e8e3d8",
@@ -407,11 +471,12 @@ const sectionPreviewStyle: React.CSSProperties = {
 };
 const sectionPreviewHeaderStyle: React.CSSProperties = {
   display: "flex",
-  alignItems: "baseline",
+  alignItems: "center",
   gap: 10,
   marginBottom: 10,
   paddingBottom: 8,
   borderBottom: "1px dashed #e8e3d8",
+  flexWrap: "wrap",
 };
 const sectionOrdinalStyle: React.CSSProperties = {
   fontFamily: 'Georgia, "Times New Roman", serif',
@@ -423,12 +488,41 @@ const sectionLabelStyle: React.CSSProperties = {
   fontSize: 16,
   color: "#1a1a1a",
   flex: 1,
+  minWidth: 0,
 };
 const sectionWordsStyle: React.CSSProperties = {
   fontSize: 11,
   letterSpacing: 0.4,
   color: "#888",
   fontVariantNumeric: "tabular-nums",
+};
+const chipOwnStyle: React.CSSProperties = {
+  padding: "3px 8px",
+  borderRadius: 3,
+  background: "#f0f9ff",
+  border: "1px solid #bae6fd",
+  color: "#075985",
+  fontSize: 11,
+  letterSpacing: 0.2,
+};
+const chipInheritedStyle: React.CSSProperties = {
+  padding: "3px 8px",
+  borderRadius: 3,
+  background: "#fbfaf6",
+  border: "1px solid #e8e3d8",
+  color: "#666",
+  fontSize: 11,
+  letterSpacing: 0.2,
+  fontStyle: "italic",
+};
+const chipMissingStyle: React.CSSProperties = {
+  padding: "3px 8px",
+  borderRadius: 3,
+  background: "#fef3c7",
+  border: "1px solid #d97706",
+  color: "#7c2d12",
+  fontSize: 11,
+  letterSpacing: 0.2,
 };
 const proseStyle: React.CSSProperties = {
   display: "flex",
@@ -456,30 +550,6 @@ const panelStyle: React.CSSProperties = {
   background: "#fbfaf6",
   border: "1px solid #e8e3d8",
   borderRadius: 4,
-};
-const panelTitleStyle: React.CSSProperties = {
-  fontFamily: 'Georgia, "Times New Roman", serif',
-  fontSize: 24,
-  fontWeight: 400,
-  margin: 0,
-};
-const panelLeadStyle: React.CSSProperties = {
-  margin: 0,
-  fontSize: 14,
-  color: "#555",
-  lineHeight: 1.6,
-};
-const mapStyle: React.CSSProperties = {
-  height: 320,
-  borderRadius: 3,
-  overflow: "hidden",
-  border: "1px solid #d4cfc2",
-};
-const coordStyle: React.CSSProperties = {
-  margin: 0,
-  fontSize: 12,
-  color: "#666",
-  fontVariantNumeric: "tabular-nums",
 };
 const labelStyle: React.CSSProperties = {
   display: "flex",

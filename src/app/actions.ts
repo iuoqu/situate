@@ -1014,6 +1014,19 @@ export async function submitFromForm(
 
 // ─── Draft → submission handoff (template / voice write path) ──────────────
 
+function hasOwnCoord(section: DraftSection): boolean {
+  return (
+    typeof section.longitude === "number" &&
+    Number.isFinite(section.longitude) &&
+    section.longitude >= -180 &&
+    section.longitude <= 180 &&
+    typeof section.latitude === "number" &&
+    Number.isFinite(section.latitude) &&
+    section.latitude >= -90 &&
+    section.latitude <= 90
+  );
+}
+
 export interface SubmitDraftPayload {
   draftId: string;
   userId: string;
@@ -1022,11 +1035,6 @@ export interface SubmitDraftPayload {
   /** Display name on the submission. We don't enforce uniqueness or
    *  policy here — the editor flow handles that. */
   authorPenName: string;
-  /** Single coordinate for the story (Slice-1 minimum; Slice-4
-   *  upgrades to per-section coordinates). All narrative_blocks created
-   *  from the draft's sections share this coordinate until then. */
-  longitude: number;
-  latitude: number;
   /** F1.b — required by submissions table at ≥50 words. We surface the
    *  same field on the AssemblyView so the template path produces a
    *  submission that the existing editorial pipeline can consume. */
@@ -1064,10 +1072,6 @@ export interface SubmitDraftResult {
 export async function submitFromDraft(
   input: SubmitDraftPayload,
 ): Promise<SubmitDraftResult> {
-  if (!Number.isFinite(input.longitude) || input.longitude < -180 || input.longitude > 180)
-    throw new Error("longitude out of range");
-  if (!Number.isFinite(input.latitude) || input.latitude < -90 || input.latitude > 90)
-    throw new Error("latitude out of range");
   if (countWords(input.relocationTest) < 50)
     throw new Error("relocation test must be at least 50 words");
   if (!input.legalAttestation)
@@ -1095,6 +1099,34 @@ export async function submitFromDraft(
   );
   if (sections.length === 0) throw new Error("draft has no content");
 
+  // Locations: every section ends up with a coordinate, either its own
+  // or the most recent upstream one. The first section MUST have its
+  // own — there's nothing to inherit from. If the user only set a pin
+  // on, say, Section 3, then Sections 1-2 have no upstream coord and
+  // we reject the submit. UX-side they should never reach here without
+  // at least Section 1 set (review page gates), but defence in depth.
+  if (!hasOwnCoord(sections[0])) {
+    throw new Error(
+      "section 1 must have a location — drop a pin in the editor",
+    );
+  }
+  let runningLon = sections[0].longitude as number;
+  let runningLat = sections[0].latitude as number;
+  let runningPlace = sections[0].place_description ?? null;
+  const resolvedSections = sections.map((s) => {
+    if (hasOwnCoord(s)) {
+      runningLon = s.longitude as number;
+      runningLat = s.latitude as number;
+      runningPlace = s.place_description ?? null;
+    }
+    return {
+      ...s,
+      _longitude: runningLon,
+      _latitude: runningLat,
+      _placeDescription: runningPlace,
+    };
+  });
+
   // Total word count across all sections. Same 800–2500 envelope as
   // /submit. We use the shared countWords helper so CJK + Latin scripts
   // are counted consistently.
@@ -1119,8 +1151,12 @@ export async function submitFromDraft(
     draftId: draft.id,
     title,
     sections,
-    longitude: input.longitude,
-    latitude: input.latitude,
+    resolvedLocations: resolvedSections.map((s) => ({
+      section_id: s.section_id,
+      longitude: s._longitude,
+      latitude: s._latitude,
+      placeDescription: s._placeDescription,
+    })),
     relocationTest: input.relocationTest,
     authorEmail: input.authorEmail,
     authorPenName: input.authorPenName,
@@ -1161,23 +1197,12 @@ export async function submitFromDraft(
       })
       .returning({ id: submissions.id });
 
-    for (const [idx, section] of sections.entries()) {
-      // Per-section coordinate override (Slice-4 will populate
-      // section.longitude/.latitude via MultiLocationPicker). For now
-      // every block falls back to the global pick.
-      const lon =
-        typeof section.longitude === "number" && Number.isFinite(section.longitude)
-          ? section.longitude
-          : input.longitude;
-      const lat =
-        typeof section.latitude === "number" && Number.isFinite(section.latitude)
-          ? section.latitude
-          : input.latitude;
+    for (const section of resolvedSections) {
       const [block] = await tx
         .insert(narrativeBlocks)
         .values({
           submissionId: submission.id,
-          location: { x: lon, y: lat },
+          location: { x: section._longitude, y: section._latitude },
           eventDate: null,
         })
         .returning({ id: narrativeBlocks.id });
@@ -1190,9 +1215,6 @@ export async function submitFromDraft(
         content: section.content,
         annotations: [],
       });
-      // sequence_number is a serial column on narrative_blocks; idx is
-      // only used here for the (future) per-section coordinate fallback.
-      void idx;
     }
 
     await tx

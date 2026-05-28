@@ -28,8 +28,6 @@ export const maxDuration = 60; // AI review may take 20–40s.
 type RouteCtx = { params: Promise<{ id: string }> };
 
 interface Body {
-  longitude?: unknown;
-  latitude?: unknown;
   relocationTest?: unknown;
   legalAttestation?: unknown;
   authorPenName?: unknown;
@@ -55,15 +53,6 @@ export async function POST(req: NextRequest, ctx: RouteCtx) {
   const body = (await safeJson(req)) as Body | null;
   if (!body) {
     return NextResponse.json({ error: "expected JSON body" }, { status: 400 });
-  }
-
-  const lon = numberOrNaN(body.longitude);
-  const lat = numberOrNaN(body.latitude);
-  if (!Number.isFinite(lon) || !Number.isFinite(lat)) {
-    return NextResponse.json(
-      { error: "longitude and latitude are required" },
-      { status: 400 },
-    );
   }
 
   const relocationTest =
@@ -97,8 +86,6 @@ export async function POST(req: NextRequest, ctx: RouteCtx) {
       userId: user.id,
       authorEmail: user.email,
       authorPenName,
-      longitude: lon,
-      latitude: lat,
       relocationTest,
       legalAttestation,
     });
@@ -115,15 +102,6 @@ export async function POST(req: NextRequest, ctx: RouteCtx) {
     const status = message === "draft not found" ? 404 : 400;
     return NextResponse.json({ error: message }, { status });
   }
-}
-
-function numberOrNaN(v: unknown): number {
-  if (typeof v === "number") return v;
-  if (typeof v === "string") {
-    const n = Number(v);
-    return Number.isFinite(n) ? n : NaN;
-  }
-  return NaN;
 }
 
 async function safeJson(req: NextRequest): Promise<unknown> {

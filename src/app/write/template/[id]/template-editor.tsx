@@ -3,7 +3,9 @@
 import Link from "next/link";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
-import type { DraftSection } from "@/db/schema";
+import { Section1Hooks } from "@/components/template/Section1Hooks";
+import { SectionLocationPicker } from "@/components/template/SectionLocationPicker";
+import type { DraftSection, SupportedLanguage } from "@/db/schema";
 
 /**
  * TemplateEditor — the multi-section guided write surface (Year 1
@@ -61,6 +63,7 @@ interface Props {
   template: TemplateView;
   initialTitle: string;
   initialSections: DraftSection[];
+  language: SupportedLanguage;
 }
 
 type SaveState = "idle" | "saving" | "saved" | "error";
@@ -77,6 +80,7 @@ export function TemplateEditor({
   template,
   initialTitle,
   initialSections,
+  language,
 }: Props) {
   const [title, setTitle] = useState(initialTitle);
   const [sections, setSections] = useState<DraftSection[]>(initialSections);
@@ -253,6 +257,49 @@ export function TemplateEditor({
     [wordCounts],
   );
 
+  // For each section, what coordinate would it inherit from "upstream"
+  // if it didn't set its own? We scan backwards through prior sections
+  // and pick the latest one that has its own coord. Section 1 always
+  // gets NULL (nothing upstream of it).
+  const inheritedCoords = useMemo(() => {
+    const result: Array<
+      | { longitude: number; latitude: number; placeDescription: string | null }
+      | null
+    > = [];
+    for (let i = 0; i < sections.length; i++) {
+      let inherited:
+        | { longitude: number; latitude: number; placeDescription: string | null }
+        | null = null;
+      for (let j = i - 1; j >= 0; j--) {
+        const s = sections[j];
+        if (
+          typeof s.longitude === "number" &&
+          typeof s.latitude === "number"
+        ) {
+          inherited = {
+            longitude: s.longitude,
+            latitude: s.latitude,
+            placeDescription: s.place_description ?? null,
+          };
+          break;
+        }
+      }
+      result.push(inherited);
+    }
+    return result;
+  }, [sections]);
+
+  // Section 1's own coord drives the hook generator. We extract it once
+  // here so the Hook component re-renders only when this section's pin
+  // changes (not on every keystroke).
+  const section1Coord = useMemo(() => {
+    const first = sections[0];
+    if (!first) return null;
+    if (typeof first.longitude !== "number" || typeof first.latitude !== "number")
+      return null;
+    return { longitude: first.longitude, latitude: first.latitude };
+  }, [sections]);
+
   return (
     <main style={mainStyle}>
       <header style={headerStyle}>
@@ -297,6 +344,47 @@ export function TemplateEditor({
                   <p style={sectionPromptStyle}>{sectionDef.prompt}</p>
                 </div>
               </header>
+              <SectionLocationPicker
+                sectionId={sectionDef.id}
+                longitude={data?.longitude ?? null}
+                latitude={data?.latitude ?? null}
+                placeDescription={data?.place_description ?? null}
+                inheritedCoord={inheritedCoords[idx] ?? null}
+                isFirstSection={idx === 0}
+                onChange={(patch) =>
+                  updateSection(sectionDef.id, {
+                    longitude: patch.longitude,
+                    latitude: patch.latitude,
+                    place_description: patch.placeDescription,
+                  })
+                }
+              />
+              {idx === 0 && sectionDef.showHookSelector && section1Coord && (
+                <Section1Hooks
+                  longitude={section1Coord.longitude}
+                  latitude={section1Coord.latitude}
+                  language={language}
+                  onPick={(hook) => {
+                    // Prepend the hook's premise as a starter prompt
+                    // (italicised in display because of the leading "> "
+                    // which Markdown-style readers render as quote). We
+                    // wrap with blank lines so the author can write
+                    // freely below without their content getting glued
+                    // to the seed.
+                    const seed = `> ${hook.title}\n> ${hook.premise}\n\n`;
+                    const existing = data?.content ?? "";
+                    const next =
+                      existing.length === 0
+                        ? seed
+                        : existing.startsWith(">")
+                          ? // Replace previous seed if user picks again
+                            seed +
+                            existing.replace(/^>[^\n]*\n>[^\n]*\n+/, "")
+                          : seed + existing;
+                    updateSection(sectionDef.id, { content: next });
+                  }}
+                />
+              )}
               <textarea
                 value={data?.content ?? ""}
                 onChange={(e) =>

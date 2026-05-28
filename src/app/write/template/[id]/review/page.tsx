@@ -56,16 +56,45 @@ export default async function ReviewPage({ params }: { params: RouteParams }) {
   const template = draft.templateId ? getTemplate(draft.templateId) : null;
   if (!template) notFound();
 
-  const sections = (
-    (Array.isArray(draft.sections) ? draft.sections : []) as DraftSection[]
-  ).map((s, idx) => ({
-    index: idx,
-    section_id: s.section_id,
-    content: s.content ?? "",
-    label:
-      template.sections.find((ts) => ts.id === s.section_id)?.label ??
-      s.section_id,
-  }));
+  const rawSections = (Array.isArray(draft.sections)
+    ? draft.sections
+    : []) as DraftSection[];
+
+  // Resolve per-section coords with forward inheritance — mirrors the
+  // logic in `submitFromDraft` so the review screen shows exactly what
+  // the editor pipeline will receive.
+  let runningLon: number | null = null;
+  let runningLat: number | null = null;
+  let runningPlace: string | null = null;
+  const sections = rawSections.map((s, idx) => {
+    const ownLon =
+      typeof s.longitude === "number" && Number.isFinite(s.longitude)
+        ? s.longitude
+        : null;
+    const ownLat =
+      typeof s.latitude === "number" && Number.isFinite(s.latitude)
+        ? s.latitude
+        : null;
+    if (ownLon !== null && ownLat !== null) {
+      runningLon = ownLon;
+      runningLat = ownLat;
+      runningPlace = s.place_description ?? null;
+    }
+    return {
+      index: idx,
+      section_id: s.section_id,
+      content: s.content ?? "",
+      label:
+        template.sections.find((ts) => ts.id === s.section_id)?.label ??
+        s.section_id,
+      ownLongitude: ownLon,
+      ownLatitude: ownLat,
+      resolvedLongitude: runningLon,
+      resolvedLatitude: runningLat,
+      resolvedPlaceDescription: runningPlace,
+      hasOwnCoord: ownLon !== null && ownLat !== null,
+    };
+  });
 
   return (
     <ReviewAndSubmit

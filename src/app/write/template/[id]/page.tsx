@@ -101,6 +101,7 @@ export default async function TemplateWritePage({
       }}
       initialTitle={draft.title ?? ""}
       initialSections={normalisedSections}
+      language={draft.language}
     />
   );
 }
