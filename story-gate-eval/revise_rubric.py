@@ -1,32 +1,30 @@
-"""把 eval 翻车样本喂回 Claude，让它指 RUBRIC 哪几行该改。
+"""把 eval 翻车样本喂回 /api/revise-rubric（opus-4-7 + adaptive thinking），
+让它指 RUBRIC 哪几行该改。
 
 用法：
     python revise_rubric.py            # 看 train 桶，不看 holdout
-    python revise_rubric.py --include-holdout   # 也看 holdout（确认大改之前）
+    python revise_rubric.py --include-holdout   # 也看 holdout（大改前的最终检查）
     python revise_rubric.py --mode partial      # 改 RUBRIC_PARTIAL 而不是 FULL
 
 流程：
     1. 读 results/ 里所有 .json（即上一轮 run_eval.py 的输出）
     2. 跟 expectations.json 对账，找出失败和 borderline 案例
-    3. 把当前 RUBRIC + 失败样本（含文本 / 期望 / 模型推理）+ 代表性 PASS 案例
-       一起喂给 Claude，强制 tool_use 输出修改建议
+    3. 把当前 RUBRIC（从 analyze.py 读取本地副本）+ 失败 + borderline + 健康代表
+       POST 到 /api/revise-rubric
     4. 把建议打印 + 写到 revision_proposals/<timestamp>.json
 
-注意：本脚本本身要调 Claude，**不走 ANALYZER_URL**——meta 推理是开发工作，
-请在本地用 ANTHROPIC_API_KEY 跑。默认用 opus-4-7（开高思考），因为 RUBRIC 改动
-是高杠杆决策，比单篇诊断值钱。
+env vars: ANALYZER_URL（必需，Vercel base URL）+ ANALYZER_TOKEN（必需，bearer）。
+本端**不需要** ANTHROPIC_API_KEY——Claude 调用在 Vercel 那一头跑。
 """
 from __future__ import annotations
 
 import argparse
 import json
-import os
 from datetime import datetime
 from pathlib import Path
 from typing import Any, Literal
 
-import anthropic
-
+from _http import base_url, post_json
 from analyze import RUBRIC_FULL, RUBRIC_PARTIAL
 from run_eval import (
     SPEC_DIR,
@@ -42,136 +40,10 @@ from run_eval import (
 ROOT = Path(__file__).parent
 PROPOSAL_DIR = ROOT / "revision_proposals"
 
-# Meta-analysis is high-leverage; spend more here than on per-specimen calls.
-META_MODEL = "claude-opus-4-7"
-META_MAX_TOKENS = 8192
-
 Mode = Literal["full", "partial"]
 
 
-META_SYSTEM = """\
-你是叙事结构诊断 RUBRIC 的提示词工程审查员。给你：
-- 现行 RUBRIC
-- 一批最近一次 eval 翻车的样本（文本 + 期望 + 模型实际推理）
-- 一批 borderline PASS（confidence 贴近 band 边缘）作为风险锚
-- 一批 healthy PASS 作为"不要破坏这些"的不动点
-
-你的工作：定位翻车的根因，提出**外科式**的 RUBRIC 修改建议——指向具体段落，
-说明改前改后，预估修改可能把哪些当前 PASS 推过边界。
-
-**根因分类**：
-- rubric_wording：措辞模糊、判定边界没说清，改 RUBRIC 文字就能修
-- skeleton_model：S0/D/T/S1/K 五元 + 四引擎本身覆盖不到这类文学——
-  改文字救不了，要扩骨架（或显式声明这一类 out_of_scope）
-- confidence_calibration：判断对了但 confidence 偏（普遍太高 / 太低）
-- expectation_wrong：标注本身有争议，eval 数据需要修正
-
-**重要原则**：
-1. 宁可缩小 RUBRIC 适用范围，也不要把它扩成"什么都能说"。明确标 out_of_scope
-   比硬给低 confidence 结论好。
-2. 单次修改建议 ≤ 200 字。改一处，看下一轮结果，再改一处。**不要给"重写整段"
-   这种建议**——那是骨架改，不是 RUBRIC 改。
-3. 任何修改都要预估副作用：如果改了某一句让 X 类样本能通过，可能让 Y 类样本
-   反而过界——必须明说。
-
-通过 propose_rubric_revisions 工具输出。"""
-
-
-REVISION_TOOL: dict[str, Any] = {
-    "name": "propose_rubric_revisions",
-    "description": "Submit your structured rubric-revision proposal.",
-    "input_schema": {
-        "type": "object",
-        "properties": {
-            "diagnosis": {
-                "type": "array",
-                "description": "把失败聚类，每条覆盖一类失败模式。",
-                "items": {
-                    "type": "object",
-                    "properties": {
-                        "failure_pattern": {"type": "string"},
-                        "affected_specimens": {
-                            "type": "array",
-                            "items": {"type": "string"},
-                        },
-                        "root_cause": {
-                            "type": "string",
-                            "enum": [
-                                "rubric_wording",
-                                "skeleton_model",
-                                "confidence_calibration",
-                                "expectation_wrong",
-                            ],
-                        },
-                        "evidence": {"type": "string"},
-                    },
-                    "required": [
-                        "failure_pattern",
-                        "affected_specimens",
-                        "root_cause",
-                        "evidence",
-                    ],
-                },
-            },
-            "proposed_edits": {
-                "type": "array",
-                "description": "外科式修改，每条 ≤ 200 字，指向 RUBRIC 中具体段落。",
-                "items": {
-                    "type": "object",
-                    "properties": {
-                        "target_rubric": {
-                            "type": "string",
-                            "enum": ["RUBRIC_FULL", "RUBRIC_PARTIAL"],
-                        },
-                        "summary": {"type": "string"},
-                        "before_snippet": {
-                            "type": "string",
-                            "description": "RUBRIC 中应被替换的原文片段，≤ 200 字。",
-                        },
-                        "after_snippet": {
-                            "type": "string",
-                            "description": "替换后的文字，≤ 200 字。",
-                        },
-                        "expected_to_fix": {
-                            "type": "array",
-                            "items": {"type": "string"},
-                            "description": "预计修复哪些当前失败 specimen。",
-                        },
-                        "risk_of_breaking": {
-                            "type": "array",
-                            "items": {"type": "string"},
-                            "description": "预计可能让哪些当前 PASS 退步。",
-                        },
-                    },
-                    "required": [
-                        "target_rubric",
-                        "summary",
-                        "before_snippet",
-                        "after_snippet",
-                        "expected_to_fix",
-                        "risk_of_breaking",
-                    ],
-                },
-            },
-            "skeleton_questions": {
-                "type": "array",
-                "items": {"type": "string"},
-                "description": "需要人类决断的骨架级问题（不是 RUBRIC 改得动的）。",
-            },
-            "overall_assessment": {"type": "string"},
-        },
-        "required": [
-            "diagnosis",
-            "proposed_edits",
-            "skeleton_questions",
-            "overall_assessment",
-        ],
-    },
-}
-
-
 def load_result_for(rel_path: str) -> dict | None:
-    """逆向 run_eval 的命名规则找 result 文件。"""
     stem = Path(rel_path).stem
     flat = f"{stem}__{rel_path.replace('/', '__').replace('.txt', '')}.json"
     p = RESULT_DIR / flat
@@ -183,13 +55,13 @@ def load_result_for(rel_path: str) -> dict | None:
         return None
 
 
-def gather_cases(mode: Mode, include_holdout: bool) -> dict[str, list[dict]]:
+def gather_cases(mode: Mode, include_holdout: bool) -> dict[str, Any]:
     expectations = json.loads(EXPECT_FILE.read_text(encoding="utf-8"))
     failures: list[dict] = []
     borderlines: list[dict] = []
     healthy: list[dict] = []
     skipped_no_result = 0
-    skipped_partial = 0
+    skipped_wrong_mode = 0
     skipped_holdout = 0
 
     for spec_path in collect_specimens():
@@ -198,10 +70,10 @@ def gather_cases(mode: Mode, include_holdout: bool) -> dict[str, list[dict]]:
         if not expected:
             continue
         if expected.get("is_partial") and mode == "full":
-            skipped_partial += 1
+            skipped_wrong_mode += 1
             continue
         if not expected.get("is_partial") and mode == "partial":
-            skipped_partial += 1
+            skipped_wrong_mode += 1
             continue
         if expected.get("holdout") and not include_holdout:
             skipped_holdout += 1
@@ -219,26 +91,21 @@ def gather_cases(mode: Mode, include_holdout: bool) -> dict[str, list[dict]]:
             else check_full(result, expected)
         )
 
+        gate = result.get("gate") or {}
         case = {
             "path": rel,
             "text": spec_path.read_text(encoding="utf-8"),
             "expected": expected,
             "actual": {
-                "is_story": (result.get("gate") or {}).get("is_story"),
-                "if_not_story_type": (result.get("gate") or {}).get("if_not_story_type"),
+                "is_story": gate.get("is_story"),
+                "if_not_story_type": gate.get("if_not_story_type"),
                 "confidence": confidence_of(result),
                 "primary_engine": primary_engine(result),
-                "borderline_note": (result.get("gate") or {}).get("borderline_note", ""),
+                "borderline_note": gate.get("borderline_note", ""),
                 "skeleton": result.get("skeleton") or result.get("skeleton_status"),
-                "why_transformed": (
-                    (result.get("gate") or {}).get("transformed") or {}
-                ).get("why", ""),
-                "why_causal": (
-                    (result.get("gate") or {}).get("causal") or {}
-                ).get("why", ""),
-                "why_stakes_bound": (
-                    (result.get("gate") or {}).get("stakes_bound") or {}
-                ).get("why", ""),
+                "why_transformed": (gate.get("transformed") or {}).get("why", ""),
+                "why_causal": (gate.get("causal") or {}).get("why", ""),
+                "why_stakes_bound": (gate.get("stakes_bound") or {}).get("why", ""),
             },
             "failed_checks": fails,
         }
@@ -253,46 +120,20 @@ def gather_cases(mode: Mode, include_holdout: bool) -> dict[str, list[dict]]:
                 if margin <= 0.05:
                     borderlines.append(case)
                 else:
-                    healthy.append(case)
+                    healthy.append({k: v for k, v in case.items() if k != "text"})
             else:
-                healthy.append(case)
+                healthy.append({k: v for k, v in case.items() if k != "text"})
 
     return {
         "failures": failures,
         "borderlines": borderlines,
         "healthy": healthy,
-        "stats": {
-            "skipped_no_result": skipped_no_result,
-            "skipped_wrong_mode": skipped_partial,
-            "skipped_holdout": skipped_holdout,
+        "skipped": {
+            "no_result": skipped_no_result,
+            "wrong_mode": skipped_wrong_mode,
+            "holdout": skipped_holdout,
         },
     }
-
-
-def build_user_message(
-    rubric_text: str, rubric_name: str, cases: dict[str, list[dict]]
-) -> str:
-    parts = [
-        f"## 当前 {rubric_name}\n\n```\n{rubric_text}\n```\n",
-        f"## 失败样本 ({len(cases['failures'])} 篇)",
-    ]
-    for c in cases["failures"]:
-        parts.append(json.dumps(c, ensure_ascii=False, indent=2))
-    parts.append(f"\n## Borderline PASS（confidence 贴近边界, {len(cases['borderlines'])} 篇）")
-    for c in cases["borderlines"]:
-        parts.append(json.dumps(c, ensure_ascii=False, indent=2))
-    # Healthy 只取前 6 篇代表，省 token
-    sample_healthy = cases["healthy"][:6]
-    parts.append(f"\n## 健康 PASS 代表 ({len(sample_healthy)} / {len(cases['healthy'])} 篇), 不要破坏这些")
-    for c in sample_healthy:
-        parts.append(
-            json.dumps(
-                {"path": c["path"], "actual": c["actual"], "expected": c["expected"]},
-                ensure_ascii=False,
-                indent=2,
-            )
-        )
-    return "\n\n".join(parts)
 
 
 def main() -> None:
@@ -310,9 +151,10 @@ def main() -> None:
     )
     args = parser.parse_args()
 
-    api_key = os.environ.get("ANTHROPIC_API_KEY")
-    if not api_key:
-        raise SystemExit("ANTHROPIC_API_KEY 未设置——meta 调用不走 ANALYZER_URL。")
+    if not base_url():
+        raise SystemExit(
+            "ANALYZER_URL 未设置——meta 调用走 /api/revise-rubric，需要指向 Vercel base URL。"
+        )
 
     rubric_text = RUBRIC_FULL if args.mode == "full" else RUBRIC_PARTIAL
     rubric_name = "RUBRIC_FULL" if args.mode == "full" else "RUBRIC_PARTIAL"
@@ -322,35 +164,27 @@ def main() -> None:
         f"收集到 失败 {len(cases['failures'])} / borderline {len(cases['borderlines'])} "
         f"/ 健康 {len(cases['healthy'])} 篇"
     )
-    print(f"  (skipped: {cases['stats']})")
+    print(f"  skipped: {cases['skipped']}")
 
     if not cases["failures"] and not cases["borderlines"]:
         print("没有失败也没有边界——RUBRIC 已经稳了，不需要 revise。")
         return
 
-    print(f"\n调用 {META_MODEL} 跑 meta 分析...")
-    client = anthropic.Anthropic(api_key=api_key)
-    user_msg = build_user_message(rubric_text, rubric_name, cases)
-
-    response = client.messages.create(
-        model=META_MODEL,
-        max_tokens=META_MAX_TOKENS,
-        thinking={"type": "adaptive"},
-        system=META_SYSTEM,
-        tools=[REVISION_TOOL],
-        tool_choice={"type": "tool", "name": "propose_rubric_revisions"},
-        messages=[{"role": "user", "content": user_msg}],
+    print(f"\nPOST /api/revise-rubric ...")
+    result = post_json(
+        "/api/revise-rubric",
+        {
+            "current_rubric": rubric_text,
+            "rubric_name": rubric_name,
+            "mode": args.mode,
+            "failures": cases["failures"],
+            "borderlines": cases["borderlines"],
+            "healthy": cases["healthy"],
+        },
     )
 
-    tool_use = next(
-        (b for b in response.content if getattr(b, "type", None) == "tool_use"), None
-    )
-    if not tool_use:
-        raise SystemExit(
-            f"无 tool_use 返回。stop_reason={response.stop_reason}\n{response.content}"
-        )
-
-    proposal = tool_use.input
+    if "error" in result:
+        raise SystemExit(f"远端错误: {result['error']}\n{result.get('raw', '')[:500]}")
 
     PROPOSAL_DIR.mkdir(exist_ok=True)
     stamp = datetime.now().strftime("%Y%m%d_%H%M%S")
@@ -360,16 +194,12 @@ def main() -> None:
             {
                 "mode": args.mode,
                 "include_holdout": args.include_holdout,
-                "case_counts": {k: len(v) if isinstance(v, list) else v for k, v in cases.items()},
-                "proposal": proposal,
-                "model": META_MODEL,
-                "usage": {
-                    "input_tokens": response.usage.input_tokens,
-                    "output_tokens": response.usage.output_tokens,
-                    "cache_read_input_tokens": getattr(
-                        response.usage, "cache_read_input_tokens", 0
-                    ),
+                "case_counts": {
+                    "failures": len(cases["failures"]),
+                    "borderlines": len(cases["borderlines"]),
+                    "healthy": len(cases["healthy"]),
                 },
+                "proposal": result,
             },
             ensure_ascii=False,
             indent=2,
@@ -381,38 +211,41 @@ def main() -> None:
     print("─" * 60)
     print("DIAGNOSIS")
     print("─" * 60)
-    for d in proposal["diagnosis"]:
+    for d in result.get("diagnosis", []):
         print(f"\n• [{d['root_cause']}] {d['failure_pattern']}")
-        print(f"  影响: {', '.join(d['affected_specimens'][:5])}"
-              f"{' …' if len(d['affected_specimens']) > 5 else ''}")
+        print(
+            f"  影响: {', '.join(d['affected_specimens'][:5])}"
+            f"{' …' if len(d['affected_specimens']) > 5 else ''}"
+        )
         print(f"  证据: {d['evidence']}")
 
     print()
     print("─" * 60)
     print("PROPOSED EDITS")
     print("─" * 60)
-    for i, e in enumerate(proposal["proposed_edits"], 1):
+    for i, e in enumerate(result.get("proposed_edits", []), 1):
         print(f"\n[{i}] {e['target_rubric']}: {e['summary']}")
         print(f"  before: {e['before_snippet']}")
         print(f"  after : {e['after_snippet']}")
         print(f"  修复 : {', '.join(e['expected_to_fix'])}")
         print(f"  风险 : {', '.join(e['risk_of_breaking'])}")
 
-    if proposal.get("skeleton_questions"):
+    if result.get("skeleton_questions"):
         print()
         print("─" * 60)
         print("骨架级问题（需要人决断，RUBRIC 改不动）")
         print("─" * 60)
-        for q in proposal["skeleton_questions"]:
+        for q in result["skeleton_questions"]:
             print(f"  ? {q}")
 
     print()
     print("─" * 60)
-    print(f"OVERALL: {proposal['overall_assessment']}")
+    print(f"OVERALL: {result.get('overall_assessment', '')}")
     print("─" * 60)
     print()
-    print("下一步：人工 review 上面的 edits，挑一两条 apply 到 analyze.py")
-    print("（如果合并到 TS 端，apply 到 src/lib/skeleton-diagnostic/rubric.ts），")
+    print("下一步：人审上述 edits，挑 1-2 条同时 apply 到")
+    print("  - src/lib/skeleton-diagnostic/rubric.ts（权威，部署用）")
+    print("  - story-gate-eval/analyze.py 里的 RUBRIC_* 副本（沙盒）")
     print("然后重跑 run_eval.py 看效果。")
 
 

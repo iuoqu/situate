@@ -1,5 +1,6 @@
 import { NextResponse, type NextRequest } from "next/server";
 
+import { requireBearerToken } from "@/lib/skeleton-diagnostic/auth";
 import { diagnoseSkeleton } from "@/lib/skeleton-diagnostic/diagnose";
 import type { DiagnosticMode } from "@/lib/skeleton-diagnostic/types";
 
@@ -54,20 +55,8 @@ function parseBody(raw: unknown): Body | string {
 
 export async function POST(req: NextRequest) {
   // Step 1: auth
-  const expected = process.env.DIAGNOSTIC_INTERNAL_TOKEN;
-  if (!expected) {
-    // Fail loudly rather than silently allow everything — a missing token in
-    // prod means the operator forgot to configure it, not "skip auth".
-    console.error("DIAGNOSTIC_INTERNAL_TOKEN not set; refusing all requests");
-    return NextResponse.json(
-      { error: "diagnose endpoint not configured" },
-      { status: 503 },
-    );
-  }
-  const header = req.headers.get("authorization") ?? "";
-  if (header !== `Bearer ${expected}`) {
-    return NextResponse.json({ error: "unauthorized" }, { status: 401 });
-  }
+  const unauthorized = requireBearerToken(req);
+  if (unauthorized) return unauthorized;
 
   // Step 2: body
   let raw: unknown;
