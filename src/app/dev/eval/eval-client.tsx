@@ -46,45 +46,71 @@ interface DoneEvent {
 // from the browser, hit /api/dev/diagnose-by-path once per specimen with
 // a small worker pool. Each request is 5-10s, well under any plan's
 // function timeout.
+//
+// "Failed to fetch" errors still happen sporadically on Vercel — the route
+// works for some requests in a burst but cold-starting lambdas + the free
+// tier's tight concurrency cap kills others. The retry loop below absorbs
+// that. Default concurrency stays at 2 to reduce the cold-start pressure.
+
+const FETCH_RETRY_ATTEMPTS = 3;
+const FETCH_RETRY_BACKOFF_MS = [1000, 2500, 5000]; // before attempt 1, 2, 3
 
 async function diagnoseOne(spec: SpecimenInfo): Promise<ResultEvent> {
   const mode = spec.bucket === "partial" ? "partial" : "full";
-  try {
-    const resp = await fetch("/api/dev/diagnose-by-path", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ path: spec.path, mode }),
-      credentials: "same-origin",
-    });
-    if (!resp.ok) {
-      const text = await resp.text();
-      return {
-        path: spec.path,
-        bucket: spec.bucket,
-        run_mode: mode,
-        error: `HTTP ${resp.status}: ${text.slice(0, 160)}`,
-        diagnostic: null,
-        check: { ok: false, fails: ["http_error"] },
-        primary_engine: "-",
-        confidence: null,
-        expectation: spec.expectation,
-      };
+  let lastError = "no attempts made";
+
+  for (let attempt = 0; attempt < FETCH_RETRY_ATTEMPTS; attempt++) {
+    if (attempt > 0) {
+      await new Promise((r) => setTimeout(r, FETCH_RETRY_BACKOFF_MS[attempt - 1] ?? 5000));
     }
-    const data = (await resp.json()) as ResultEvent & { error?: string };
-    return { ...data, error: data.error ?? null };
-  } catch (e) {
-    return {
-      path: spec.path,
-      bucket: spec.bucket,
-      run_mode: mode,
-      error: e instanceof Error ? e.message : String(e),
-      diagnostic: null,
-      check: { ok: false, fails: ["fetch_error"] },
-      primary_engine: "-",
-      confidence: null,
-      expectation: spec.expectation,
-    };
+    try {
+      const resp = await fetch("/api/dev/diagnose-by-path", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ path: spec.path, mode }),
+        credentials: "same-origin",
+      });
+      if (resp.ok) {
+        const data = (await resp.json()) as ResultEvent & { error?: string };
+        return { ...data, error: data.error ?? null };
+      }
+      // 4xx is permanent (bad token, bad path) — don't retry
+      // 5xx is retryable (server overload, cold start)
+      const text = await resp.text();
+      const errMsg = `HTTP ${resp.status}: ${text.slice(0, 160)}`;
+      if (resp.status < 500) {
+        return errorRow(spec, mode, errMsg, "http_error");
+      }
+      lastError = errMsg;
+    } catch (e) {
+      lastError = e instanceof Error ? e.message : String(e);
+    }
   }
+  return errorRow(
+    spec,
+    mode,
+    `${lastError} (${FETCH_RETRY_ATTEMPTS} attempts)`,
+    "fetch_error",
+  );
+}
+
+function errorRow(
+  spec: SpecimenInfo,
+  mode: "full" | "partial",
+  message: string,
+  failTag: string,
+): ResultEvent {
+  return {
+    path: spec.path,
+    bucket: spec.bucket,
+    run_mode: mode,
+    error: message,
+    diagnostic: null,
+    check: { ok: false, fails: [failTag] },
+    primary_engine: "-",
+    confidence: null,
+    expectation: spec.expectation,
+  };
 }
 
 async function fanOut(
@@ -219,7 +245,7 @@ function EvalSection({
   setSummary: (s: DoneEvent | null) => void;
 }) {
   const [mode, setMode] = useState<"full" | "partial" | "both">("both");
-  const [concurrency, setConcurrency] = useState(4);
+  const [concurrency, setConcurrency] = useState(2);
   const [running, setRunning] = useState(false);
   const [progress, setProgress] = useState<ProgressEvent | null>(null);
   const [error, setError] = useState<string | null>(null);

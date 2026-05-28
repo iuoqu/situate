@@ -23,14 +23,12 @@ export interface CheckResult {
 }
 
 export function primaryEngine(result: SkeletonDiagnostic): string {
-  if (result.mode === "full") {
-    const engines = result.engines ?? [];
-    if (!engines.length) return "-";
-    const top = engines.reduce((a, b) => ((b.weight ?? 0) > (a.weight ?? 0) ? b : a));
-    return top.engine ?? "-";
-  }
-  const engines = result.tentative_engines ?? [];
-  if (!engines.length) return "-";
+  const raw =
+    result.mode === "full" ? result.engines : result.tentative_engines;
+  // Model occasionally returns the field as a single object instead of an
+  // array; Array.isArray guards against a `.reduce is not a function` crash.
+  const engines = Array.isArray(raw) ? raw : [];
+  if (engines.length === 0) return "-";
   const top = engines.reduce((a, b) => ((b.weight ?? 0) > (a.weight ?? 0) ? b : a));
   return top.engine || "-";
 }
@@ -46,18 +44,24 @@ export function checkFull(
 ): CheckResult {
   const fails: string[] = [];
   const gate = result.gate ?? null;
+  const gotIsStory = gate?.is_story;
+  const isStoryMatch = gotIsStory === expected.is_story;
 
-  if (gate?.is_story !== expected.is_story) {
-    fails.push("is_story");
+  if (!isStoryMatch) {
+    fails.push(`is_story(${gotIsStory}≠${expected.is_story})`);
   }
 
-  if (expected.is_story === false) {
+  // Only check `type` when both sides agree the piece is a non-story.
+  // Otherwise the type fail is just noise — of course the model didn't
+  // fill in a failure type if it judged it as a story.
+  if (expected.is_story === false && gotIsStory === false) {
     if (gate?.if_not_story_type !== (expected.type ?? null)) {
       fails.push(`type(${gate?.if_not_story_type}≠${expected.type ?? "null"})`);
     }
   }
 
-  if (expected.expected_engine) {
+  // Engine check only meaningful when both sides agree it IS a story.
+  if (expected.expected_engine && expected.is_story === true && gotIsStory === true) {
     const got = primaryEngine(result);
     if (got !== expected.expected_engine) {
       fails.push(`engine(${got}≠${expected.expected_engine})`);
