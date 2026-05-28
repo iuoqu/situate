@@ -26,7 +26,10 @@ interface WaitlistRequestBody {
   email?: unknown;
   note?: unknown;
   source?: unknown;
+  kind?: unknown;
 }
+
+const VALID_KINDS = new Set(["write_invite", "newsletter"]);
 
 export async function POST(req: NextRequest) {
   const body = await safeJson(req);
@@ -40,6 +43,10 @@ export async function POST(req: NextRequest) {
     typeof body?.source === "string" && body.source.trim().length > 0
       ? body.source.trim().slice(0, 60)
       : "landing";
+  const kind =
+    typeof body?.kind === "string" && VALID_KINDS.has(body.kind)
+      ? body.kind
+      : "write_invite";
 
   if (!email || !isPlausibleEmail(email)) {
     return NextResponse.json(
@@ -48,14 +55,13 @@ export async function POST(req: NextRequest) {
     );
   }
 
-  // Upsert via ON CONFLICT on the lower(email) unique index. Drizzle 0.36
-  // doesn't have first-class onConflictDoUpdate against expression indexes,
-  // so we use a raw `INSERT ... ON CONFLICT ... DO NOTHING` and treat the
-  // duplicate as idempotent success.
+  // The per-kind unique index lets the same email be on both lists, so we
+  // upsert against (lower(email), kind). Treat ON CONFLICT as idempotent
+  // success — the user just resubmitted.
   await db.execute(sql`
-    INSERT INTO waitlist_requests (email, note, source)
-    VALUES (${email}, ${note}, ${source})
-    ON CONFLICT (lower(email)) DO NOTHING
+    INSERT INTO waitlist_requests (email, note, source, kind)
+    VALUES (${email}, ${note}, ${source}, ${kind})
+    ON CONFLICT (lower(email), kind) DO NOTHING
   `);
 
   return NextResponse.json({ status: "queued" });

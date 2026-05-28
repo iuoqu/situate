@@ -1,7 +1,12 @@
 import Link from "next/link";
 
 import { getEditionBySlug } from "@/app/actions";
+import { NewsletterForm } from "@/components/landing/newsletter-form";
 import { WaitlistForm } from "@/components/landing/waitlist-form";
+import {
+  WorldMapSvg,
+  type WorldMapPin,
+} from "@/components/landing/world-map-svg";
 import { getReaderPrefs } from "@/lib/reader-prefs";
 
 /**
@@ -37,6 +42,21 @@ export default async function LandingPage() {
   const issue = data?.edition ?? null;
   const previewPieces = (data?.pieces ?? []).slice(0, 3);
 
+  // Coordinates for the world-map ghost pinning. Each piece's first block
+  // is the entry point of the story, so it stands in for "where the piece
+  // lives" on the landing's map summary.
+  const mapPins: WorldMapPin[] = previewPieces
+    .filter(({ firstBlock }) => firstBlock !== null)
+    .map(({ submission, firstBlock }) => ({
+      longitude: firstBlock!.longitude,
+      latitude: firstBlock!.latitude,
+      label: submission.title ?? undefined,
+    }));
+
+  // Hero metadata strip. Currently anchors: issue, language count, beta state.
+  // TODO: add an "Edited from [city]" when Jake settles on a hometown to claim.
+  const supportedLanguageTags = ["EN", "中文", "日本語", "한국어"];
+
   return (
     <main style={pageStyle}>
       {/* ── Hero ────────────────────────────────────────────────────────── */}
@@ -49,6 +69,23 @@ export default async function LandingPage() {
           World flash fiction in five languages, anchored to coordinates.
           Every story we publish would break if you moved the pin.
         </p>
+        <ul style={heroMetaStripStyle} aria-label="Magazine quick facts">
+          <li style={heroMetaItemStyle}>
+            {issue ? `Issue No. 0${issue.number}` : "Issue No. 01"}
+          </li>
+          <li style={heroMetaItemStyle}>Out now</li>
+          <li style={heroMetaItemStyle}>Invite-only beta</li>
+          <li style={heroMetaItemStyle}>
+            <span style={heroLangListStyle}>
+              {supportedLanguageTags.map((tag, i) => (
+                <span key={tag}>
+                  {tag}
+                  {i < supportedLanguageTags.length - 1 ? " · " : ""}
+                </span>
+              ))}
+            </span>
+          </li>
+        </ul>
         <div style={ctaRowStyle}>
           <Link
             href={`/editions/${CURRENT_ISSUE_SLUG}`}
@@ -83,6 +120,15 @@ export default async function LandingPage() {
         </h2>
         {issue?.theme && (
           <p style={editorialLeadStyle}>{issue.theme}</p>
+        )}
+        {mapPins.length > 0 && (
+          <figure style={mapFigureStyle}>
+            <WorldMapSvg pins={mapPins} />
+            <figcaption style={mapCaptionStyle}>
+              Three coordinates. Three pieces. Each story sits at the
+              corner of the world it could only be told from.
+            </figcaption>
+          </figure>
         )}
         {previewPieces.length > 0 ? (
           <ul style={pieceListStyle}>
@@ -178,6 +224,21 @@ export default async function LandingPage() {
         <Link href="/about/constitution" style={inlineLinkStyle}>
           Read the thirteen principles →
         </Link>
+      </section>
+
+      <Divider />
+
+      {/* ── Newsletter (soft commitment, reader-facing) ────────────────── */}
+      <section style={sectionStyle} aria-labelledby="newsletter-heading">
+        <SectionHeader eyebrow="Stay close" />
+        <h2 id="newsletter-heading" style={sectionHeadingStyle}>
+          A new story when we publish.
+        </h2>
+        <p style={editorialLeadStyle}>
+          One issue every few weeks. We send you one piece, the editor&rsquo;s
+          note, and a link to the map. No tracking, no drip, no upsell.
+        </p>
+        <NewsletterForm />
       </section>
 
       <Divider />
@@ -306,6 +367,53 @@ const heroSubtitleStyle: React.CSSProperties = {
   color: "#555",
   lineHeight: 1.55,
   maxWidth: 580,
+};
+
+const heroMetaStripStyle: React.CSSProperties = {
+  listStyle: "none",
+  margin: "8px 0 0",
+  padding: 0,
+  display: "flex",
+  flexWrap: "wrap",
+  gap: "6px 14px",
+  alignItems: "center",
+};
+
+const heroMetaItemStyle: React.CSSProperties = {
+  fontFamily: "system-ui, sans-serif",
+  fontSize: 11,
+  letterSpacing: 1.5,
+  textTransform: "uppercase",
+  color: "#9b8a6b",
+  position: "relative",
+  paddingRight: 14,
+};
+
+const heroLangListStyle: React.CSSProperties = {
+  textTransform: "none",
+  letterSpacing: 0.3,
+  color: "#777",
+  fontSize: 12,
+};
+
+const mapFigureStyle: React.CSSProperties = {
+  margin: "8px 0 0",
+  padding: 22,
+  background: "#fbfaf6",
+  border: "1px solid #e8e3d8",
+  borderRadius: 3,
+  display: "flex",
+  flexDirection: "column",
+  gap: 12,
+};
+
+const mapCaptionStyle: React.CSSProperties = {
+  margin: 0,
+  fontFamily: 'Georgia, "Times New Roman", serif',
+  fontSize: 14,
+  color: "#666",
+  lineHeight: 1.55,
+  fontStyle: "italic",
 };
 
 const ctaRowStyle: React.CSSProperties = {

@@ -599,6 +599,10 @@ export const waitlistRequests = pgTable(
     email: text("email").notNull(),
     note: text("note"),
     source: text("source"),
+    // 'write_invite' = high-intent author requests (manual triage,
+    // admin issues an invite code in response). 'newsletter' = soft
+    // signup, just wants stories in their inbox.
+    kind: text("kind").notNull().default("write_invite"),
     createdAt: timestamp("created_at", { withTimezone: true })
       .notNull()
       .default(sql`now()`),
@@ -609,6 +613,10 @@ export const waitlistRequests = pgTable(
   },
   (t) => ({
     createdAtIdx: index("waitlist_created_at_idx").on(t.createdAt),
+    kindValid: check(
+      "waitlist_kind_valid",
+      sql`${t.kind} IN ('write_invite', 'newsletter')`,
+    ),
   }),
 );
 
