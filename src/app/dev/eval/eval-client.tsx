@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
 import { clearDevToken, saveDevToken } from "./actions";
 
@@ -74,13 +74,20 @@ const FETCH_RETRY_BACKOFF_MS = [1000, 2500, 5000]; // before attempt 1, 2, 3
 async function diagnoseOne(
   spec: SpecimenInfo,
   providerId: string,
+  signal: AbortSignal,
 ): Promise<ResultEvent> {
   const mode = spec.bucket === "partial" ? "partial" : "full";
   let lastError = "no attempts made";
 
   for (let attempt = 0; attempt < FETCH_RETRY_ATTEMPTS; attempt++) {
+    if (signal.aborted) {
+      return errorRow(spec, providerId, mode, "aborted by user", "aborted");
+    }
     if (attempt > 0) {
       await new Promise((r) => setTimeout(r, FETCH_RETRY_BACKOFF_MS[attempt - 1] ?? 5000));
+      if (signal.aborted) {
+        return errorRow(spec, providerId, mode, "aborted by user", "aborted");
+      }
     }
     try {
       const resp = await fetch("/api/dev/diagnose-by-path", {
@@ -88,6 +95,7 @@ async function diagnoseOne(
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ path: spec.path, mode, provider: providerId }),
         credentials: "same-origin",
+        signal,
       });
       if (resp.ok) {
         const data = (await resp.json()) as ResultEvent & { error?: string };
@@ -100,6 +108,9 @@ async function diagnoseOne(
       }
       lastError = errMsg;
     } catch (e) {
+      if (e instanceof DOMException && e.name === "AbortError") {
+        return errorRow(spec, providerId, mode, "aborted by user", "aborted");
+      }
       lastError = e instanceof Error ? e.message : String(e);
     }
   }
@@ -140,6 +151,7 @@ async function fanOutMulti(
   targets: SpecimenInfo[],
   providerIds: string[],
   concurrency: number,
+  signal: AbortSignal,
   onResult: (r: ResultEvent) => void,
   onProgress: (completed: number, total: number) => void,
 ): Promise<void> {
@@ -153,9 +165,10 @@ async function fanOutMulti(
   const total = queue.length;
   async function worker(): Promise<void> {
     while (queue.length > 0) {
+      if (signal.aborted) return;
       const item = queue.shift();
       if (!item) return;
-      const result = await diagnoseOne(item.spec, item.providerId);
+      const result = await diagnoseOne(item.spec, item.providerId, signal);
       onResult(result);
       completed += 1;
       onProgress(completed, total);
@@ -283,6 +296,11 @@ function EvalSection({
   const [running, setRunning] = useState(false);
   const [progress, setProgress] = useState<ProgressEvent | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const abortRef = useRef<AbortController | null>(null);
+
+  function stop() {
+    abortRef.current?.abort();
+  }
 
   // Initialize selection to whichever providers are available, defaulting to
   // the canonical Anthropic one if all keys are configured.
@@ -316,6 +334,9 @@ function EvalSection({
     setResults({});
     setRunProviderIds(selectedIds);
 
+    const ctrl = new AbortController();
+    abortRef.current = ctrl;
+
     const targets = specimens.filter((s) => {
       if (mode === "full") return s.bucket !== "partial";
       if (mode === "partial") return s.bucket === "partial";
@@ -328,6 +349,7 @@ function EvalSection({
         targets,
         selectedIds,
         concurrency,
+        ctrl.signal,
         (r) => {
           if (!local[r.path]) local[r.path] = {};
           local[r.path][r.provider] = r;
@@ -339,6 +361,7 @@ function EvalSection({
       setError(e instanceof Error ? e.message : String(e));
     } finally {
       setRunning(false);
+      abortRef.current = null;
     }
   }
 
@@ -411,13 +434,20 @@ function EvalSection({
             disabled={running}
           />
         </Field>
-        <button
-          onClick={run}
-          disabled={!active || running || selectedIds.length === 0}
-          style={btnPrimary}
-        >
-          {running ? "running…" : `run eval (${selectedIds.length})`}
-        </button>
+        {!running && (
+          <button
+            onClick={run}
+            disabled={!active || selectedIds.length === 0}
+            style={btnPrimary}
+          >
+            run eval ({selectedIds.length})
+          </button>
+        )}
+        {running && (
+          <button onClick={stop} style={{ ...btnPrimary, background: "#7c2020" }}>
+            stop
+          </button>
+        )}
         {progress && (
           <span style={{ fontSize: 13, color: "#555" }}>
             {progress.completed} / {progress.total} done
@@ -563,13 +593,37 @@ function ComparisonTable({
       : r.check.fails.length > 0
         ? r.check.fails.join(", ")
         : "ok";
+    // For errors and fails, show the message inline (truncated) below the
+    // verdict — saves a hover. Full text still in title attribute.
+    const inline = r.error
+      ? r.error
+      : !r.check.ok
+        ? r.check.fails.join(", ")
+        : "";
     return (
-      <div
-        title={tip}
-        style={{ color, fontWeight: 600, fontSize: 11.5 }}
-      >
-        {verdict}
-        {conf && <span style={{ color: "#666", fontWeight: 400, marginLeft: 4 }}>{conf}</span>}
+      <div title={tip} style={{ minWidth: 140 }}>
+        <div style={{ color, fontWeight: 600, fontSize: 11.5 }}>
+          {verdict}
+          {conf && (
+            <span style={{ color: "#666", fontWeight: 400, marginLeft: 4 }}>
+              {conf}
+            </span>
+          )}
+        </div>
+        {inline && (
+          <div
+            style={{
+              fontSize: 10.5,
+              color: r.error ? "#a05300" : "#7c2020",
+              marginTop: 2,
+              maxWidth: 260,
+              wordBreak: "break-word",
+              lineHeight: 1.3,
+            }}
+          >
+            {inline.length > 110 ? `${inline.slice(0, 110)}…` : inline}
+          </div>
+        )}
       </div>
     );
   }
