@@ -4,6 +4,10 @@
 迭代工具。对每篇散文：抽骨架（S0/D/T/S1/K）→ 跑门神三谓词 → 识别引擎 → 跑诊断
 子。最终是 Situate Editions /submit 表单的"边写边诊断"侧栏的底座。
 
+> **可以走 UI 了**：部署之后访问 `/dev/eval`，输入 DIAGNOSTIC_INTERNAL_TOKEN，
+> 三个按钮——Run eval / Propose revisions / Generate variation——全部在浏览器里。
+> 下面的 Python 脚本仍然能用，作为 headless / CI 备用方案保留。
+
 ## 架构：所有 Claude 调用都在 Vercel 那一头
 
 ```
