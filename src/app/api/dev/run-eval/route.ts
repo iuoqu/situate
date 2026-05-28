@@ -175,6 +175,11 @@ export async function POST(req: NextRequest) {
       "Content-Type": "text/event-stream; charset=utf-8",
       "Cache-Control": "no-cache, no-transform",
       "Connection": "keep-alive",
+      // Vercel + nginx-style proxies buffer responses by default, which
+      // breaks SSE (the client sees nothing until the function exits, then
+      // either gets the whole thing at once or trips a timeout). This
+      // header is the standard opt-out — flushes each chunk through.
+      "X-Accel-Buffering": "no",
     },
   });
 }
