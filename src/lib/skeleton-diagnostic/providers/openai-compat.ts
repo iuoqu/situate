@@ -1,3 +1,5 @@
+import { jsonrepair } from "jsonrepair";
+
 import { RUBRIC_FULL, RUBRIC_PARTIAL } from "../rubric";
 import type {
   DiagnosticMode,
@@ -144,17 +146,30 @@ export function createOpenAICompatProvider(opts: OpenAICompatOpts): Provider {
       try {
         raw = JSON.parse(argsStr);
       } catch {
-        // Some non-OpenAI providers (notably Qwen) produce valid JSON
-        // followed by stray non-whitespace garbage. Try to recover by
-        // slicing at the first matching close brace of the leading
-        // object, then re-parse. If that still fails we surface the
-        // original argsStr's tail so the user can see what came back.
+        // Layered fallback for non-OpenAI providers (DeepSeek, Qwen):
+        //   1. jsonrepair  — handles mid-JSON corruption that non-OpenAI
+        //      models produce a lot of: unescaped ASCII quotes inside
+        //      Chinese strings (`"每个"算了"的回声"`), missing commas,
+        //      stray brackets. Doesn't recover from trailing-garbage.
+        //   2. extractFirstJsonObject + jsonrepair  — for trailing-
+        //      garbage cases: slice at the first matching close brace,
+        //      then repair what remains.
+        let repaired: string | null = null;
         try {
-          raw = JSON.parse(extractFirstJsonObject(argsStr));
-        } catch (e2) {
-          throw new Error(
-            `${displayName} returned malformed JSON in tool call: ${e2 instanceof Error ? e2.message : e2}; tail=${argsStr.slice(-120)}`,
-          );
+          repaired = jsonrepair(argsStr);
+          raw = JSON.parse(repaired);
+        } catch {
+          try {
+            const sliced = extractFirstJsonObject(argsStr);
+            repaired = jsonrepair(sliced);
+            raw = JSON.parse(repaired);
+          } catch (e3) {
+            throw new Error(
+              `${displayName} returned unrepairable JSON in tool call: ${
+                e3 instanceof Error ? e3.message : e3
+              }; tail=${argsStr.slice(-200)}`,
+            );
+          }
         }
       }
 
