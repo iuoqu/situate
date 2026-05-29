@@ -56,18 +56,24 @@ const FAMILIES: FamilyConfig[] = [
   {
     provider_id: "alibaba:qwen-flash",
     display_name: "Qwen Flash",
+    // qwen-flash is a hybrid-thinking model. Per DashScope's OpenAI-
+    // compatibility docs we explicitly disable thinking via
+    // enable_thinking: false in extra_body. Deterministic + faster +
+    // no billable reasoning tokens. Note: Qwen and DeepSeek use
+    // different param names — Qwen uses enable_thinking (flat bool),
+    // DeepSeek uses thinking: { type: "disabled" } (nested object).
+    extra_body: {
+      enable_thinking: false,
+    },
   },
   {
     provider_id: "deepseek:deepseek-v4-flash",
     display_name: "DeepSeek V4 Flash",
-    // Try multiple thinking-disable conventions; the unsupported ones
-    // are ignored. If thinking stays on, tool_choice="auto" keeps the
-    // call valid (forced tool_choice would HTTP 400 with thinking).
     // DeepSeek V4 Flash defaults to thinking ON. Thinking mode rejects
-    // forced tool_choice AND rejects temperature/top_p. We're using
-    // temperature 0.9 for multi-sample, so disabling thinking is
-    // mandatory. Per https://api-docs.deepseek.com/guides/thinking_mode
-    // the correct disable is { thinking: { type: "disabled" } }.
+    // forced tool_choice AND rejects temperature/top_p — and we use
+    // temperature 0.9 for multi-sample, so this disable is mandatory.
+    // Per https://api-docs.deepseek.com/guides/thinking_mode the
+    // correct disable is { thinking: { type: "disabled" } }.
     // tool_choice_auto stays true as belt-and-suspenders.
     extra_body: {
       thinking: { type: "disabled" },
