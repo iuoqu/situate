@@ -1,5 +1,9 @@
 import { createAnthropicProvider, DEFAULT_ANTHROPIC_PROVIDER } from "./anthropic";
-import { DEEPSEEK_PROVIDER, QWEN_PROVIDER } from "./openai-compat";
+import {
+  DEEPSEEK_PROVIDER,
+  QWEN_PLUS_PROVIDER,
+  QWEN_PROVIDER,
+} from "./openai-compat";
 import type { Provider, ProviderInfo } from "./types";
 
 /**
@@ -20,6 +24,7 @@ const PROVIDERS: Provider[] = [
   OPUS_PROVIDER,
   DEEPSEEK_PROVIDER,
   QWEN_PROVIDER,
+  QWEN_PLUS_PROVIDER,
 ];
 
 const BY_ID = new Map(PROVIDERS.map((p) => [p.id, p]));

@@ -271,3 +271,17 @@ export const QWEN_PROVIDER = createOpenAICompatProvider({
   baseURL: "https://dashscope.aliyuncs.com/compatible-mode/v1",
   model: "qwen-max",
 });
+
+/**
+ * Qwen Plus — the cheap-tier sibling. Used as the internal sampler for
+ * the center_consensus diagnoser (multi-sample / high-temperature
+ * structural robustness check). Roughly 1/20 the cost of qwen-max.
+ */
+export const QWEN_PLUS_PROVIDER = createOpenAICompatProvider({
+  id: "alibaba:qwen-plus",
+  displayName: "Qwen Plus",
+  costNote: "$0.08 / $0.20 per 1M",
+  apiKeyEnv: "DASHSCOPE_API_KEY",
+  baseURL: "https://dashscope.aliyuncs.com/compatible-mode/v1",
+  model: "qwen-plus",
+});

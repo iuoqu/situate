@@ -616,6 +616,9 @@ function CoachPanel({
             />
           );
         }
+        if (id === "center_consensus") {
+          return <CenterConsensusCard key={id} result={result} />;
+        }
         return (
           <DiagnoserCard
             key={id}
@@ -723,6 +726,100 @@ function DiagnoserCard({
           providers={providers}
           providersRun={providersRun}
         />
+      )}
+    </div>
+  );
+}
+
+// ─── Center consensus card (multi-sample vote distribution) ───────────────
+
+function CenterConsensusCard({ result }: { result: DiagnoserResult }) {
+  // The result has by_provider keyed by "__internal__"
+  const cell = Object.values(result.by_provider)[0];
+  if (!cell) return null;
+  if (cell.error) {
+    return (
+      <div style={{
+        border: "1px solid #e0dccb",
+        borderLeft: "4px solid #a04040",
+        borderRadius: 4,
+        padding: "14px 16px",
+        background: "#fff",
+      }}>
+        <h3 style={{ margin: 0, fontSize: 15, fontFamily: 'Georgia, "Times New Roman", serif', fontWeight: 400 }}>
+          center_consensus
+        </h3>
+        <div style={{ marginTop: 6, color: "#a04040", fontSize: 13 }}>{cell.error}</div>
+      </div>
+    );
+  }
+  const j = (cell.judgment ?? {}) as {
+    votes?: Array<{ quote: string; count: number }>;
+    top_quote?: string;
+    top_count?: number;
+    total_samples?: number;
+    agreement_pct?: number;
+    errors?: string[];
+  };
+  const votes = j.votes ?? [];
+  const totalSamples = j.total_samples ?? 0;
+  const agreementPct = j.agreement_pct ?? 0;
+  const topCount = j.top_count ?? 0;
+
+  // Strong consensus when >=5/7 (~71%), split when scattered
+  const strong = agreementPct >= 0.65 && totalSamples >= 4;
+  const tierColor = strong ? "#5e8a4a" : agreementPct >= 0.4 ? "#a07a30" : "#a04040";
+  const banner = strong
+    ? `强共识 ${topCount}/${totalSamples}`
+    : agreementPct >= 0.4
+      ? `软共识 ${topCount}/${totalSamples}`
+      : `无共识（模型在 ${votes.length} 个候选间分散）`;
+
+  return (
+    <div style={{
+      border: "1px solid #e0dccb",
+      borderLeft: `4px solid ${tierColor}`,
+      borderRadius: 4,
+      padding: "14px 16px",
+      background: "#fff",
+    }}>
+      <div style={{ display: "flex", alignItems: "baseline", gap: 10 }}>
+        <h3 style={{ margin: 0, fontSize: 15, fontFamily: 'Georgia, "Times New Roman", serif', fontWeight: 400 }}>
+          center_consensus
+        </h3>
+        <span style={{ fontSize: 12, color: tierColor, fontWeight: 600 }}>{banner}</span>
+        <span style={{ fontSize: 11, color: "#888", marginLeft: "auto" }}>
+          qwen-plus × {totalSamples} samples, temp 0.9
+        </span>
+      </div>
+      {strong && j.top_quote && (
+        <div style={{ marginTop: 10, padding: "10px 14px", background: "#f5f8f1", border: "1px solid #d3e0c7", borderRadius: 4, fontFamily: 'Georgia, "Times New Roman", serif', fontSize: 14, lineHeight: 1.6, color: "#2d4a1f" }}>
+          <em>"{j.top_quote}"</em>
+        </div>
+      )}
+      {!strong && votes.length > 0 && (
+        <div style={{ marginTop: 10 }}>
+          <div style={{ fontSize: 12, color: "#888", marginBottom: 6 }}>
+            投票分布
+          </div>
+          <ul style={{ listStyle: "none", padding: 0, margin: 0, display: "flex", flexDirection: "column", gap: 5 }}>
+            {votes.map((v, i) => (
+              <li key={i} style={{ display: "flex", gap: 10, alignItems: "baseline", fontSize: 13, lineHeight: 1.5 }}>
+                <span style={{ color: "#888", fontWeight: 600, minWidth: 36 }}>
+                  {v.count}/{totalSamples}
+                </span>
+                <em style={{ color: "#444", fontFamily: 'Georgia, "Times New Roman", serif' }}>
+                  "{v.quote}"
+                </em>
+              </li>
+            ))}
+          </ul>
+        </div>
+      )}
+      {j.errors && j.errors.length > 0 && (
+        <div style={{ marginTop: 8, fontSize: 11, color: "#a07a30" }}>
+          {j.errors.length} sample(s) failed: {j.errors[0]}
+        </div>
       )}
     </div>
   );

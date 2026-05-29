@@ -51,6 +51,12 @@ export interface FocusedCallOpts {
    * <intent> block.
    */
   intent?: string;
+  /**
+   * Sampling temperature. Default omitted (provider default). Higher
+   * values useful for multi-sample consensus checks where we want to
+   * see whether the model converges on the same answer under noise.
+   */
+  temperature?: number;
 }
 
 export async function focusedCall<T>(
@@ -93,6 +99,7 @@ async function callAnthropic<T>(
   const response = await anthropicClient().messages.create({
     model,
     max_tokens: MAX_TOKENS,
+    ...(opts.temperature !== undefined ? { temperature: opts.temperature } : {}),
     system: [
       {
         type: "text",
@@ -141,6 +148,7 @@ async function callOpenAICompat<T>(
   const body = {
     model: config.model,
     max_tokens: MAX_TOKENS,
+    ...(opts.temperature !== undefined ? { temperature: opts.temperature } : {}),
     messages: [
       { role: "system", content: opts.systemPrompt },
       { role: "user", content: composeUserMessage(opts.text, opts.intent) },
@@ -249,6 +257,13 @@ function providerIdToOpenAICompatConfig(id: string): {
     return {
       baseURL: "https://dashscope.aliyuncs.com/compatible-mode/v1",
       model: "qwen-max",
+      apiKeyEnv: "DASHSCOPE_API_KEY",
+    };
+  }
+  if (id === "alibaba:qwen-plus") {
+    return {
+      baseURL: "https://dashscope.aliyuncs.com/compatible-mode/v1",
+      model: "qwen-plus",
       apiKeyEnv: "DASHSCOPE_API_KEY",
     };
   }
