@@ -118,6 +118,22 @@ const SAMPLES: Sample[] = [
     prose: `我早上爱我的狗。我中午爱我的狗。虽然下午打了一下我的狗。晚上爱我的狗。`,
   },
   {
+    id: "chengdu_scenery",
+    label: "成都黄昏（纯装饰 — 应该 dual diverge）",
+    note: "无 K 无转变的纯氛围描写。两家族应该无联合共识。",
+    prose: `傍晚的成都，雨刚停。锦江两岸的梧桐叶被洗得发亮，路灯一盏盏亮起来，光打在湿漉漉的青石板上，反射出橙黄色的水痕。
+
+街口有一家老字号川菜馆，门口的红灯笼摇晃着，灯笼上"麻辣"两个字被风吹得颤动。馆子里飘出花椒和豆瓣酱的香气，混着隔壁茶馆飘来的盖碗茶的茉莉香。空气里湿润、辛辣、又带着一丝甜。
+
+街上的行人匆匆，撑着颜色各异的雨伞，没人停下来。两个穿汉服的女孩说说笑笑地走过，裙摆扫过地面的水洼，溅起几滴。一个老人推着自行车，车铃叮当响了一下。一辆出租车按了下喇叭，停在馆子门口让客人上下车。
+
+天色又暗了一些。江对岸的霓虹招牌开始亮起来，绿色、红色、金色，倒映在水里，被涟漪拉成长条。一只白鹭从桥下飞过，扇了两下翅膀，又落进芦苇丛里。
+
+远处的杜甫草堂方向传来钟声，悠长，浑厚，似乎来自很远的时间。
+
+这是这座城市最寻常的一个黄昏。`,
+  },
+  {
     id: "blank",
     label: "（空白 — 自己粘）",
     note: "",
@@ -284,8 +300,8 @@ export function CoachPreviewClient({
       />
 
       <section>
-        <div style={{ display: "flex", flexWrap: "wrap", gap: 6, marginBottom: 8 }}>
-          <span style={{ fontSize: 11, color: "#888", letterSpacing: 0.4, textTransform: "uppercase", alignSelf: "center", marginRight: 4 }}>
+        <div style={{ display: "flex", flexWrap: "wrap", gap: 6, marginBottom: 8, alignItems: "center" }}>
+          <span style={{ fontSize: 11, color: "#888", letterSpacing: 0.4, textTransform: "uppercase", marginRight: 4 }}>
             samples
           </span>
           {SAMPLES.map((s) => (
@@ -298,6 +314,19 @@ export function CoachPreviewClient({
               {s.label}
             </button>
           ))}
+          <button
+            onClick={() => setText("")}
+            style={{
+              ...btnGhost,
+              fontSize: 11,
+              marginLeft: "auto",
+              color: "#a04040",
+              borderColor: "#e0c4c4",
+            }}
+            title="Empty the textarea — useful before pasting your own prose"
+          >
+            clear textarea
+          </button>
         </div>
         <label
           htmlFor="prose"
