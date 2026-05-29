@@ -1,37 +1,60 @@
 import { focusedCall, type FocusedCallResult } from "../_call";
 
 /**
- * center_consensus — single-question, cheap-model, multi-sample
- * structural robustness check.
+ * center_consensus — dual-family, cheap-model, multi-sample structural
+ * robustness check.
  *
- * The other inferred-style diagnosers run 4 different expensive models
- * once each, and we compute inter-model consensus on the "center of
- * gravity" sentence. That measures cross-reader agreement.
+ * Why two families: a single cheap model run N times measures that
+ * model's sticky preferences, NOT the prose's actual structural
+ * robustness. Empirically (Chengdu modified specimen), qwen-plus × 7
+ * gave 7/7 on the bell sentence — but 4 diverse expensive models
+ * actually split 2-2 between the bell and other candidates. The
+ * single-family multi-sample was giving false strong consensus.
  *
- * This diagnoser measures a different thing: intra-model robustness
- * under sampling noise. We run qwen-plus N times at high temperature
- * and check whether it keeps picking the same sentence. If a sentence
- * is structurally load-bearing — independently identifiable as the
- * pivot — even a less sophisticated reader will keep landing on it.
- * If the prose has no single structural center, the votes will scatter.
+ * The fix: run two cheap models from two different training families
+ * in parallel. Only when BOTH families converge on the same sentence
+ * with strong intra-family consensus do we declare a real center.
  *
- * Two robustness signals, two purposes:
- *   - inter-model consensus (existing): "do different careful readers agree?"
- *   - intra-model sampling (this): "is the structural cue robust under noise?"
+ *   - qwen-flash (Alibaba family)   × N samples at temp 0.9
+ *   - deepseek-v4-flash (DeepSeek family) × N samples at temp 0.9
+ *     (with thinking mode disabled for speed)
  *
- * Both pointing to the same sentence = strong center.
- * Either alone = soft center.
- * Both diverging = no center.
+ * Joint consensus =
+ *   both families ≥ 65% intra-family agreement
+ *   AND both top picks normalize to the same sentence
  *
- * Cost: roughly 1/100 of the existing 4-model fan-out at N=7 samples.
+ * Cost at N=7 per family is roughly $0.001 per coach-preview run —
+ * negligible vs the 4-model expensive fanout.
  */
 
 export const DIAGNOSER_ID = "center_consensus";
 export const STATUS = "experimental";
 
-const N_SAMPLES = 7;
+const N_SAMPLES_PER_FAMILY = 7;
 const SAMPLE_TEMPERATURE = 0.9;
-const CHEAP_PROVIDER_ID = "alibaba:qwen-plus";
+
+interface FamilyConfig {
+  provider_id: string;
+  display_name: string;
+  /**
+   * Extra request body for provider-specific knobs. DeepSeek V4 defaults
+   * to thinking mode (slow + adds reasoning content); we explicitly
+   * disable for the one-quote task.
+   */
+  extra_body?: Record<string, unknown>;
+}
+
+const FAMILIES: FamilyConfig[] = [
+  {
+    provider_id: "alibaba:qwen-flash",
+    display_name: "Qwen Flash",
+  },
+  {
+    provider_id: "deepseek:deepseek-v4-flash",
+    display_name: "DeepSeek V4 Flash",
+    extra_body: { enable_thinking: false },
+  },
+];
 
 export const SYSTEM_PROMPT = `你只回答一个问题：这段散文的"重心"落在哪一句话上？
 
@@ -66,36 +89,119 @@ interface SingleVote {
   center_quote: string;
 }
 
-export interface CenterConsensusResult {
-  /** All distinct quotes that appeared, sorted by vote count desc. */
-  votes: Array<{ quote: string; count: number }>;
-  /** The top-voted quote. Empty string if no successful calls. */
+export interface FamilyConsensus {
+  provider_id: string;
+  display_name: string;
+  /** Distinct quotes that appeared, sorted by vote count desc. */
+  votes: Array<{ quote: string; count: number; bucket_key: string }>;
+  /** Top-voted quote. Empty string if zero successful calls. */
   top_quote: string;
   /** How many samples voted for top_quote. */
   top_count: number;
-  /** Total successful samples (failed calls excluded). */
+  /** Successful samples (failed calls excluded). */
   total_samples: number;
   /** top_count / total_samples. */
   agreement_pct: number;
-  /** Failed sample messages, if any. */
+  /** Bucket key of the top quote (used to compare families). */
+  top_bucket_key: string;
+  /** Failed sample error messages. */
   errors: string[];
 }
 
+export interface CenterConsensusResult {
+  families: FamilyConsensus[];
+  /**
+   * Joint consensus: present only if both families have strong
+   * intra-family agreement (>= 65%) AND their top picks share the
+   * same normalized bucket key.
+   */
+  joint_consensus: {
+    is_strong: boolean;
+    quote: string;
+  };
+}
+
+const STRONG_THRESHOLD = 0.65;
+
 /**
- * Normalize a quote for fuzzy bucketing: strip whitespace and
- * punctuation differences, keep first ~16 chars as the bucket key.
- * Two quotes hashing to the same key are treated as the same vote.
+ * Normalize a quote for fuzzy bucketing: strip whitespace, punctuation,
+ * keep first ~18 chars as the bucket key. Two quotes hashing to the
+ * same key are treated as the same vote.
  */
 function bucketKey(quote: string): string {
   return quote
     .replace(/\s+/g, "")
     .replace(/[。，、；：！？.,;:!?""''""'"]/g, "")
-    .slice(0, 16);
+    .slice(0, 18);
+}
+
+async function runFamily(
+  family: FamilyConfig,
+  text: string,
+): Promise<FamilyConsensus> {
+  const calls: Promise<FocusedCallResult<SingleVote>>[] = Array.from(
+    { length: N_SAMPLES_PER_FAMILY },
+    () =>
+      focusedCall<SingleVote>({
+        text,
+        systemPrompt: SYSTEM_PROMPT,
+        toolName: TOOL_NAME,
+        toolDescription: TOOL_DESCRIPTION,
+        inputSchema: INPUT_SCHEMA,
+        providerId: family.provider_id,
+        temperature: SAMPLE_TEMPERATURE,
+        extraBody: family.extra_body,
+      }),
+  );
+  const settled = await Promise.allSettled(calls);
+  const quotes: string[] = [];
+  const errors: string[] = [];
+  for (const r of settled) {
+    if (r.status === "fulfilled") {
+      const q = r.value.result.center_quote?.trim() ?? "";
+      if (q) quotes.push(q);
+    } else {
+      errors.push(
+        r.reason instanceof Error ? r.reason.message : String(r.reason),
+      );
+    }
+  }
+
+  const buckets = new Map<
+    string,
+    { quote: string; count: number; bucket_key: string }
+  >();
+  for (const q of quotes) {
+    const key = bucketKey(q);
+    const existing = buckets.get(key);
+    if (existing) {
+      existing.count += 1;
+    } else {
+      buckets.set(key, { quote: q, count: 1, bucket_key: key });
+    }
+  }
+  const votes = Array.from(buckets.values()).sort(
+    (a, b) => b.count - a.count,
+  );
+  const top = votes[0] ?? { quote: "", count: 0, bucket_key: "" };
+
+  return {
+    provider_id: family.provider_id,
+    display_name: family.display_name,
+    votes,
+    top_quote: top.quote,
+    top_count: top.count,
+    total_samples: quotes.length,
+    agreement_pct:
+      quotes.length === 0 ? 0 : top.count / quotes.length,
+    top_bucket_key: top.bucket_key,
+    errors,
+  };
 }
 
 export async function runCenterConsensus(
   text: string,
-  _providerId?: string, // ignored — this diagnoser uses its own cheap model
+  _providerId?: string, // ignored — diagnoser uses its own internal providers
 ): Promise<{
   result: CenterConsensusResult;
   raw: unknown;
@@ -105,76 +211,43 @@ export async function runCenterConsensus(
     duration_ms: number;
     input_tokens: number;
     output_tokens: number;
-    samples: number;
+    samples_per_family: number;
+    family_count: number;
   };
 }> {
   const startedAt = Date.now();
-  const calls: Promise<FocusedCallResult<SingleVote>>[] = Array.from(
-    { length: N_SAMPLES },
-    () =>
-      focusedCall<SingleVote>({
-        text,
-        systemPrompt: SYSTEM_PROMPT,
-        toolName: TOOL_NAME,
-        toolDescription: TOOL_DESCRIPTION,
-        inputSchema: INPUT_SCHEMA,
-        providerId: CHEAP_PROVIDER_ID,
-        temperature: SAMPLE_TEMPERATURE,
-      }),
+  const familyResults = await Promise.all(
+    FAMILIES.map((f) => runFamily(f, text)),
   );
-  const settled = await Promise.allSettled(calls);
 
-  const quotes: string[] = [];
-  const errors: string[] = [];
-  let totalInputTokens = 0;
-  let totalOutputTokens = 0;
-  let lastModel = "qwen-plus";
-
-  for (const r of settled) {
-    if (r.status === "fulfilled") {
-      const q = r.value.result.center_quote?.trim() ?? "";
-      if (q) quotes.push(q);
-      totalInputTokens += r.value.meta.input_tokens;
-      totalOutputTokens += r.value.meta.output_tokens;
-      lastModel = r.value.meta.model;
-    } else {
-      errors.push(
-        r.reason instanceof Error ? r.reason.message : String(r.reason),
-      );
-    }
-  }
-
-  const buckets = new Map<string, { quote: string; count: number }>();
-  for (const q of quotes) {
-    const key = bucketKey(q);
-    const existing = buckets.get(key);
-    if (existing) {
-      existing.count += 1;
-    } else {
-      buckets.set(key, { quote: q, count: 1 });
-    }
-  }
-  const votes = Array.from(buckets.values()).sort((a, b) => b.count - a.count);
-  const top = votes[0] ?? { quote: "", count: 0 };
+  // Joint consensus: both families strong AND same bucket
+  const allStrong = familyResults.every(
+    (f) => f.agreement_pct >= STRONG_THRESHOLD && f.total_samples > 0,
+  );
+  const allSameBucket =
+    familyResults.length > 0 &&
+    familyResults.every(
+      (f) => f.top_bucket_key === familyResults[0].top_bucket_key,
+    );
+  const jointStrong = allStrong && allSameBucket;
 
   return {
     result: {
-      votes,
-      top_quote: top.quote,
-      top_count: top.count,
-      total_samples: quotes.length,
-      agreement_pct:
-        quotes.length === 0 ? 0 : top.count / quotes.length,
-      errors,
+      families: familyResults,
+      joint_consensus: {
+        is_strong: jointStrong,
+        quote: jointStrong ? familyResults[0].top_quote : "",
+      },
     },
-    raw: { quotes, errors },
+    raw: { familyResults },
     meta: {
-      provider_id: CHEAP_PROVIDER_ID,
-      model: lastModel,
+      provider_id: "dual-family",
+      model: FAMILIES.map((f) => f.provider_id).join("+"),
       duration_ms: Date.now() - startedAt,
-      input_tokens: totalInputTokens,
-      output_tokens: totalOutputTokens,
-      samples: N_SAMPLES,
+      input_tokens: 0,
+      output_tokens: 0,
+      samples_per_family: N_SAMPLES_PER_FAMILY,
+      family_count: FAMILIES.length,
     },
   };
 }
