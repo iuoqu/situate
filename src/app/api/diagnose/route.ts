@@ -40,6 +40,7 @@ const MAX_TEXT_LEN = 50_000; // safe upper bound — typical flash fic is < 5K c
 interface Body {
   text: string;
   mode: DiagnosticMode;
+  provider?: string;
 }
 
 function parseBody(raw: unknown): Body | string {
@@ -50,7 +51,11 @@ function parseBody(raw: unknown): Body | string {
   if (obj.text.length > MAX_TEXT_LEN) return `text too long (> ${MAX_TEXT_LEN})`;
   const mode = obj.mode ?? "full";
   if (mode !== "full" && mode !== "partial") return `mode must be full | partial`;
-  return { text: obj.text, mode };
+  const provider = obj.provider;
+  if (provider !== undefined && typeof provider !== "string") {
+    return "provider must be a string when provided";
+  }
+  return { text: obj.text, mode, provider };
 }
 
 export async function POST(req: NextRequest) {
@@ -72,7 +77,7 @@ export async function POST(req: NextRequest) {
 
   // Step 3: diagnose
   try {
-    const result = await diagnoseSkeleton(parsed.text, parsed.mode);
+    const result = await diagnoseSkeleton(parsed.text, parsed.mode, parsed.provider);
     return NextResponse.json(result);
   } catch (err) {
     console.error("diagnose failed", err);
