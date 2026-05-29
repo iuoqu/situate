@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
+import { StoryBibleSidebar } from "@/components/bible/StoryBibleSidebar";
 import { Section1Hooks } from "@/components/template/Section1Hooks";
 import { SectionLocationPicker } from "@/components/template/SectionLocationPicker";
 import type { DraftSection, SupportedLanguage } from "@/db/schema";
@@ -351,6 +352,7 @@ export function TemplateEditor({
   }, [sections]);
 
   return (
+    <div style={pageWrapStyle}>
     <main style={mainStyle}>
       <header style={headerStyle}>
         <Link href="/write" style={backLinkStyle}>
@@ -543,6 +545,10 @@ export function TemplateEditor({
         )}
       </footer>
     </main>
+    <aside style={sidebarColStyle}>
+      <StoryBibleSidebar draftId={draftId} />
+    </aside>
+    </div>
   );
 }
 
@@ -636,10 +642,29 @@ function countWords(s: string): number {
 
 // ── styles ────────────────────────────────────────────────────────────────
 
+// pageWrapStyle = two-column shell. The editor occupies the centre
+// (max-width preserved), the Story Bible sidebar sits on the right.
+// At narrow widths (< 1100px) the sidebar collapses below the editor
+// rather than squeezing it.
+const pageWrapStyle: React.CSSProperties = {
+  display: "grid",
+  gridTemplateColumns: "minmax(0, 1fr) minmax(280px, 340px)",
+  gap: 32,
+  maxWidth: 1180,
+  margin: "0 auto",
+  padding: "0 28px",
+  alignItems: "start",
+};
+const sidebarColStyle: React.CSSProperties = {
+  position: "sticky",
+  top: 60,
+  paddingTop: 60,
+  paddingBottom: 120,
+};
 const mainStyle: React.CSSProperties = {
   maxWidth: 760,
-  margin: "0 auto",
-  padding: "60px 28px 120px",
+  margin: 0,
+  padding: "60px 0 120px",
   fontFamily: "system-ui, sans-serif",
   color: "#1a1a1a",
 };

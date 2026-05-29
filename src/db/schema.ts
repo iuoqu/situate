@@ -700,6 +700,222 @@ export const storyDrafts = pgTable(
   }),
 );
 
+// ─── Story Bible (0012) ───────────────────────────────────────────────────
+//
+// Six tables that hold the structured "brain" captured during writing.
+// Split by stability:
+//   - STABLE: entities, entity_name_renderings, relationships
+//   - METHOD-PLUGGABLE: story_units, postures, elisions
+//     (each carries `tradition_profile_id` text and uses text columns
+//     for the open value spaces — the tradition registry decides what
+//     strings are valid, no enum lock-in)
+//
+// All FK to story_drafts.id; bible travels with the draft. Submission
+// handoff snapshots the bible into submissions.submission_form jsonb
+// as an audit trail.
+
+export const entities = pgTable(
+  "entities",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    draftId: uuid("draft_id").notNull(),
+    canonicalName: text("canonical_name").notNull(),
+    entityType: text("entity_type").notNull(),
+    aliases: text("aliases")
+      .array()
+      .notNull()
+      .default(sql`ARRAY[]::text[]`),
+    attributes: jsonb("attributes").notNull().default(sql`'{}'::jsonb`),
+    isRealPerson: boolean("is_real_person"),
+    consentStatus: text("consent_status"),
+    createdAt: timestamp("created_at", { withTimezone: true })
+      .notNull()
+      .default(sql`now()`),
+    updatedAt: timestamp("updated_at", { withTimezone: true })
+      .notNull()
+      .default(sql`now()`),
+  },
+  (t) => ({
+    draftIdx: index("entities_draft_id_idx").on(t.draftId),
+    draftTypeIdx: index("entities_draft_type_idx").on(t.draftId, t.entityType),
+  }),
+);
+
+export const entityNameRenderings = pgTable(
+  "entity_name_renderings",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    entityId: uuid("entity_id").notNull(),
+    language: supportedLanguage("language").notNull(),
+    literal: text("literal"),
+    transposed: text("transposed"),
+    registerDefault: jsonb("register_default")
+      .notNull()
+      .default(sql`'{}'::jsonb`),
+    createdAt: timestamp("created_at", { withTimezone: true })
+      .notNull()
+      .default(sql`now()`),
+    updatedAt: timestamp("updated_at", { withTimezone: true })
+      .notNull()
+      .default(sql`now()`),
+  },
+  (t) => ({
+    uniqLang: uniqueIndex("entity_name_renderings_uniq_lang").on(
+      t.entityId,
+      t.language,
+    ),
+    entityIdx: index("entity_name_renderings_entity_id_idx").on(t.entityId),
+  }),
+);
+
+export const relationships = pgTable(
+  "relationships",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    draftId: uuid("draft_id").notNull(),
+    entityA: uuid("entity_a").notNull(),
+    entityB: uuid("entity_b").notNull(),
+    kind: text("kind").notNull(),
+    registerOverrides: jsonb("register_overrides")
+      .notNull()
+      .default(sql`'{}'::jsonb`),
+    notes: text("notes"),
+    createdAt: timestamp("created_at", { withTimezone: true })
+      .notNull()
+      .default(sql`now()`),
+    updatedAt: timestamp("updated_at", { withTimezone: true })
+      .notNull()
+      .default(sql`now()`),
+  },
+  (t) => ({
+    uniqEdge: uniqueIndex("relationships_uniq_edge").on(
+      t.draftId,
+      t.entityA,
+      t.entityB,
+      t.kind,
+    ),
+    draftIdx: index("relationships_draft_id_idx").on(t.draftId),
+  }),
+);
+
+export const storyUnits = pgTable(
+  "story_units",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    draftId: uuid("draft_id").notNull(),
+    traditionProfileId: text("tradition_profile_id").notNull(),
+    sectionId: text("section_id"),
+    unitType: text("unit_type").notNull(),
+    value: text("value"),
+    predicates: jsonb("predicates").notNull().default(sql`'{}'::jsonb`),
+    failureType: text("failure_type"),
+    createdAt: timestamp("created_at", { withTimezone: true })
+      .notNull()
+      .default(sql`now()`),
+    updatedAt: timestamp("updated_at", { withTimezone: true })
+      .notNull()
+      .default(sql`now()`),
+  },
+  (t) => ({
+    draftIdx: index("story_units_draft_id_idx").on(t.draftId),
+    draftSectionIdx: index("story_units_draft_section_idx").on(
+      t.draftId,
+      t.sectionId,
+    ),
+  }),
+);
+
+export const postures = pgTable(
+  "postures",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    draftId: uuid("draft_id").notNull(),
+    traditionProfileId: text("tradition_profile_id").notNull(),
+    subjectEntityId: uuid("subject_entity_id").notNull(),
+    anchorSectionId: text("anchor_section_id"),
+    anchorOffset: integer("anchor_offset"),
+    value: text("value").notNull(),
+    surfaceIntentPair: jsonb("surface_intent_pair")
+      .notNull()
+      .default(sql`'{}'::jsonb`),
+    expiresAnchorSectionId: text("expires_anchor_section_id"),
+    expiresAnchorOffset: integer("expires_anchor_offset"),
+    createdAt: timestamp("created_at", { withTimezone: true })
+      .notNull()
+      .default(sql`now()`),
+    updatedAt: timestamp("updated_at", { withTimezone: true })
+      .notNull()
+      .default(sql`now()`),
+  },
+  (t) => ({
+    draftIdx: index("postures_draft_id_idx").on(t.draftId),
+    subjectIdx: index("postures_subject_idx").on(t.draftId, t.subjectEntityId),
+  }),
+);
+
+export const elisions = pgTable(
+  "elisions",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    draftId: uuid("draft_id").notNull(),
+    sectionId: text("section_id").notNull(),
+    textSpanStart: integer("text_span_start").notNull(),
+    textSpanEnd: integer("text_span_end").notNull(),
+    resolutionType: text("resolution_type").notNull(),
+    resolvedEntityId: uuid("resolved_entity_id"),
+    notes: text("notes"),
+    createdAt: timestamp("created_at", { withTimezone: true })
+      .notNull()
+      .default(sql`now()`),
+    updatedAt: timestamp("updated_at", { withTimezone: true })
+      .notNull()
+      .default(sql`now()`),
+  },
+  (t) => ({
+    draftSectionIdx: index("elisions_draft_section_idx").on(
+      t.draftId,
+      t.sectionId,
+    ),
+  }),
+);
+
+// ─── Coaching events (0013) ───────────────────────────────────────────────
+//
+// Append-only log of diagnostic-engine activity. Shell table; the
+// AI-coach skeleton window owns the value space of `diagnoser`,
+// `scale`, `author_response`. All TEXT, no enum lock-in.
+
+export const coachingEvents = pgTable(
+  "coaching_events",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    draftId: uuid("draft_id").notNull(),
+    sectionId: text("section_id"),
+    traditionProfileId: text("tradition_profile_id").notNull(),
+    diagnoser: text("diagnoser").notNull(),
+    scale: text("scale").notNull(),
+    severityScore: smallint("severity_score"),
+    observation: text("observation"),
+    socraticQuestion: text("socratic_question"),
+    surfacedToAuthor: boolean("surfaced_to_author").notNull().default(false),
+    authorResponse: text("author_response"),
+    authorRespondedAt: timestamp("author_responded_at", { withTimezone: true }),
+    payload: jsonb("payload").notNull().default(sql`'{}'::jsonb`),
+    createdAt: timestamp("created_at", { withTimezone: true })
+      .notNull()
+      .default(sql`now()`),
+  },
+  (t) => ({
+    draftIdx: index("coaching_events_draft_id_idx").on(t.draftId),
+    draftSurfacedIdx: index("coaching_events_draft_surfaced_idx").on(
+      t.draftId,
+      t.surfacedToAuthor,
+      t.createdAt,
+    ),
+    diagnoserIdx: index("coaching_events_diagnoser_idx").on(t.diagnoser),
+  }),
+);
+
 export const waitlistRequests = pgTable(
   "waitlist_requests",
   {
@@ -777,6 +993,24 @@ export type PrincipleVerdict = (typeof principleVerdict.enumValues)[number];
 
 export type SubmissionStatus = (typeof submissionStatus.enumValues)[number];
 export type PublicationSection = (typeof publicationSection.enumValues)[number];
+
+// ─── Story Bible types (0012) ─────────────────────────────────────────────
+export type Entity = typeof entities.$inferSelect;
+export type NewEntity = typeof entities.$inferInsert;
+export type EntityNameRendering = typeof entityNameRenderings.$inferSelect;
+export type NewEntityNameRendering = typeof entityNameRenderings.$inferInsert;
+export type Relationship = typeof relationships.$inferSelect;
+export type NewRelationship = typeof relationships.$inferInsert;
+export type StoryUnit = typeof storyUnits.$inferSelect;
+export type NewStoryUnit = typeof storyUnits.$inferInsert;
+export type Posture = typeof postures.$inferSelect;
+export type NewPosture = typeof postures.$inferInsert;
+export type Elision = typeof elisions.$inferSelect;
+export type NewElision = typeof elisions.$inferInsert;
+
+// ─── Coaching events types (0013) ─────────────────────────────────────────
+export type CoachingEvent = typeof coachingEvents.$inferSelect;
+export type NewCoachingEvent = typeof coachingEvents.$inferInsert;
 export type EditionStatus = (typeof editionStatus.enumValues)[number];
 export type SupportedLanguage = (typeof supportedLanguage.enumValues)[number];
 export type TranslationMethod = (typeof translationMethod.enumValues)[number];
