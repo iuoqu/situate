@@ -50,15 +50,19 @@ export const DIAGNOSERS: Record<string, DiagnoserDefinition> = {
       // contrast pair specimens are named *_with_K.txt and *_no_K.txt
       positive_suffix: "_with_K.txt",
       negative_suffix: "_no_K.txt",
-      // K_present + K_implicit both count as "positive" for the binary
-      // pair contrast; K_absent is "negative". (K_implicit is a tolerated
-      // intermediate so the binary classification is generous to the
-      // model — it has to clearly say K_absent on the stripped versions.)
+      // Strict binarization: only K_present counts as "K is squarely
+      // here" (positive). K_implicit and K_absent both count as "K is
+      // not squarely here" (negative). The v0 classifier was generous
+      // (treated K_implicit as positive), which caused the first PDR
+      // experiment to score 6% — models reliably returned K_implicit
+      // on stripped specimens, so K_implicit had to belong to the
+      // "not present" side for the binary contrast to track the line
+      // the model actually draws.
       classify_judgment: (judgment) => {
         const j = judgment as Partial<StakesAbsentJudgment>;
-        if (j.verdict === "K_absent") return "negative";
-        if (j.verdict === "K_present" || j.verdict === "K_implicit")
-          return "positive";
+        if (j.verdict === "K_present") return "positive";
+        if (j.verdict === "K_implicit" || j.verdict === "K_absent")
+          return "negative";
         return "ambiguous";
       },
     },
