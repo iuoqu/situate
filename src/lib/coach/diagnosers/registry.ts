@@ -5,6 +5,17 @@ import {
   type CausalSpineJudgment,
 } from "./causal_spine";
 import {
+  DIAGNOSER_ID as ECONOMY_ID,
+  STATUS as ECONOMY_STATUS,
+  runEconomy,
+  type EconomyJudgment,
+} from "./economy";
+import {
+  DIAGNOSER_ID as INFERRED_INTENT_ID,
+  STATUS as INFERRED_INTENT_STATUS,
+  runInferredIntent,
+} from "./inferred_intent";
+import {
   DIAGNOSER_ID as INTENT_REALIZATION_ID,
   STATUS as INTENT_REALIZATION_STATUS,
   runIntentRealization,
@@ -127,6 +138,39 @@ export const DIAGNOSERS: Record<string, DiagnoserDefinition> = {
     pair_axis: null, // contrast pairs don't apply — axis is per-call
     requires_intent: true,
     run: runIntentRealization,
+  },
+  [INFERRED_INTENT_ID]: {
+    id: INFERRED_INTENT_ID,
+    display_name: "inferred_intent",
+    status: INFERRED_INTENT_STATUS,
+    description:
+      "Independently reads the prose and reports the AI-inferred intent (K, transformation, setting, center of gravity, subtext signal). No verdict tier — it's an extractor, not a judge.",
+    pair_axis: null,
+    requires_intent: false,
+    run: runInferredIntent,
+  },
+  [ECONOMY_ID]: {
+    id: ECONOMY_ID,
+    display_name: "economy",
+    status: ECONOMY_STATUS,
+    description:
+      "Detects whether every element in the prose earns its place. Handles device-style repetition (overprotest, ritual) as load-bearing, not slack.",
+    pair_axis: {
+      // economy contrast pairs not yet authored; placeholder suffixes
+      // means /api/dev/diagnoser-pair-test will return "no pairs found"
+      // until the corpus exists.
+      positive_suffix: "_taut.txt",
+      negative_suffix: "_slack.txt",
+      classify_judgment: (judgment) => {
+        const j = judgment as Partial<EconomyJudgment>;
+        if (j.verdict === "economy_present") return "positive";
+        if (j.verdict === "economy_implicit" || j.verdict === "economy_absent")
+          return "negative";
+        return "ambiguous";
+      },
+    },
+    requires_intent: false,
+    run: runEconomy,
   },
 };
 
