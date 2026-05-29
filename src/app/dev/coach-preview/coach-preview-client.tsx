@@ -731,10 +731,29 @@ function DiagnoserCard({
   );
 }
 
-// ─── Center consensus card (multi-sample vote distribution) ───────────────
+// ─── Center consensus card (dual-family multi-sample vote distribution) ───
+
+interface FamilyConsensus {
+  provider_id: string;
+  display_name: string;
+  votes: Array<{ quote: string; count: number; bucket_key: string }>;
+  top_quote: string;
+  top_count: number;
+  total_samples: number;
+  agreement_pct: number;
+  top_bucket_key: string;
+  errors: string[];
+}
+
+interface CenterConsensusJudgment {
+  families: FamilyConsensus[];
+  joint_consensus: {
+    is_strong: boolean;
+    quote: string;
+  };
+}
 
 function CenterConsensusCard({ result }: { result: DiagnoserResult }) {
-  // The result has by_provider keyed by "__internal__"
   const cell = Object.values(result.by_provider)[0];
   if (!cell) return null;
   if (cell.error) {
@@ -753,32 +772,19 @@ function CenterConsensusCard({ result }: { result: DiagnoserResult }) {
       </div>
     );
   }
-  const j = (cell.judgment ?? {}) as {
-    votes?: Array<{ quote: string; count: number }>;
-    top_quote?: string;
-    top_count?: number;
-    total_samples?: number;
-    agreement_pct?: number;
-    errors?: string[];
-  };
-  const votes = j.votes ?? [];
-  const totalSamples = j.total_samples ?? 0;
-  const agreementPct = j.agreement_pct ?? 0;
-  const topCount = j.top_count ?? 0;
+  const j = (cell.judgment ?? {}) as CenterConsensusJudgment;
+  const families = j.families ?? [];
+  const joint = j.joint_consensus ?? { is_strong: false, quote: "" };
 
-  // Strong consensus when >=5/7 (~71%), split when scattered
-  const strong = agreementPct >= 0.65 && totalSamples >= 4;
-  const tierColor = strong ? "#5e8a4a" : agreementPct >= 0.4 ? "#a07a30" : "#a04040";
-  const banner = strong
-    ? `强共识 ${topCount}/${totalSamples}`
-    : agreementPct >= 0.4
-      ? `软共识 ${topCount}/${totalSamples}`
-      : `无共识（模型在 ${votes.length} 个候选间分散）`;
+  const headerColor = joint.is_strong ? "#5e8a4a" : "#a07a30";
+  const headerLabel = joint.is_strong
+    ? "双家族联合共识"
+    : "无联合共识（两家族分歧或单家族不稳）";
 
   return (
     <div style={{
       border: "1px solid #e0dccb",
-      borderLeft: `4px solid ${tierColor}`,
+      borderLeft: `4px solid ${headerColor}`,
       borderRadius: 4,
       padding: "14px 16px",
       background: "#fff",
@@ -787,38 +793,67 @@ function CenterConsensusCard({ result }: { result: DiagnoserResult }) {
         <h3 style={{ margin: 0, fontSize: 15, fontFamily: 'Georgia, "Times New Roman", serif', fontWeight: 400 }}>
           center_consensus
         </h3>
-        <span style={{ fontSize: 12, color: tierColor, fontWeight: 600 }}>{banner}</span>
+        <span style={{ fontSize: 12, color: headerColor, fontWeight: 600 }}>
+          {headerLabel}
+        </span>
         <span style={{ fontSize: 11, color: "#888", marginLeft: "auto" }}>
-          qwen-plus × {totalSamples} samples, temp 0.9
+          dual-family multi-sample, temp 0.9
         </span>
       </div>
-      {strong && j.top_quote && (
-        <div style={{ marginTop: 10, padding: "10px 14px", background: "#f5f8f1", border: "1px solid #d3e0c7", borderRadius: 4, fontFamily: 'Georgia, "Times New Roman", serif', fontSize: 14, lineHeight: 1.6, color: "#2d4a1f" }}>
-          <em>"{j.top_quote}"</em>
+
+      {joint.is_strong && joint.quote && (
+        <div style={{
+          marginTop: 10,
+          padding: "10px 14px",
+          background: "#f5f8f1",
+          border: "1px solid #d3e0c7",
+          borderRadius: 4,
+          fontFamily: 'Georgia, "Times New Roman", serif',
+          fontSize: 14,
+          lineHeight: 1.6,
+          color: "#2d4a1f",
+        }}>
+          <em>"{joint.quote}"</em>
         </div>
       )}
-      {!strong && votes.length > 0 && (
-        <div style={{ marginTop: 10 }}>
-          <div style={{ fontSize: 12, color: "#888", marginBottom: 6 }}>
-            投票分布
-          </div>
-          <ul style={{ listStyle: "none", padding: 0, margin: 0, display: "flex", flexDirection: "column", gap: 5 }}>
-            {votes.map((v, i) => (
-              <li key={i} style={{ display: "flex", gap: 10, alignItems: "baseline", fontSize: 13, lineHeight: 1.5 }}>
-                <span style={{ color: "#888", fontWeight: 600, minWidth: 36 }}>
-                  {v.count}/{totalSamples}
-                </span>
-                <em style={{ color: "#444", fontFamily: 'Georgia, "Times New Roman", serif' }}>
-                  "{v.quote}"
-                </em>
-              </li>
-            ))}
-          </ul>
-        </div>
-      )}
-      {j.errors && j.errors.length > 0 && (
-        <div style={{ marginTop: 8, fontSize: 11, color: "#a07a30" }}>
-          {j.errors.length} sample(s) failed: {j.errors[0]}
+
+      <div style={{ marginTop: 14, display: "flex", flexDirection: "column", gap: 12 }}>
+        {families.map((f) => (
+          <FamilyBlock key={f.provider_id} family={f} />
+        ))}
+      </div>
+    </div>
+  );
+}
+
+function FamilyBlock({ family: f }: { family: FamilyConsensus }) {
+  const strong = f.agreement_pct >= 0.65 && f.total_samples >= 4;
+  const color = strong ? "#5e8a4a" : f.agreement_pct >= 0.4 ? "#a07a30" : "#a04040";
+  return (
+    <div style={{ borderTop: "1px solid #f0ece0", paddingTop: 10 }}>
+      <div style={{ display: "flex", alignItems: "baseline", gap: 8, fontSize: 12 }}>
+        <strong style={{ color }}>{f.display_name}</strong>
+        <span style={{ color: "#888" }}>
+          {f.top_count}/{f.total_samples} on top pick
+          {f.errors.length > 0 && ` · ${f.errors.length} failed`}
+        </span>
+      </div>
+      {f.votes.length > 0 ? (
+        <ul style={{ listStyle: "none", padding: 0, margin: "6px 0 0", display: "flex", flexDirection: "column", gap: 4 }}>
+          {f.votes.map((v, i) => (
+            <li key={i} style={{ display: "flex", gap: 10, alignItems: "baseline", fontSize: 12, lineHeight: 1.5 }}>
+              <span style={{ color: "#888", fontWeight: 600, minWidth: 36 }}>
+                {v.count}/{f.total_samples}
+              </span>
+              <em style={{ color: "#444", fontFamily: 'Georgia, "Times New Roman", serif' }}>
+                "{v.quote}"
+              </em>
+            </li>
+          ))}
+        </ul>
+      ) : (
+        <div style={{ fontSize: 12, color: "#a04040", marginTop: 6 }}>
+          all samples failed: {f.errors[0] ?? "?"}
         </div>
       )}
     </div>

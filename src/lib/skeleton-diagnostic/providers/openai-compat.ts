@@ -273,9 +273,9 @@ export const QWEN_PROVIDER = createOpenAICompatProvider({
 });
 
 /**
- * Qwen Plus — the cheap-tier sibling. Used as the internal sampler for
- * the center_consensus diagnoser (multi-sample / high-temperature
- * structural robustness check). Roughly 1/20 the cost of qwen-max.
+ * Qwen Plus — the cheap-tier sibling. Available as a UI option for
+ * any of the diagnosers, though no longer used internally by
+ * center_consensus.
  */
 export const QWEN_PLUS_PROVIDER = createOpenAICompatProvider({
   id: "alibaba:qwen-plus",
@@ -284,4 +284,36 @@ export const QWEN_PLUS_PROVIDER = createOpenAICompatProvider({
   apiKeyEnv: "DASHSCOPE_API_KEY",
   baseURL: "https://dashscope.aliyuncs.com/compatible-mode/v1",
   model: "qwen-plus",
+});
+
+/**
+ * Qwen Flash — cheap text-tier model. Used as one of the two families
+ * inside center_consensus (multi-sample structural robustness check).
+ * Roughly 1/8 the cost of qwen-plus.
+ */
+export const QWEN_FLASH_PROVIDER = createOpenAICompatProvider({
+  id: "alibaba:qwen-flash",
+  displayName: "Qwen Flash",
+  costNote: "~$0.05 / $0.20 per 1M",
+  apiKeyEnv: "DASHSCOPE_API_KEY",
+  baseURL: "https://dashscope.aliyuncs.com/compatible-mode/v1",
+  model: "qwen-flash",
+});
+
+/**
+ * DeepSeek V4 Flash — the cheapest production-grade DeepSeek model
+ * with strong Chinese narrative reasoning. Used as the second family
+ * inside center_consensus, providing cross-family bias defense
+ * against qwen-flash's sticky preferences.
+ *
+ * NOTE: V4 defaults to thinking mode; the center_consensus diagnoser
+ * disables it via extraBody when calling.
+ */
+export const DEEPSEEK_V4_FLASH_PROVIDER = createOpenAICompatProvider({
+  id: "deepseek:deepseek-v4-flash",
+  displayName: "DeepSeek V4 Flash",
+  costNote: "$0.14 / $0.28 per 1M",
+  apiKeyEnv: "DEEPSEEK_API_KEY",
+  baseURL: "https://api.deepseek.com",
+  model: "deepseek-v4-flash",
 });

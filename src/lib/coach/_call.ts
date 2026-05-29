@@ -57,6 +57,13 @@ export interface FocusedCallOpts {
    * see whether the model converges on the same answer under noise.
    */
   temperature?: number;
+  /**
+   * Provider-specific extra body fields, merged into the request. Used
+   * e.g. to disable DeepSeek V4's thinking mode for fast multi-sample
+   * loops (default is thinking-on, which adds latency we don't need
+   * for one-sentence quote tasks).
+   */
+  extraBody?: Record<string, unknown>;
 }
 
 export async function focusedCall<T>(
@@ -149,6 +156,7 @@ async function callOpenAICompat<T>(
     model: config.model,
     max_tokens: MAX_TOKENS,
     ...(opts.temperature !== undefined ? { temperature: opts.temperature } : {}),
+    ...(opts.extraBody ?? {}),
     messages: [
       { role: "system", content: opts.systemPrompt },
       { role: "user", content: composeUserMessage(opts.text, opts.intent) },
@@ -251,6 +259,20 @@ function providerIdToOpenAICompatConfig(id: string): {
       baseURL: "https://api.deepseek.com",
       model: "deepseek-chat",
       apiKeyEnv: "DEEPSEEK_API_KEY",
+    };
+  }
+  if (id === "deepseek:deepseek-v4-flash") {
+    return {
+      baseURL: "https://api.deepseek.com",
+      model: "deepseek-v4-flash",
+      apiKeyEnv: "DEEPSEEK_API_KEY",
+    };
+  }
+  if (id === "alibaba:qwen-flash") {
+    return {
+      baseURL: "https://dashscope.aliyuncs.com/compatible-mode/v1",
+      model: "qwen-flash",
+      apiKeyEnv: "DASHSCOPE_API_KEY",
     };
   }
   if (id === "alibaba:qwen3-max") {
