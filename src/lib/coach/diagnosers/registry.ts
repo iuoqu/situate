@@ -5,6 +5,11 @@ import {
   type CausalSpineJudgment,
 } from "./causal_spine";
 import {
+  DIAGNOSER_ID as INTENT_REALIZATION_ID,
+  STATUS as INTENT_REALIZATION_STATUS,
+  runIntentRealization,
+} from "./intent_realization";
+import {
   DIAGNOSER_ID as STAKES_ABSENT_ID,
   STATUS as STAKES_ABSENT_STATUS,
   runStakesAbsent,
@@ -42,10 +47,14 @@ export interface DiagnoserDefinition {
     classify_judgment: (judgment: unknown) => "positive" | "negative" | "ambiguous";
   } | null;
   /**
-   * Runs the diagnoser against one specimen with one provider. Optional
-   * `intent` lets the caller supply an author-declared intent block; the
-   * diagnoser will compare prose against intent in its evidence output.
+   * When true: this diagnoser only runs when an intent block is
+   * supplied. Routes should skip it otherwise. Its `run` function
+   * receives the intent as the third argument. The other diagnosers
+   * (stakes_absent, causal_spine) stay strictly per-axis and do NOT
+   * receive intent — they would only be confused by it.
    */
+  requires_intent: boolean;
+  /** Runs the diagnoser against one specimen with one provider. */
   run: (
     text: string,
     providerId?: string,
@@ -80,6 +89,7 @@ export const DIAGNOSERS: Record<string, DiagnoserDefinition> = {
         return "ambiguous";
       },
     },
+    requires_intent: false,
     run: runStakesAbsent,
   },
   [CAUSAL_SPINE_ID]: {
@@ -105,7 +115,18 @@ export const DIAGNOSERS: Record<string, DiagnoserDefinition> = {
         return "ambiguous";
       },
     },
+    requires_intent: false,
     run: runCausalSpine,
+  },
+  [INTENT_REALIZATION_ID]: {
+    id: INTENT_REALIZATION_ID,
+    display_name: "intent_realization",
+    status: INTENT_REALIZATION_STATUS,
+    description:
+      "Given an author-declared intent block and prose, judges how completely the prose realizes the declared intent. Requires intent.",
+    pair_axis: null, // contrast pairs don't apply — axis is per-call
+    requires_intent: true,
+    run: runIntentRealization,
   },
 };
 

@@ -37,6 +37,7 @@ interface PreviewResponse {
   results: Record<string, DiagnoserResult>;
   providers_run: string[];
   diagnoser_ids: string[];
+  skipped_diagnoser_ids?: string[];
   intent_used: string | null;
 }
 
@@ -526,8 +527,13 @@ function CoachPanel({
         </h2>
         {response.intent_used && (
           <span style={{ fontSize: 12, color: "#5e8a4a" }}>
-            (compared against declared intent — see evidence field for
-            "吻合 / 部分吻合 / 未吻合")
+            (intent_realization diagnoser included)
+          </span>
+        )}
+        {response.skipped_diagnoser_ids && response.skipped_diagnoser_ids.length > 0 && (
+          <span style={{ fontSize: 12, color: "#a07a30" }}>
+            (skipped {response.skipped_diagnoser_ids.join(", ")} — no intent
+            supplied)
           </span>
         )}
       </div>
@@ -699,14 +705,35 @@ function PerProviderTable({
           const verdict = String(j.verdict ?? "?");
           const confidence =
             typeof j.confidence === "number" ? j.confidence.toFixed(2) : "?";
-          const evidence = String(j.evidence ?? j.reorder_test ?? j.who ?? "");
+          const realized = typeof j.realized === "string" ? j.realized : "";
+          const unrealized =
+            typeof j.unrealized === "string" ? j.unrealized : "";
+          const baseEvidence = String(
+            j.evidence ?? j.reorder_test ?? j.who ?? "",
+          );
           return (
             <tr key={pid} style={{ borderTop: "1px solid #eee" }}>
               <td style={tdSmall}>{provName}</td>
               <td style={tdSmall}>{verdict}</td>
               <td style={tdSmall}>{confidence}</td>
               <td style={{ ...tdSmall, color: "#555", lineHeight: 1.5 }}>
-                {evidence}
+                {realized && (
+                  <div>
+                    <span style={{ color: "#5e8a4a", fontWeight: 600 }}>
+                      realized:
+                    </span>{" "}
+                    {realized}
+                  </div>
+                )}
+                {unrealized && (
+                  <div>
+                    <span style={{ color: "#a04040", fontWeight: 600 }}>
+                      unrealized:
+                    </span>{" "}
+                    {unrealized}
+                  </div>
+                )}
+                {baseEvidence && <div>{baseEvidence}</div>}
               </td>
             </tr>
           );
@@ -722,15 +749,19 @@ function PerProviderTable({
  * Verdict strings are <prefix>_<tier>. Extract the tier suffix.
  * stakes_absent: K_present / K_implicit / K_absent
  * causal_spine: causal_present / causal_implicit / causal_absent
- * Future diagnosers will follow the same convention.
+ * intent_realization: intent_implemented / intent_partial / intent_unimplemented
+ * Tier semantics map: "all good" / "in between" / "missing".
  */
 function extractTier(cell: CellResult | undefined): Tier {
   if (!cell || cell.error) return "unknown";
   const j = (cell.judgment ?? {}) as Record<string, unknown>;
   const verdict = String(j.verdict ?? "");
-  if (verdict.endsWith("_present")) return "present";
-  if (verdict.endsWith("_implicit")) return "implicit";
-  if (verdict.endsWith("_absent")) return "absent";
+  if (verdict.endsWith("_present") || verdict.endsWith("_implemented"))
+    return "present";
+  if (verdict.endsWith("_implicit") || verdict.endsWith("_partial"))
+    return "implicit";
+  if (verdict.endsWith("_absent") || verdict.endsWith("_unimplemented"))
+    return "absent";
   return "unknown";
 }
 
@@ -778,7 +809,9 @@ function tierToAction(diagnoserId: string, tier: Tier): CoachAction {
           ? "承担明确在场。这一段读者知道这件事压在谁身上。"
           : diagnoserId === "causal_spine"
             ? "事件之间因果清晰。这一段不可重排。"
-            : "axis 在位。",
+            : diagnoserId === "intent_realization"
+              ? "你声明要做的，prose 里都做到了。"
+              : "axis 在位。",
       quotes: [],
       question: null,
     };
@@ -790,14 +823,18 @@ function tierToAction(diagnoserId: string, tier: Tier): CoachAction {
           ? "承担隐含——意识在场，但没被推到台前。"
           : diagnoserId === "causal_spine"
             ? "因果是隐含的——事件并置暗示了链条。"
-            : "axis 隐含。",
+            : diagnoserId === "intent_realization"
+              ? "声明与实现部分对齐——一些元素落地了，另一些被改写或缺失。"
+              : "axis 隐含。",
       quotes: [],
       question:
         diagnoserId === "stakes_absent"
           ? "考虑：是有意留白，还是该让承担落点更可见？看展开内的 evidence 字段——模型指认了它落在哪一句。"
           : diagnoserId === "causal_spine"
             ? "考虑：这是中文文学的常态写法，还是因果链断了一节？看展开内的 reorder_test——模型说哪两个事件不可换位。"
-            : "考虑：是有意，还是该让 axis 更显。",
+            : diagnoserId === "intent_realization"
+              ? "考虑：被改写的部分是更好的版本，还是想拉回声明？看展开内的 realized 和 unrealized 字段——模型分别指出了什么落地、什么没落地。"
+              : "考虑：是有意，还是该让 axis 更显。",
     };
   }
   if (tier === "absent") {
@@ -807,14 +844,18 @@ function tierToAction(diagnoserId: string, tier: Tier): CoachAction {
           ? "纯事件流。这一段读起来像观察、不像故事。"
           : diagnoserId === "causal_spine"
             ? "事件平行——可以重排而不损意义。"
-            : "axis 缺失。",
+            : diagnoserId === "intent_realization"
+              ? "声明的意图和 prose 写的几乎是两个故事。"
+              : "axis 缺失。",
       quotes: [],
       question:
         diagnoserId === "stakes_absent"
           ? "根本问题：这件事，对谁是一件事？"
           : diagnoserId === "causal_spine"
             ? "根本问题：事件 B 之所以发生，是因为事件 A 吗？还是 A 和 B 只是同时被记录？"
-            : "根本问题：这个 axis 是不是该在这里？",
+            : diagnoserId === "intent_realization"
+              ? "根本问题：保留 prose 当下的方向，还是回到声明的意图？两者都合法，但要选。"
+              : "根本问题：这个 axis 是不是该在这里？",
     };
   }
   return {
