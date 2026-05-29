@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { Fragment, useCallback, useEffect, useMemo, useRef, useState } from "react";
 
 import { clearDevToken, saveDevToken } from "./actions";
 
@@ -1395,6 +1395,10 @@ export function EvalClient({ initialTokenSet }: { initialTokenSet: boolean }) {
         runProviderIds={runProviderIds}
         setRunProviderIds={setRunProviderIds}
       />
+      <DiagnoserExperimentSection
+        active={tokenSet && !!specimens && providers.length > 0}
+        providers={providers}
+      />
       <ReviseSection
         active={tokenSet && !!specimens}
         results={results}
@@ -1404,6 +1408,354 @@ export function EvalClient({ initialTokenSet }: { initialTokenSet: boolean }) {
       />
       <GenerateSection active={tokenSet && !!specimens} specimens={specimens ?? []} />
     </>
+  );
+}
+
+// ─── Diagnoser experiments section ──────────────────────────────────────
+
+interface DiagnoserInfo {
+  id: string;
+  display_name: string;
+  status: "experimental" | "production";
+  description: string;
+  supports_pair_test: boolean;
+}
+
+interface PairResultCell {
+  judgment: unknown;
+  classified: "positive" | "negative" | "ambiguous";
+  correct: boolean;
+  error?: string;
+}
+
+interface PairTestRow {
+  pair_id: string;
+  positive_path: string;
+  negative_path: string;
+  positive: Record<string, PairResultCell>;
+  negative: Record<string, PairResultCell>;
+}
+
+interface PDRReport {
+  diagnoser_id: string;
+  by_provider: Record<
+    string,
+    {
+      total_pairs: number;
+      distinguished: number;
+      rate: number;
+      pair_results: Array<{
+        pair_id: string;
+        positive_correct: boolean;
+        negative_correct: boolean;
+        distinguished: boolean;
+        positive_classified: "positive" | "negative" | "ambiguous";
+        negative_classified: "positive" | "negative" | "ambiguous";
+      }>;
+    }
+  >;
+  overall_rate: number;
+  total_pairs: number;
+  providers_run: string[];
+}
+
+function DiagnoserExperimentSection({
+  active,
+  providers,
+}: {
+  active: boolean;
+  providers: ProviderInfo[];
+}) {
+  const [diagnosers, setDiagnosers] = useState<DiagnoserInfo[]>([]);
+  const [selectedDiagnoser, setSelectedDiagnoser] = useState<string>("");
+  const [selectedProviders, setSelectedProviders] = useState<string[]>([]);
+  const [running, setRunning] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const [report, setReport] = useState<PDRReport | null>(null);
+  const [rows, setRows] = useState<PairTestRow[]>([]);
+
+  // Fetch diagnoser list
+  useEffect(() => {
+    if (!active) return;
+    fetch("/api/dev/run-diagnoser", { credentials: "same-origin" })
+      .then((r) => (r.ok ? r.json() : Promise.reject(new Error(`HTTP ${r.status}`))))
+      .then((data: { diagnosers: DiagnoserInfo[] }) => {
+        setDiagnosers(data.diagnosers);
+        if (data.diagnosers.length > 0 && !selectedDiagnoser) {
+          setSelectedDiagnoser(data.diagnosers[0].id);
+        }
+      })
+      .catch((e) => setError(e instanceof Error ? e.message : String(e)));
+  }, [active, selectedDiagnoser]);
+
+  // Default to all available providers
+  useEffect(() => {
+    if (selectedProviders.length === 0 && providers.length > 0) {
+      setSelectedProviders(providers.filter((p) => p.available).map((p) => p.id));
+    }
+  }, [providers, selectedProviders.length]);
+
+  const currentDiagnoser = diagnosers.find((d) => d.id === selectedDiagnoser);
+
+  function toggleProvider(pid: string) {
+    setSelectedProviders((prev) =>
+      prev.includes(pid) ? prev.filter((x) => x !== pid) : [...prev, pid],
+    );
+  }
+
+  async function runPairTest() {
+    setError(null);
+    setReport(null);
+    setRows([]);
+    setRunning(true);
+    try {
+      const resp = await fetch("/api/dev/diagnoser-pair-test", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          diagnoser_id: selectedDiagnoser,
+          providers: selectedProviders,
+        }),
+        credentials: "same-origin",
+      });
+      if (!resp.ok) {
+        const text = await resp.text();
+        throw new Error(`HTTP ${resp.status}: ${text.slice(0, 200)}`);
+      }
+      const data = (await resp.json()) as { report: PDRReport; rows: PairTestRow[] };
+      setReport(data.report);
+      setRows(data.rows);
+    } catch (e) {
+      setError(e instanceof Error ? e.message : String(e));
+    } finally {
+      setRunning(false);
+    }
+  }
+
+  return (
+    <Section title="Diagnoser experiments" disabled={!active}>
+      <p style={mutedStyle}>
+        Run a focused diagnoser (small per-axis prompt) against its contrast-pair
+        specimens. Output is a Pair Distinguish Rate (PDR) per provider — what
+        fraction of pairs the model correctly distinguishes positive from negative.
+        Used to decide whether the diagnoser is ready for production.
+      </p>
+
+      <div style={{ display: "flex", gap: 12, flexWrap: "wrap", marginBottom: 14 }}>
+        <Field label="diagnoser">
+          <select
+            value={selectedDiagnoser}
+            onChange={(e) => setSelectedDiagnoser(e.target.value)}
+            disabled={running}
+            style={{ ...inputStyle, minWidth: 280 }}
+          >
+            {diagnosers.map((d) => (
+              <option key={d.id} value={d.id} disabled={!d.supports_pair_test}>
+                {d.display_name} ({d.status}) — {d.description.slice(0, 60)}
+              </option>
+            ))}
+          </select>
+        </Field>
+      </div>
+
+      <div style={{ marginBottom: 14 }}>
+        <div style={{ fontSize: 11, textTransform: "uppercase", letterSpacing: 1.2, color: "#665", marginBottom: 6 }}>
+          providers
+        </div>
+        <div style={{ display: "flex", flexDirection: "column", gap: 4 }}>
+          {providers.map((p) => (
+            <label
+              key={p.id}
+              style={{
+                display: "flex",
+                gap: 8,
+                fontSize: 13,
+                color: p.available ? "#1a1a1a" : "#999",
+                cursor: p.available && !running ? "pointer" : "not-allowed",
+              }}
+            >
+              <input
+                type="checkbox"
+                checked={selectedProviders.includes(p.id)}
+                onChange={() => toggleProvider(p.id)}
+                disabled={!p.available || running}
+              />
+              <span style={{ fontFamily: "monospace", fontSize: 11.5, color: "#666", minWidth: 220 }}>
+                {p.id}
+              </span>
+              <span style={{ minWidth: 160 }}>{p.displayName}</span>
+            </label>
+          ))}
+        </div>
+      </div>
+
+      <div style={{ marginBottom: 14 }}>
+        <button
+          onClick={runPairTest}
+          disabled={!active || running || selectedProviders.length === 0 || !currentDiagnoser?.supports_pair_test}
+          style={btnPrimary}
+        >
+          {running ? "running…" : `run pair test (${selectedProviders.length} providers)`}
+        </button>
+        {currentDiagnoser?.supports_pair_test === false && (
+          <span style={{ ...mutedStyle, marginLeft: 12 }}>
+            this diagnoser doesn&apos;t support pair tests
+          </span>
+        )}
+      </div>
+
+      {error && <ErrorBox text={error} />}
+
+      {report && (
+        <div style={{ marginBottom: 18 }}>
+          <SubSection title="Pair Distinguish Rate">
+            <div style={{ ...proposalCard, background: "#fafaf7" }}>
+              <div style={{ fontSize: 13, marginBottom: 8 }}>
+                <strong>overall PDR</strong> {(report.overall_rate * 100).toFixed(0)}%{" "}
+                <span style={{ color: "#666" }}>
+                  (averaged across {report.providers_run.length} providers, {report.total_pairs} pairs)
+                </span>
+                {report.overall_rate >= 0.7 && (
+                  <span style={{ color: "#2a5230", marginLeft: 12 }}>✓ ready for production</span>
+                )}
+                {report.overall_rate < 0.7 && (
+                  <span style={{ color: "#a05300", marginLeft: 12 }}>
+                    ⚠ below 70% — diagnoser needs more work
+                  </span>
+                )}
+              </div>
+              <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 13 }}>
+                <thead>
+                  <tr style={{ borderBottom: "1px solid #ddd", textAlign: "left", color: "#666" }}>
+                    <th style={{ ...th, fontSize: 11 }}>provider</th>
+                    <th style={{ ...th, fontSize: 11 }}>distinguished</th>
+                    <th style={{ ...th, fontSize: 11 }}>PDR</th>
+                    <th style={{ ...th, fontSize: 11 }}>per-pair detail</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {report.providers_run.map((pid) => {
+                    const r = report.by_provider[pid];
+                    if (!r) return null;
+                    const ratePct = (r.rate * 100).toFixed(0);
+                    return (
+                      <tr key={pid} style={{ borderBottom: "1px solid #f0ecdf" }}>
+                        <td style={{ ...td, fontFamily: "monospace", fontSize: 11.5 }}>
+                          {shortProviderName(pid, providers)}
+                        </td>
+                        <td style={td}>
+                          {r.distinguished}/{r.total_pairs}
+                        </td>
+                        <td style={{ ...td, fontWeight: 600, color: r.rate >= 0.7 ? "#2a5230" : "#b00020" }}>
+                          {ratePct}%
+                        </td>
+                        <td style={{ ...td, fontSize: 11.5 }}>
+                          {r.pair_results.map((p) => (
+                            <span
+                              key={p.pair_id}
+                              title={`${p.pair_id}: pos=${p.positive_classified}, neg=${p.negative_classified}`}
+                              style={{
+                                display: "inline-block",
+                                padding: "1px 6px",
+                                margin: "1px 2px",
+                                borderRadius: 3,
+                                background: p.distinguished ? "#e6f0e3" : "#fce9e9",
+                                color: p.distinguished ? "#2a5230" : "#7c2020",
+                              }}
+                            >
+                              {p.pair_id} {p.distinguished ? "✓" : "✗"}
+                            </span>
+                          ))}
+                        </td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
+            </div>
+          </SubSection>
+
+          <SubSection title="Per-pair × per-provider judgments">
+            <div style={{ fontSize: 11.5, overflowX: "auto" }}>
+              <table style={{ width: "100%", borderCollapse: "collapse" }}>
+                <thead>
+                  <tr style={{ borderBottom: "1px solid #ddd", color: "#666", textAlign: "left" }}>
+                    <th style={th}>pair</th>
+                    <th style={th}>side</th>
+                    {report.providers_run.map((pid) => (
+                      <th key={pid} style={th}>
+                        {shortProviderName(pid, providers)}
+                      </th>
+                    ))}
+                  </tr>
+                </thead>
+                <tbody>
+                  {rows.map((row) => (
+                    <Fragment key={row.pair_id}>
+                      <tr style={{ borderBottom: "1px solid #f0ecdf" }}>
+                        <td rowSpan={2} style={{ ...td, fontFamily: "monospace", verticalAlign: "top" }}>
+                          {row.pair_id}
+                        </td>
+                        <td style={{ ...td, color: "#2a5230" }}>+</td>
+                        {report.providers_run.map((pid) => {
+                          const c = row.positive[pid];
+                          return (
+                            <td key={pid} style={td}>
+                              {renderCell(c, "positive")}
+                            </td>
+                          );
+                        })}
+                      </tr>
+                      <tr style={{ borderBottom: "1px solid #f0ecdf" }}>
+                        <td style={{ ...td, color: "#b00020" }}>−</td>
+                        {report.providers_run.map((pid) => {
+                          const c = row.negative[pid];
+                          return (
+                            <td key={pid} style={td}>
+                              {renderCell(c, "negative")}
+                            </td>
+                          );
+                        })}
+                      </tr>
+                    </Fragment>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          </SubSection>
+        </div>
+      )}
+    </Section>
+  );
+}
+
+function renderCell(
+  c: PairResultCell | undefined,
+  expected: "positive" | "negative",
+): React.ReactNode {
+  if (!c) return <span style={{ color: "#bbb" }}>—</span>;
+  if (c.error) {
+    return (
+      <span style={{ color: "#a05300" }} title={c.error}>
+        ERR
+      </span>
+    );
+  }
+  const j = c.judgment as { verdict?: string; confidence?: number; who?: string } | null;
+  const verdict = j?.verdict ?? "?";
+  const conf = typeof j?.confidence === "number" ? ` ${j.confidence.toFixed(2)}` : "";
+  const correct = c.classified === expected;
+  return (
+    <span
+      style={{
+        color: correct ? "#2a5230" : "#b00020",
+        fontWeight: correct ? 600 : 400,
+      }}
+      title={`classified: ${c.classified}\nexpected: ${expected}\nwho: ${j?.who ?? "—"}`}
+    >
+      {verdict}
+      <span style={{ color: "#666", fontWeight: 400 }}>{conf}</span>
+    </span>
   );
 }
 

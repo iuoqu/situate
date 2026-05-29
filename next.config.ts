@@ -26,6 +26,16 @@ const nextConfig: NextConfig = {
       "./story-gate-eval/diagnoser_experiments/**/*",
       "./story-gate-eval/expectations.json",
     ],
+    "/api/dev/run-diagnoser": [
+      "./story-gate-eval/specimens/**/*",
+      "./story-gate-eval/diagnoser_experiments/**/*",
+      "./story-gate-eval/expectations.json",
+    ],
+    "/api/dev/diagnoser-pair-test": [
+      "./story-gate-eval/specimens/**/*",
+      "./story-gate-eval/diagnoser_experiments/**/*",
+      "./story-gate-eval/expectations.json",
+    ],
   },
 };
 
