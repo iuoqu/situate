@@ -70,9 +70,60 @@ function formatIntent(f: IntentFields): string {
 
 type Tier = "present" | "implicit" | "absent" | "unknown";
 
-const SAMPLE_TEXT = `公寓三楼门铃响了。门内有人在做饭。门外站着一个约六十岁的男性，两手空着。
+interface Sample {
+  id: string;
+  label: string;
+  prose: string;
+  note: string;
+}
+
+const SAMPLES: Sample[] = [
+  {
+    id: "monitor",
+    label: "监控记录（K_absent baseline）",
+    note: "纯观察纪录，预期所有 axis 缺失",
+    prose: `公寓三楼门铃响了。门内有人在做饭。门外站着一个约六十岁的男性，两手空着。
 开门的人开了门。两人在门两侧站着，约十秒。屋内传出水开的声音。
-门外的人开口说话。门内的人点了一下头。`;
+门外的人开口说话。门内的人点了一下头。`,
+  },
+  {
+    id: "mother_daughter",
+    label: "母女抽屉（K_present，富因果）",
+    note: "已知 PDR 高分样本",
+    prose: `床头柜的抽屉
+医院的姑息病房在第六层最末端。我每天下班过来坐两小时，母亲多数时候是睡着的。护士说她剩下的时间用周来算，不要超过三周。
+
+今天她让我把床头柜最下面那个抽屉打开。她说话已经很费力，每次只能吐三四个字：抽屉、最下、给你。
+
+我拉开抽屉，里面是一叠纸——很厚，用粉色发圈扎着。我以为是病历或保单。解开发圈，最上面那张是我七岁画的——大山、小房子、太阳那种笔触歪扭的画，每个孩子都画的那种。背面我用稚嫩的字写了"妈妈"两个字。
+
+下一张是我九岁的春游画。再下一张是中学时一张草稿——我那时候迷漫画，画了一个不会画的人物。我以为她当时早扔了。
+
+整叠下面，是我大学时第一次离家前给她写的一张便条："冰箱里有汤，记得热。我下周末回来。"——我记得放在桌上就走了，没想到她留下来了。
+
+我数了数，从我七岁到二十四岁，一年都没缺。她一直在保留。
+
+我抬头看她。她已经又闭上眼睛，呼吸器的声音很轻。她大概以为她要说的话——这些东西在这里——已经传达了。
+
+她不知道，我从十六岁开始，没好好看过她一眼。我嫌她唠叨。后来我成年了，每次回家半天，半天里有四十分钟在手机上。她从不抱怨。
+
+我把那叠纸重新用发圈扎好，放回原处。我没把抽屉关上——我想她下次醒来再看一眼，知道我没把它带走。她会以为我不要。其实我是想再回来一次。
+
+我坐在床边，到了下班该走的时间，没走。`,
+  },
+  {
+    id: "dog_overprotest",
+    label: "狗（subtext via 重复 — 关键测试）",
+    note: "测试模型是否被多数信号洗掉单一断裂",
+    prose: `我早上爱我的狗。我中午爱我的狗。虽然下午打了一下我的狗。晚上爱我的狗。`,
+  },
+  {
+    id: "blank",
+    label: "（空白 — 自己粘）",
+    note: "",
+    prose: "",
+  },
+];
 
 export function CoachPreviewClient({
   initialTokenSet,
@@ -85,7 +136,7 @@ export function CoachPreviewClient({
   const [diagnosers, setDiagnosers] = useState<DiagnoserInfo[]>([]);
   const [selectedProviders, setSelectedProviders] = useState<string[]>([]);
   const [selectedDiagnosers, setSelectedDiagnosers] = useState<string[]>([]);
-  const [text, setText] = useState(SAMPLE_TEXT);
+  const [text, setText] = useState(SAMPLES[0].prose);
   const [intent, setIntent] = useState<IntentFields>(EMPTY_INTENT);
   const [intentExpanded, setIntentExpanded] = useState(false);
   const [running, setRunning] = useState(false);
@@ -233,6 +284,21 @@ export function CoachPreviewClient({
       />
 
       <section>
+        <div style={{ display: "flex", flexWrap: "wrap", gap: 6, marginBottom: 8 }}>
+          <span style={{ fontSize: 11, color: "#888", letterSpacing: 0.4, textTransform: "uppercase", alignSelf: "center", marginRight: 4 }}>
+            samples
+          </span>
+          {SAMPLES.map((s) => (
+            <button
+              key={s.id}
+              onClick={() => setText(s.prose)}
+              style={chip(text === s.prose)}
+              title={s.note}
+            >
+              {s.label}
+            </button>
+          ))}
+        </div>
         <label
           htmlFor="prose"
           style={{ display: "block", fontSize: 13, color: "#666", marginBottom: 6 }}
@@ -540,6 +606,16 @@ function CoachPanel({
       {orderedDiagnoserIds.map((id) => {
         const result = response.results[id];
         if (!result) return null;
+        if (id === "inferred_intent") {
+          return (
+            <InferredIntentCard
+              key={id}
+              result={result}
+              providers={providers}
+              providersRun={response.providers_run}
+            />
+          );
+        }
         return (
           <DiagnoserCard
             key={id}
@@ -651,6 +727,118 @@ function DiagnoserCard({
     </div>
   );
 }
+
+// ─── Inferred intent card (no tier — structured field dump) ───────────────
+
+function InferredIntentCard({
+  result,
+  providers,
+  providersRun,
+}: {
+  result: DiagnoserResult;
+  providers: ProviderInfo[];
+  providersRun: string[];
+}) {
+  return (
+    <div
+      style={{
+        border: "1px solid #e0dccb",
+        borderLeft: `4px solid #5b6f8a`,
+        borderRadius: 4,
+        padding: "14px 16px",
+        background: "#fff",
+      }}
+    >
+      <div style={{ display: "flex", alignItems: "baseline", gap: 10, marginBottom: 4 }}>
+        <h3 style={{ margin: 0, fontSize: 15, fontFamily: 'Georgia, "Times New Roman", serif', fontWeight: 400 }}>
+          inferred_intent
+        </h3>
+        <span style={{ fontSize: 12, color: "#888" }}>
+          AI 独立从 prose 推断（不知道作者声明的意图）
+        </span>
+      </div>
+      <div style={{ display: "flex", flexDirection: "column", gap: 14, marginTop: 10 }}>
+        {providersRun.map((pid) => {
+          const cell = result.by_provider[pid];
+          const provName = providers.find((p) => p.id === pid)?.displayName ?? pid;
+          if (!cell || cell.error) {
+            return (
+              <div key={pid} style={inferredProviderBlock}>
+                <div style={inferredProviderHeader}>{provName}</div>
+                <div style={{ color: "#a04040", fontSize: 12 }}>
+                  {cell?.error ?? "no response"}
+                </div>
+              </div>
+            );
+          }
+          const j = (cell.judgment ?? {}) as Record<string, unknown>;
+          const confidence = typeof j.confidence === "number" ? j.confidence.toFixed(2) : "?";
+          const fields: { key: string; label: string; highlight?: boolean }[] = [
+            { key: "k_inferred", label: "K" },
+            { key: "others_inferred", label: "其他人物" },
+            { key: "changes_inferred", label: "转变" },
+            { key: "setting_inferred", label: "设定" },
+            { key: "takeaway_inferred", label: "读者留下" },
+            { key: "center_of_gravity", label: "重心", highlight: true },
+            { key: "subtext_signal", label: "subtext", highlight: true },
+          ];
+          return (
+            <div key={pid} style={inferredProviderBlock}>
+              <div style={inferredProviderHeader}>
+                {provName}
+                <span style={{ color: "#888", fontSize: 11, fontWeight: 400, marginLeft: 8 }}>
+                  conf {confidence}
+                </span>
+              </div>
+              <table style={{ borderCollapse: "collapse", width: "100%", fontSize: 13 }}>
+                <tbody>
+                  {fields.map((f) => {
+                    const v = String(j[f.key] ?? "");
+                    if (!v) return null;
+                    return (
+                      <tr key={f.key}>
+                        <td style={{
+                          padding: "2px 8px 2px 0",
+                          color: "#888",
+                          width: 90,
+                          verticalAlign: "top",
+                          fontSize: 11,
+                          letterSpacing: 0.3,
+                        }}>
+                          {f.label}
+                        </td>
+                        <td style={{
+                          padding: "2px 0",
+                          color: f.highlight ? "#5b6f8a" : "#333",
+                          fontWeight: f.highlight ? 600 : 400,
+                          lineHeight: 1.55,
+                        }}>
+                          {v}
+                        </td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
+            </div>
+          );
+        })}
+      </div>
+    </div>
+  );
+}
+
+const inferredProviderBlock: React.CSSProperties = {
+  borderTop: "1px solid #f0ece0",
+  paddingTop: 10,
+};
+const inferredProviderHeader: React.CSSProperties = {
+  fontSize: 12,
+  color: "#5b6f8a",
+  fontWeight: 600,
+  marginBottom: 4,
+  letterSpacing: 0.3,
+};
 
 function PerProviderTable({
   result,
