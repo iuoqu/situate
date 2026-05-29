@@ -164,6 +164,8 @@ async function callOpenAICompat<T>(
     model: config.model,
     max_tokens: MAX_TOKENS,
     ...(opts.temperature !== undefined ? { temperature: opts.temperature } : {}),
+    // Provider defaults first, then per-call overrides on top
+    ...(config.defaultExtraBody ?? {}),
     ...(opts.extraBody ?? {}),
     messages: [
       { role: "system", content: opts.systemPrompt },
@@ -259,11 +261,21 @@ function providerIdToAnthropicModel(id: string): string {
   return id.split(":")[1];
 }
 
-function providerIdToOpenAICompatConfig(id: string): {
+interface OpenAICompatConfig {
   baseURL: string;
   model: string;
   apiKeyEnv: string;
-} {
+  /**
+   * Default request-body fields auto-applied for every call to this
+   * provider. Used to handle vendor-specific quirks like hybrid-
+   * thinking models that need explicit disable to avoid forced-
+   * tool_choice and temperature incompatibility. Per-call extraBody
+   * is merged on top of this default.
+   */
+  defaultExtraBody?: Record<string, unknown>;
+}
+
+function providerIdToOpenAICompatConfig(id: string): OpenAICompatConfig {
   if (id === "deepseek:deepseek-chat") {
     return {
       baseURL: "https://api.deepseek.com",
@@ -276,6 +288,10 @@ function providerIdToOpenAICompatConfig(id: string): {
       baseURL: "https://api.deepseek.com",
       model: "deepseek-v4-flash",
       apiKeyEnv: "DEEPSEEK_API_KEY",
+      // V4 defaults to thinking-on; thinking-on rejects forced
+      // tool_choice and temperature/top_p. We always want non-thinking
+      // for diagnoser tasks. Per https://api-docs.deepseek.com/guides/thinking_mode
+      defaultExtraBody: { thinking: { type: "disabled" } },
     };
   }
   if (id === "alibaba:qwen-flash") {
@@ -283,6 +299,10 @@ function providerIdToOpenAICompatConfig(id: string): {
       baseURL: "https://dashscope.aliyuncs.com/compatible-mode/v1",
       model: "qwen-flash",
       apiKeyEnv: "DASHSCOPE_API_KEY",
+      // qwen-flash is hybrid-thinking. Explicit disable matches DeepSeek
+      // for consistency. Different param name (flat enable_thinking
+      // bool) per the DashScope OpenAI-compat docs.
+      defaultExtraBody: { enable_thinking: false },
     };
   }
   if (id === "alibaba:qwen3-max") {
@@ -290,6 +310,9 @@ function providerIdToOpenAICompatConfig(id: string): {
       baseURL: "https://dashscope.aliyuncs.com/compatible-mode/v1",
       model: "qwen-max",
       apiKeyEnv: "DASHSCOPE_API_KEY",
+      // qwen3-max is also hybrid-thinking; defensive disable for
+      // consistency. Empirically working without it, but explicit > implicit.
+      defaultExtraBody: { enable_thinking: false },
     };
   }
   if (id === "alibaba:qwen-plus") {
@@ -297,6 +320,7 @@ function providerIdToOpenAICompatConfig(id: string): {
       baseURL: "https://dashscope.aliyuncs.com/compatible-mode/v1",
       model: "qwen-plus",
       apiKeyEnv: "DASHSCOPE_API_KEY",
+      defaultExtraBody: { enable_thinking: false },
     };
   }
   throw new Error(`Unknown openai-compat provider: ${id}`);
