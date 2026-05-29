@@ -37,6 +37,34 @@ interface PreviewResponse {
   results: Record<string, DiagnoserResult>;
   providers_run: string[];
   diagnoser_ids: string[];
+  intent_used: string | null;
+}
+
+interface IntentFields {
+  whose: string; // K
+  others: string;
+  changes: string; // D → S1
+  setting: string;
+  reader_takeaway: string;
+}
+
+const EMPTY_INTENT: IntentFields = {
+  whose: "",
+  others: "",
+  changes: "",
+  setting: "",
+  reader_takeaway: "",
+};
+
+function formatIntent(f: IntentFields): string {
+  const lines: string[] = [];
+  if (f.whose.trim()) lines.push(`K（承担者）：${f.whose.trim()}`);
+  if (f.others.trim()) lines.push(`其他人物：${f.others.trim()}`);
+  if (f.changes.trim()) lines.push(`转变（D → S1）：${f.changes.trim()}`);
+  if (f.setting.trim()) lines.push(`设定：${f.setting.trim()}`);
+  if (f.reader_takeaway.trim())
+    lines.push(`读者留下：${f.reader_takeaway.trim()}`);
+  return lines.join("\n");
 }
 
 type Tier = "present" | "implicit" | "absent" | "unknown";
@@ -57,9 +85,14 @@ export function CoachPreviewClient({
   const [selectedProviders, setSelectedProviders] = useState<string[]>([]);
   const [selectedDiagnosers, setSelectedDiagnosers] = useState<string[]>([]);
   const [text, setText] = useState(SAMPLE_TEXT);
+  const [intent, setIntent] = useState<IntentFields>(EMPTY_INTENT);
+  const [intentExpanded, setIntentExpanded] = useState(false);
   const [running, setRunning] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [response, setResponse] = useState<PreviewResponse | null>(null);
+
+  const intentBlock = useMemo(() => formatIntent(intent), [intent]);
+  const hasIntent = intentBlock.length > 0;
 
   // Fetch providers + diagnosers once token is set
   useEffect(() => {
@@ -127,6 +160,7 @@ export function CoachPreviewClient({
           text,
           providers: selectedProviders,
           diagnoser_ids: selectedDiagnosers,
+          ...(hasIntent ? { intent: intentBlock } : {}),
         }),
         credentials: "same-origin",
       });
@@ -188,6 +222,15 @@ export function CoachPreviewClient({
         onClearToken={handleClearToken}
       />
 
+      <IntentCard
+        intent={intent}
+        setIntent={setIntent}
+        expanded={intentExpanded}
+        setExpanded={setIntentExpanded}
+        intentBlock={intentBlock}
+        hasIntent={hasIntent}
+      />
+
       <section>
         <label
           htmlFor="prose"
@@ -219,7 +262,7 @@ export function CoachPreviewClient({
           >
             {running
               ? "running…"
-              : `diagnose (${selectedDiagnosers.length} × ${selectedProviders.length} = ${selectedDiagnosers.length * selectedProviders.length} calls)`}
+              : `diagnose ${hasIntent ? "(with intent) " : ""}(${selectedDiagnosers.length} × ${selectedProviders.length} = ${selectedDiagnosers.length * selectedProviders.length} calls)`}
           </button>
           {error && (
             <span style={{ color: "#a04040", fontSize: 13 }}>{error}</span>
@@ -319,6 +362,145 @@ function ControlsBar({
   );
 }
 
+// ─── Intent card ───────────────────────────────────────────────────────────
+
+function IntentCard({
+  intent,
+  setIntent,
+  expanded,
+  setExpanded,
+  intentBlock,
+  hasIntent,
+}: {
+  intent: IntentFields;
+  setIntent: (f: IntentFields) => void;
+  expanded: boolean;
+  setExpanded: (e: boolean) => void;
+  intentBlock: string;
+  hasIntent: boolean;
+}) {
+  const fields: {
+    key: keyof IntentFields;
+    label: string;
+    placeholder: string;
+  }[] = [
+    { key: "whose", label: "K — 承担者", placeholder: "女儿" },
+    { key: "others", label: "其他人物", placeholder: "母亲；护士（背景）" },
+    {
+      key: "changes",
+      label: "转变 (D → S1)",
+      placeholder: "女儿翻完抽屉后没走",
+    },
+    {
+      key: "setting",
+      label: "设定（地点 + 时刻）",
+      placeholder: "上海某姑息病房，下班后 30 分钟",
+    },
+    {
+      key: "reader_takeaway",
+      label: "读者留下（可选）",
+      placeholder: "对长期忽视母亲的悔意，但说不出口",
+    },
+  ];
+
+  return (
+    <section
+      style={{
+        border: "1px solid #e0dccb",
+        borderRadius: 4,
+        background: hasIntent ? "#f7f3e8" : "#fdfcf8",
+      }}
+    >
+      <button
+        onClick={() => setExpanded(!expanded)}
+        style={{
+          width: "100%",
+          padding: "10px 14px",
+          background: "transparent",
+          border: "none",
+          textAlign: "left",
+          cursor: "pointer",
+          display: "flex",
+          alignItems: "center",
+          gap: 10,
+          fontSize: 13,
+          color: "#444",
+        }}
+      >
+        <span style={{ fontSize: 12, color: "#888" }}>
+          {expanded ? "▾" : "▸"}
+        </span>
+        <strong>Author intent</strong>
+        <span style={{ color: "#888", fontSize: 12 }}>
+          (optional — declare what you're attempting; coach compares prose
+          against it)
+        </span>
+        {hasIntent && (
+          <span
+            style={{
+              marginLeft: "auto",
+              fontSize: 11,
+              color: "#5e8a4a",
+              fontWeight: 600,
+            }}
+          >
+            ✓ will be sent
+          </span>
+        )}
+      </button>
+      {expanded && (
+        <div style={{ padding: "0 14px 14px", display: "flex", flexDirection: "column", gap: 10 }}>
+          {fields.map((f) => (
+            <div key={f.key} style={{ display: "flex", flexDirection: "column", gap: 3 }}>
+              <label style={{ fontSize: 11, color: "#888", letterSpacing: 0.3 }}>
+                {f.label}
+              </label>
+              <input
+                type="text"
+                value={intent[f.key]}
+                onChange={(e) => setIntent({ ...intent, [f.key]: e.target.value })}
+                placeholder={f.placeholder}
+                style={{
+                  padding: "6px 10px",
+                  border: "1px solid #d4cdb8",
+                  borderRadius: 3,
+                  fontSize: 14,
+                  fontFamily: 'Georgia, "Times New Roman", serif',
+                  background: "white",
+                }}
+              />
+            </div>
+          ))}
+          {hasIntent && (
+            <details style={{ marginTop: 4 }}>
+              <summary
+                style={{ fontSize: 11, color: "#888", cursor: "pointer" }}
+              >
+                preview what gets sent to the diagnoser
+              </summary>
+              <pre
+                style={{
+                  margin: "6px 0 0",
+                  padding: 10,
+                  background: "#fff",
+                  border: "1px solid #e0dccb",
+                  borderRadius: 3,
+                  fontSize: 12,
+                  whiteSpace: "pre-wrap",
+                  color: "#555",
+                  fontFamily: 'ui-monospace, "SF Mono", monospace',
+                }}
+              >
+                {`<intent>\n${intentBlock}\n</intent>\n\n<prose>\n... your text ...\n</prose>`}
+              </pre>
+            </details>
+          )}
+        </div>
+      )}
+    </section>
+  );
+}
+
 // ─── Coach output panel ────────────────────────────────────────────────────
 
 function CoachPanel({
@@ -331,16 +513,24 @@ function CoachPanel({
   const orderedDiagnoserIds = response.diagnoser_ids;
   return (
     <section style={{ display: "flex", flexDirection: "column", gap: 14 }}>
-      <h2
-        style={{
-          fontFamily: 'Georgia, "Times New Roman", serif',
-          fontSize: 20,
-          fontWeight: 400,
-          margin: 0,
-        }}
-      >
-        Coach says
-      </h2>
+      <div style={{ display: "flex", alignItems: "baseline", gap: 12 }}>
+        <h2
+          style={{
+            fontFamily: 'Georgia, "Times New Roman", serif',
+            fontSize: 20,
+            fontWeight: 400,
+            margin: 0,
+          }}
+        >
+          Coach says
+        </h2>
+        {response.intent_used && (
+          <span style={{ fontSize: 12, color: "#5e8a4a" }}>
+            (compared against declared intent — see evidence field for
+            "吻合 / 部分吻合 / 未吻合")
+          </span>
+        )}
+      </div>
       {orderedDiagnoserIds.map((id) => {
         const result = response.results[id];
         if (!result) return null;

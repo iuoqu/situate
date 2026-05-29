@@ -41,8 +41,16 @@ export interface DiagnoserDefinition {
     /** Given a raw judgment, classify it as "positive" or "negative". */
     classify_judgment: (judgment: unknown) => "positive" | "negative" | "ambiguous";
   } | null;
-  /** Runs the diagnoser against one specimen with one provider. */
-  run: (text: string, providerId?: string) => Promise<unknown>;
+  /**
+   * Runs the diagnoser against one specimen with one provider. Optional
+   * `intent` lets the caller supply an author-declared intent block; the
+   * diagnoser will compare prose against intent in its evidence output.
+   */
+  run: (
+    text: string,
+    providerId?: string,
+    intent?: string,
+  ) => Promise<unknown>;
 }
 
 export const DIAGNOSERS: Record<string, DiagnoserDefinition> = {
