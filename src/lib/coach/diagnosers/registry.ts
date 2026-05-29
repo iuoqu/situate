@@ -1,4 +1,10 @@
 import {
+  DIAGNOSER_ID as CAUSAL_SPINE_ID,
+  STATUS as CAUSAL_SPINE_STATUS,
+  runCausalSpine,
+  type CausalSpineJudgment,
+} from "./causal_spine";
+import {
   DIAGNOSER_ID as STAKES_ABSENT_ID,
   STATUS as STAKES_ABSENT_STATUS,
   runStakesAbsent,
@@ -67,6 +73,31 @@ export const DIAGNOSERS: Record<string, DiagnoserDefinition> = {
       },
     },
     run: runStakesAbsent,
+  },
+  [CAUSAL_SPINE_ID]: {
+    id: CAUSAL_SPINE_ID,
+    display_name: "causal_spine",
+    status: CAUSAL_SPINE_STATUS,
+    description:
+      "Detects whether events form a causal chain ('therefore') or are merely sequential / juxtaposed ('and then').",
+    pair_axis: {
+      // contrast pair specimens are named *_causal.txt and *_juxtaposed.txt
+      positive_suffix: "_causal.txt",
+      negative_suffix: "_juxtaposed.txt",
+      // Same strict binarization as stakes_absent: only the strongest
+      // verdict counts as "positive". causal_implicit falls to the
+      // negative side because in our contrast construction the positive
+      // version is built to be explicitly causal — if the model only
+      // sees implicit linkage, it has under-detected the spine.
+      classify_judgment: (judgment) => {
+        const j = judgment as Partial<CausalSpineJudgment>;
+        if (j.verdict === "causal_present") return "positive";
+        if (j.verdict === "causal_implicit" || j.verdict === "causal_absent")
+          return "negative";
+        return "ambiguous";
+      },
+    },
+    run: runCausalSpine,
   },
 };
 
