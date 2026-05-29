@@ -36,49 +36,22 @@ const SAMPLE_TEMPERATURE = 0.9;
 interface FamilyConfig {
   provider_id: string;
   display_name: string;
-  /**
-   * Extra request body for provider-specific knobs. DeepSeek V4 defaults
-   * to thinking mode (slow + adds reasoning content); we explicitly
-   * disable for the one-quote task. Pass multiple conventions since
-   * different providers use different param names.
-   */
-  extra_body?: Record<string, unknown>;
-  /**
-   * When true, use tool_choice="auto" instead of forcing the named
-   * tool. Required for DeepSeek V4 with thinking mode: forced
-   * tool_choice + thinking returns HTTP 400. With only one tool
-   * exposed, "auto" effectively means the model still calls it.
-   */
-  tool_choice_auto?: boolean;
 }
 
+/**
+ * Two cheap providers from different training families. Thinking-mode
+ * disable is now handled at the provider config level (see
+ * defaultExtraBody in _call.ts) so we don't need per-family knobs
+ * here. If you add a third family, just include its provider id.
+ */
 const FAMILIES: FamilyConfig[] = [
   {
     provider_id: "alibaba:qwen-flash",
     display_name: "Qwen Flash",
-    // qwen-flash is a hybrid-thinking model. Per DashScope's OpenAI-
-    // compatibility docs we explicitly disable thinking via
-    // enable_thinking: false in extra_body. Deterministic + faster +
-    // no billable reasoning tokens. Note: Qwen and DeepSeek use
-    // different param names — Qwen uses enable_thinking (flat bool),
-    // DeepSeek uses thinking: { type: "disabled" } (nested object).
-    extra_body: {
-      enable_thinking: false,
-    },
   },
   {
     provider_id: "deepseek:deepseek-v4-flash",
     display_name: "DeepSeek V4 Flash",
-    // DeepSeek V4 Flash defaults to thinking ON. Thinking mode rejects
-    // forced tool_choice AND rejects temperature/top_p — and we use
-    // temperature 0.9 for multi-sample, so this disable is mandatory.
-    // Per https://api-docs.deepseek.com/guides/thinking_mode the
-    // correct disable is { thinking: { type: "disabled" } }.
-    // tool_choice_auto stays true as belt-and-suspenders.
-    extra_body: {
-      thinking: { type: "disabled" },
-    },
-    tool_choice_auto: true,
   },
 ];
 
@@ -176,8 +149,6 @@ async function runFamily(
         inputSchema: INPUT_SCHEMA,
         providerId: family.provider_id,
         temperature: SAMPLE_TEMPERATURE,
-        extraBody: family.extra_body,
-        toolChoiceAuto: family.tool_choice_auto,
       }),
   );
   const settled = await Promise.allSettled(calls);
