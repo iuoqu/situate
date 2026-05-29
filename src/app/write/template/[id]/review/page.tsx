@@ -3,7 +3,10 @@ import { notFound, redirect } from "next/navigation";
 
 import { db } from "@/db";
 import { storyDrafts, type DraftSection } from "@/db/schema";
-import { getTemplate } from "@/lib/templates/registry";
+import {
+  DEFAULT_TRADITION_ID,
+  getTradition,
+} from "@/lib/traditions/registry";
 import { getServerSupabase } from "@/lib/supabase/server";
 
 import { ReviewAndSubmit } from "./review-client";
@@ -53,8 +56,12 @@ export default async function ReviewPage({ params }: { params: RouteParams }) {
     redirect(`/write/template/${id}`);
   }
 
-  const template = draft.templateId ? getTemplate(draft.templateId) : null;
-  if (!template) notFound();
+  // Tradition profile is the source of truth for the review screen's
+  // labels and gating — Pearls vs anchored decide whether we require a
+  // Section 1 coordinate to enable submit.
+  const tradition =
+    getTradition(draft.traditionProfileId) ??
+    getTradition(DEFAULT_TRADITION_ID)!;
 
   const rawSections = (Array.isArray(draft.sections)
     ? draft.sections
@@ -85,7 +92,7 @@ export default async function ReviewPage({ params }: { params: RouteParams }) {
       section_id: s.section_id,
       content: s.content ?? "",
       label:
-        template.sections.find((ts) => ts.id === s.section_id)?.label ??
+        tradition.sections.find((ts) => ts.id === s.section_id)?.label ??
         s.section_id,
       ownLongitude: ownLon,
       ownLatitude: ownLat,
@@ -102,6 +109,11 @@ export default async function ReviewPage({ params }: { params: RouteParams }) {
       title={draft.title ?? ""}
       sections={sections}
       authorEmail={user.email ?? ""}
+      tradition={{
+        id: tradition.id,
+        name: tradition.name,
+        placeRequired: tradition.placeRequired,
+      }}
     />
   );
 }

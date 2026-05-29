@@ -41,7 +41,7 @@ import type { DraftSection, SupportedLanguage } from "@/db/schema";
  * handoff (Week 5) will require at least Section 1 to have a coordinate.
  */
 
-interface TemplateSectionView {
+interface TraditionSectionView {
   id: string;
   label: string;
   prompt: string;
@@ -49,18 +49,24 @@ interface TemplateSectionView {
   wordRangeMax: number;
   canHaveOwnLocation: boolean;
   showHookSelector: boolean;
+  /** When true, the section cannot be removed from this draft. */
+  required: boolean;
 }
 
-interface TemplateView {
+interface TraditionView {
   id: string;
   name: string;
   description: string;
-  sections: TemplateSectionView[];
+  placeRequired: boolean;
+  minSections: number;
+  maxSections: number;
+  allowSectionDeletion: boolean;
+  sections: TraditionSectionView[];
 }
 
 interface Props {
   draftId: string;
-  template: TemplateView;
+  tradition: TraditionView;
   initialTitle: string;
   initialSections: DraftSection[];
   language: SupportedLanguage;
@@ -77,7 +83,7 @@ function localKey(draftId: string) {
 
 export function TemplateEditor({
   draftId,
-  template,
+  tradition,
   initialTitle,
   initialSections,
   language,
@@ -243,6 +249,50 @@ export function TemplateEditor({
     [],
   );
 
+  // Tradition.allowSectionDeletion gates the UI; this callback assumes
+  // the gate already checked. It removes the section from the draft
+  // state — the autosave below picks it up and persists.
+  const deleteSection = useCallback((sectionId: string) => {
+    setSections((prev) => {
+      const filtered = prev.filter((s) => s.section_id !== sectionId);
+      // Re-index for stable downstream rendering (other places key by
+      // section_id, but the displayed ordinal uses array index).
+      return filtered.map((s, idx) => ({ ...s, index: idx }));
+    });
+  }, []);
+
+  // Restoring a deleted section: inserts it back in tradition order,
+  // not at the end. (If the author deleted "Aftermath" then restores
+  // it, it should land between "Incident" and "Closing image", not
+  // after "Closing image".)
+  const addSection = useCallback(
+    (sectionId: string) => {
+      const def = tradition.sections.find((s) => s.id === sectionId);
+      if (!def) return;
+      const traditionOrder = tradition.sections.map((s) => s.id);
+      const newSection: DraftSection = {
+        index: 0,
+        section_id: sectionId,
+        content: "",
+        longitude: null,
+        latitude: null,
+        place_description: null,
+        section_metadata: {},
+      };
+      setSections((prev) => {
+        if (prev.some((s) => s.section_id === sectionId)) return prev;
+        const combined = [...prev, newSection];
+        combined.sort(
+          (a, b) =>
+            traditionOrder.indexOf(a.section_id) -
+            traditionOrder.indexOf(b.section_id),
+        );
+        return combined.map((s, idx) => ({ ...s, index: idx }));
+      });
+    },
+    [tradition.sections],
+  );
+
   // Compose word counts once per render for cheap display.
   const wordCounts = useMemo(
     () =>
@@ -306,7 +356,7 @@ export function TemplateEditor({
         <Link href="/write" style={backLinkStyle}>
           ← Pick a different path
         </Link>
-        <p style={kickerStyle}>{template.name}</p>
+        <p style={kickerStyle}>{tradition.name}</p>
         <input
           type="text"
           placeholder="Untitled story"
@@ -328,21 +378,69 @@ export function TemplateEditor({
       </header>
 
       <ol style={sectionListStyle}>
-        {template.sections.map((sectionDef, idx) => {
-          const data =
-            sections.find((s) => s.section_id === sectionDef.id) ??
-            sections[idx];
+        {sections.map((data, idx) => {
+          // Section definitions live in the tradition; the draft only
+          // carries the author's content + per-section coords. We look
+          // up the def by section_id, which is stable across template
+          // revisions.
+          const sectionDef = tradition.sections.find(
+            (s) => s.id === data.section_id,
+          );
+          if (!sectionDef) {
+            // Section that the tradition has removed (shouldn't happen
+            // for current traditions). Render a small skeleton so the
+            // draft isn't silently truncated.
+            return (
+              <li key={data.section_id} style={sectionItemStyle}>
+                <p style={orphanSectionStyle}>
+                  Section &ldquo;{data.section_id}&rdquo; is no longer in
+                  this tradition&rsquo;s template. Its content is kept on
+                  the draft but not edited here.
+                </p>
+              </li>
+            );
+          }
           const count = wordCounts[sectionDef.id] ?? 0;
+          // Deletion is allowed when the tradition permits it, the
+          // section is not flagged required, and we'd stay at or above
+          // the tradition's minSections after deletion.
+          const canDelete =
+            tradition.allowSectionDeletion &&
+            !sectionDef.required &&
+            sections.length > tradition.minSections;
           return (
             <li key={sectionDef.id} style={sectionItemStyle}>
               <header style={sectionHeaderStyle}>
                 <div style={sectionOrdinalStyle}>
                   {String(idx + 1).padStart(2, "0")}
                 </div>
-                <div>
+                <div style={{ flex: 1 }}>
                   <h2 style={sectionLabelStyle}>{sectionDef.label}</h2>
                   <p style={sectionPromptStyle}>{sectionDef.prompt}</p>
                 </div>
+                {canDelete && (
+                  <button
+                    type="button"
+                    onClick={() => {
+                      const hasContent =
+                        (data?.content ?? "").trim().length > 0;
+                      if (
+                        hasContent &&
+                        !window.confirm(
+                          `Delete "${sectionDef.label}"? You'll lose the ${count} words in this section. This can't be undone within the draft.`,
+                        )
+                      ) {
+                        return;
+                      }
+                      deleteSection(sectionDef.id);
+                    }}
+                    style={deleteSectionButtonStyle}
+                    aria-label={`Delete ${sectionDef.label} section`}
+                    title="Delete this section"
+                  >
+                    ✕
+                  </button>
+                )}
               </header>
               <SectionLocationPicker
                 sectionId={sectionDef.id}
@@ -407,6 +505,14 @@ export function TemplateEditor({
             </li>
           );
         })}
+        {tradition.allowSectionDeletion &&
+          sections.length < tradition.maxSections && (
+            <RestoreSectionMenu
+              tradition={tradition}
+              currentSectionIds={sections.map((s) => s.section_id)}
+              onRestore={(sectionId) => addSection(sectionId)}
+            />
+          )}
       </ol>
 
       <footer style={footerStyle}>
@@ -441,6 +547,37 @@ export function TemplateEditor({
 }
 
 // ── helpers / sub-components ──────────────────────────────────────────────
+
+function RestoreSectionMenu({
+  tradition,
+  currentSectionIds,
+  onRestore,
+}: {
+  tradition: TraditionView;
+  currentSectionIds: string[];
+  onRestore: (sectionId: string) => void;
+}) {
+  const current = new Set(currentSectionIds);
+  const available = tradition.sections.filter((s) => !current.has(s.id));
+  if (available.length === 0) return null;
+  return (
+    <li style={restoreMenuStyle}>
+      <span style={restoreLabelStyle}>+ Add a section back:</span>
+      <div style={restoreButtonsStyle}>
+        {available.map((s) => (
+          <button
+            key={s.id}
+            type="button"
+            onClick={() => onRestore(s.id)}
+            style={restoreButtonStyle}
+          >
+            {s.label}
+          </button>
+        ))}
+      </div>
+    </li>
+  );
+}
 
 function SaveIndicator({
   state,
@@ -665,6 +802,61 @@ const indicatorOkStyle: React.CSSProperties = {
 const indicatorErrorStyle: React.CSSProperties = {
   fontSize: 12,
   color: "#7f1d1d",
+};
+const deleteSectionButtonStyle: React.CSSProperties = {
+  alignSelf: "flex-start",
+  width: 28,
+  height: 28,
+  borderRadius: 14,
+  background: "transparent",
+  border: "1px solid #d4cfc2",
+  color: "#9b8a6b",
+  fontSize: 14,
+  lineHeight: 1,
+  cursor: "pointer",
+  fontFamily: "inherit",
+  flexShrink: 0,
+};
+const orphanSectionStyle: React.CSSProperties = {
+  margin: 0,
+  padding: 14,
+  fontSize: 12,
+  fontStyle: "italic",
+  color: "#9b8a6b",
+  background: "#fbfaf6",
+  border: "1px dashed #e8e3d8",
+  borderRadius: 3,
+};
+const restoreMenuStyle: React.CSSProperties = {
+  display: "flex",
+  flexDirection: "column",
+  gap: 10,
+  padding: 16,
+  border: "1px dashed #e8e3d8",
+  borderRadius: 3,
+  background: "#fbfaf6",
+};
+const restoreLabelStyle: React.CSSProperties = {
+  fontSize: 12,
+  letterSpacing: 0.4,
+  textTransform: "uppercase",
+  color: "#9b8a6b",
+};
+const restoreButtonsStyle: React.CSSProperties = {
+  display: "flex",
+  gap: 8,
+  flexWrap: "wrap",
+};
+const restoreButtonStyle: React.CSSProperties = {
+  padding: "6px 12px",
+  background: "white",
+  color: "#1a1a1a",
+  border: "1px solid #d4cfc2",
+  borderRadius: 3,
+  fontSize: 13,
+  letterSpacing: 0.3,
+  cursor: "pointer",
+  fontFamily: "inherit",
 };
 const retryButtonStyle: React.CSSProperties = {
   marginLeft: 4,

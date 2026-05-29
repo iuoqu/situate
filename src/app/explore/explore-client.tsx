@@ -170,16 +170,49 @@ export function ExploreClient() {
 
     for (const block of blocks) {
       const el = document.createElement("div");
-      el.style.cssText = [
-        "width:14px",
-        "height:14px",
-        "border-radius:50%",
-        `background:${TIER_BADGE[block.accessTier]}`,
-        "border:2px solid white",
-        "cursor:pointer",
-        "box-shadow:0 1px 4px rgba(0,0,0,.25)",
-      ].join(";");
-      el.title = `${block.method.replace("_", " ")} · ${block.language}`;
+      const isPearl = block.publicationSection === "pearls";
+      // Pearls visual: open ring with a small inner dot, no fill colour.
+      // Communicates "this lives off the geography" without making the
+      // marker disappear into the map. Tier badge ring colour stays so
+      // the access tier is still readable.
+      el.style.cssText = isPearl
+        ? [
+            "width:16px",
+            "height:16px",
+            "border-radius:50%",
+            "background:transparent",
+            `border:2px dashed ${TIER_BADGE[block.accessTier]}`,
+            "cursor:pointer",
+            "box-shadow:0 1px 4px rgba(0,0,0,.18)",
+            "position:relative",
+          ].join(";")
+        : [
+            "width:14px",
+            "height:14px",
+            "border-radius:50%",
+            `background:${TIER_BADGE[block.accessTier]}`,
+            "border:2px solid white",
+            "cursor:pointer",
+            "box-shadow:0 1px 4px rgba(0,0,0,.25)",
+          ].join(";");
+      if (isPearl) {
+        // Inner dot so the marker reads as a "pearl in a setting".
+        const inner = document.createElement("div");
+        inner.style.cssText = [
+          "position:absolute",
+          "top:50%",
+          "left:50%",
+          "transform:translate(-50%,-50%)",
+          "width:5px",
+          "height:5px",
+          "border-radius:50%",
+          `background:${TIER_BADGE[block.accessTier]}`,
+        ].join(";");
+        el.appendChild(inner);
+      }
+      el.title = isPearl
+        ? `Pearl (遗珠) · ${block.method.replace("_", " ")} · ${block.language}`
+        : `${block.method.replace("_", " ")} · ${block.language}`;
       el.addEventListener("click", () => setSelected(block));
       const marker = new mapboxgl.Marker({ element: el })
         .setLngLat([block.longitude, block.latitude])

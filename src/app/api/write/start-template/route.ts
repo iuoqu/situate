@@ -4,18 +4,31 @@ import { db } from "@/db";
 import { storyDrafts, type DraftSection } from "@/db/schema";
 import { DEFAULT_TEMPLATE_ID, getTemplate } from "@/lib/templates/registry";
 import { getServerSupabase } from "@/lib/supabase/server";
+import {
+  DEFAULT_TRADITION_ID,
+  getTradition,
+} from "@/lib/traditions/registry";
 
 /**
  * POST /api/write/start-template
  *
  * Form-post target for the "Start a guided draft →" button on /write.
- * Creates a fresh draft pre-seeded with empty sections matching the
- * chosen template, then 303-redirects to /write/template/[draftId].
+ * Creates a fresh draft pre-seeded with empty sections, then
+ * 303-redirects to /write/template/[draftId].
  *
- * Why a form post + redirect (instead of fetch from a client component)?
- * It keeps /write a pure server component, which means we don't have to
- * ship a hydration boundary just to handle one click. The trade-off is
- * one extra round-trip; acceptable for a once-per-session action.
+ * Body (form-encoded):
+ *   - templateId  — kept for back-compat; identifies the template
+ *                   shape (legacy notion of a 5-section template).
+ *   - traditionProfileId — new in 0011. Decides the editor scaffold
+ *                          (sections + prompts), whether sections are
+ *                          deletable, and whether Section 1 must have
+ *                          a coordinate at submit time. Default
+ *                          `flash_situate_anchored`.
+ *
+ * When a tradition is provided, its `sections` define the initial
+ * shape (one DraftSection per tradition section). The legacy
+ * `templateId` is preserved for any downstream code that still reads
+ * it; new code should prefer `traditionProfileId`.
  */
 
 export const runtime = "nodejs";
@@ -26,8 +39,6 @@ export async function POST(req: NextRequest) {
     data: { user },
   } = await supabase.auth.getUser();
   if (!user) {
-    // /write is auth-gated upstream; reach here only via a stale form
-    // post. Just send them back to login.
     return NextResponse.redirect(
       new URL("/auth/login?reason=auth_required&next=/write", req.url),
       { status: 303 },
@@ -35,18 +46,27 @@ export async function POST(req: NextRequest) {
   }
 
   let templateId = DEFAULT_TEMPLATE_ID;
+  let traditionId = DEFAULT_TRADITION_ID;
   try {
     const form = await req.formData();
-    const raw = form.get("templateId");
-    if (typeof raw === "string" && getTemplate(raw)) {
-      templateId = raw;
+    const rawTemplate = form.get("templateId");
+    if (typeof rawTemplate === "string" && getTemplate(rawTemplate)) {
+      templateId = rawTemplate;
+    }
+    const rawTradition = form.get("traditionProfileId");
+    if (typeof rawTradition === "string" && getTradition(rawTradition)) {
+      traditionId = rawTradition;
     }
   } catch {
-    // Ignore — keep the default.
+    // Ignore — keep defaults.
   }
 
-  const template = getTemplate(templateId)!;
-  const sections: DraftSection[] = template.sections.map((s, idx) => ({
+  // The tradition is the source of truth for the initial sections; the
+  // legacy template is a thinner shell. Both are kept on the draft so
+  // existing code paths (TemplateEditor reads template.sections) keep
+  // working until the editor migrates to reading from tradition only.
+  const tradition = getTradition(traditionId)!;
+  const sections: DraftSection[] = tradition.sections.map((s, idx) => ({
     index: idx,
     section_id: s.id,
     content: "",
@@ -61,6 +81,7 @@ export async function POST(req: NextRequest) {
     .values({
       userId: user.id,
       templateId,
+      traditionProfileId: traditionId,
       sections: sections as unknown as object,
       stage: "editing",
     })

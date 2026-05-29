@@ -6,6 +6,10 @@ import { db } from "@/db";
 import { evaluateSubmission } from "@/lib/ai-editor/engine";
 import type { JudgmentSubmission, SubmissionReport } from "@/lib/ai-editor/types";
 import {
+  DEFAULT_TRADITION_ID,
+  getTradition,
+} from "@/lib/traditions/registry";
+import {
   blockTranslations,
   editions,
   editorialPrinciples,
@@ -372,6 +376,11 @@ export interface ViewportBlock {
   content: string;
   annotations: CulturalAnnotation[];
   accessTier: TranslationAccessTier;
+  /** 'main' anchored work or 'pearls' (遗珠) — added in 0011.
+   *  Pearls without their own coord are inserted at (0, 0) by
+   *  submitFromDraft; the explore client renders them with the
+   *  Pearls-marker style regardless of where they sit on the map. */
+  publicationSection: "main" | "pearls";
 }
 
 export type ReaderAccessLevel = "free" | "metered" | "premium";
@@ -470,6 +479,7 @@ export async function getNarrativeBlocksInBoundingBox(
     content: string;
     annotations: CulturalAnnotation[] | null;
     access_tier: TranslationAccessTier;
+    publication_section: "main" | "pearls";
   }>(sql`
     SELECT DISTINCT ON (${narrativeBlocks.id})
       ${narrativeBlocks.id}             AS block_id,
@@ -483,7 +493,8 @@ export async function getNarrativeBlocksInBoundingBox(
       ${blockTranslations.method}       AS method,
       ${blockTranslations.content}      AS content,
       ${blockTranslations.annotations}  AS annotations,
-      ${blockTranslations.accessTier}   AS access_tier
+      ${blockTranslations.accessTier}   AS access_tier,
+      ${submissions.publicationSection} AS publication_section
     FROM ${narrativeBlocks}
     INNER JOIN ${submissions}
       ON ${submissions.id} = ${narrativeBlocks.submissionId}
@@ -523,6 +534,7 @@ export async function getNarrativeBlocksInBoundingBox(
     content: r.content,
     annotations: r.annotations ?? [],
     accessTier: r.access_tier,
+    publicationSection: r.publication_section,
   }));
 }
 
@@ -789,6 +801,8 @@ export async function getSubmissionForReader(
 
   // Re-sort the rows we got by the block's sequence_number — DISTINCT ON gave
   // us one row per block but in block-id order, not narrative order.
+  // publication_section comes from the parent submission row (already
+  // loaded into `row`); same value for every block of a submission.
   const blocks: ViewportBlock[] = blockRows
     .map((r) => ({
       blockId: r.block_id,
@@ -803,6 +817,7 @@ export async function getSubmissionForReader(
       content: r.content,
       annotations: r.annotations ?? [],
       accessTier: r.access_tier,
+      publicationSection: row.publicationSection,
     }))
     .sort((a, b) => a.sequenceNumber - b.sequenceNumber);
 
@@ -1090,6 +1105,13 @@ export async function submitFromDraft(
   if (draft.stage === "trashed")
     throw new Error("draft is in trash");
 
+  // Tradition (added in 0011) decides whether Section 1 must carry a
+  // coordinate. Pearls (遗珠) waives the requirement; the carveout is
+  // exactly that the work isn't place-anchored.
+  const tradition =
+    getTradition(draft.traditionProfileId) ??
+    getTradition(DEFAULT_TRADITION_ID)!;
+
   // Section content is the authoritative source for the prose. We trust
   // the per-section validation done at edit time; here we just slim it
   // down to non-empty sections (so an unfinished section doesn't become
@@ -1099,20 +1121,28 @@ export async function submitFromDraft(
   );
   if (sections.length === 0) throw new Error("draft has no content");
 
-  // Locations: every section ends up with a coordinate, either its own
-  // or the most recent upstream one. The first section MUST have its
-  // own — there's nothing to inherit from. If the user only set a pin
-  // on, say, Section 3, then Sections 1-2 have no upstream coord and
-  // we reject the submit. UX-side they should never reach here without
-  // at least Section 1 set (review page gates), but defence in depth.
-  if (!hasOwnCoord(sections[0])) {
+  // Locations: anchored traditions require Section 1's own coord;
+  // Pearls accepts a piece with no coordinate at all. For Pearls
+  // submissions without any coord, narrative_blocks get inserted at
+  // (0, 0) — the Gulf of Guinea sentinel — and the explore map
+  // renders them with the off-map Pearls marker style.
+  if (tradition.placeRequired && !hasOwnCoord(sections[0])) {
     throw new Error(
       "section 1 must have a location — drop a pin in the editor",
     );
   }
-  let runningLon = sections[0].longitude as number;
-  let runningLat = sections[0].latitude as number;
-  let runningPlace = sections[0].place_description ?? null;
+  // Default running coord: Section 1's if it has one; otherwise the
+  // Gulf-of-Guinea sentinel (0, 0) for Pearls. The first hasOwnCoord
+  // section in the iteration below overwrites this immediately.
+  let runningLon: number = hasOwnCoord(sections[0])
+    ? (sections[0].longitude as number)
+    : 0;
+  let runningLat: number = hasOwnCoord(sections[0])
+    ? (sections[0].latitude as number)
+    : 0;
+  let runningPlace: string | null = hasOwnCoord(sections[0])
+    ? (sections[0].place_description ?? null)
+    : null;
   const resolvedSections = sections.map((s) => {
     if (hasOwnCoord(s)) {
       runningLon = s.longitude as number;
@@ -1148,6 +1178,8 @@ export async function submitFromDraft(
   const submissionFormSnapshot = {
     source: "template" as const,
     templateId: draft.templateId,
+    traditionProfileId: tradition.id,
+    traditionPlaceRequired: tradition.placeRequired,
     draftId: draft.id,
     title,
     sections,

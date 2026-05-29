@@ -10,6 +10,7 @@ import {
   pgTable,
   real,
   serial,
+  smallint,
   text,
   timestamp,
   uniqueIndex,
@@ -17,6 +18,16 @@ import {
 } from "drizzle-orm/pg-core";
 
 // ─── Enums ──────────────────────────────────────────────────────────────────
+
+// Added in 0011. Pearls (遗珠) is the editor-routed carveout for
+// work whose merit is independent of geographic anchoring (Hemingway
+// "Hills Like White Elephants" type pieces, or any submission from any
+// tradition that doesn't satisfy P3 but otherwise passes). Authors do
+// not self-route — only editors flip a piece to 'pearls'.
+export const publicationSection = pgEnum("publication_section", [
+  "main",
+  "pearls",
+]);
 
 export const submissionStatus = pgEnum("status", [
   "draft",
@@ -337,6 +348,18 @@ export const submissions = pgTable(
     // new rows set this directly from the signed-in user. NULL allowed
     // for legacy rows whose email didn't match an auth.users entry.
     authorUserId: uuid("author_user_id"),
+    // Added in 0011. 'main' = the place-anchored Situate publication
+    // (P3 enforced). 'pearls' = editor-routed carveout for work whose
+    // merit is independent of geographic anchoring. Defaults to 'main';
+    // only editors flip it.
+    publicationSection: publicationSection("publication_section")
+      .notNull()
+      .default("main"),
+    // Added in 0011. L1/L2/L3 tier; only meaningful when status is
+    // published_l1/l2/l3 (or, for the future Pearls section, accepted
+    // into a Pearls tier). Nullable for in-flight + legacy published
+    // rows.
+    publicationTier: smallint("publication_tier"),
 
     createdAt: timestamp("created_at", { withTimezone: true })
       .notNull()
@@ -644,6 +667,13 @@ export const storyDrafts = pgTable(
     id: uuid("id").primaryKey().defaultRandom(),
     userId: uuid("user_id").notNull(), // references auth.users(id); not a Drizzle FK because auth schema lives outside ours.
     templateId: text("template_id"), // NULL = voice-freeform / no template
+    // Added in 0011. File-based tradition registry id
+    // (`src/lib/traditions/registry.ts`). Coaching lens, not a
+    // publication gate — every submission is judged by P1–P13 regardless.
+    // Default reproduces the Year-1 Situate Spine behaviour.
+    traditionProfileId: text("tradition_profile_id")
+      .notNull()
+      .default("flash_situate_anchored"),
     sections: jsonb("sections").notNull().default(sql`'[]'::jsonb`),
     voiceTranscript: text("voice_transcript"),
     recordingDurationSec: integer("recording_duration_sec"),
@@ -746,6 +776,7 @@ export type AiUsageLabel = (typeof aiUsageLabel.enumValues)[number];
 export type PrincipleVerdict = (typeof principleVerdict.enumValues)[number];
 
 export type SubmissionStatus = (typeof submissionStatus.enumValues)[number];
+export type PublicationSection = (typeof publicationSection.enumValues)[number];
 export type EditionStatus = (typeof editionStatus.enumValues)[number];
 export type SupportedLanguage = (typeof supportedLanguage.enumValues)[number];
 export type TranslationMethod = (typeof translationMethod.enumValues)[number];

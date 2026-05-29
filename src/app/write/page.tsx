@@ -111,6 +111,44 @@ export default async function WritePage() {
           </p>
           <form action="/api/write/start-template" method="post" style={{ margin: 0 }}>
             <input type="hidden" name="templateId" value={DEFAULT_TEMPLATE_ID} />
+            {/* Tradition selector lives inside <details> so the default
+                flow stays one-click; advanced authors who want to write
+                under the Pearls (遗珠) tradition opt in deliberately. */}
+            <details style={advancedDetailsStyle}>
+              <summary style={advancedSummaryStyle}>
+                Advanced: pick a tradition
+              </summary>
+              <div style={advancedBodyStyle}>
+                <label style={radioRowStyle}>
+                  <input
+                    type="radio"
+                    name="traditionProfileId"
+                    value="flash_situate_anchored"
+                    defaultChecked
+                  />
+                  <span>
+                    <strong>Situate Spine · anchored</strong> — the default.
+                    Five sections, Section 1 carries a real coordinate.
+                  </span>
+                </label>
+                <label style={radioRowStyle}>
+                  <input
+                    type="radio"
+                    name="traditionProfileId"
+                    value="flash_situate_pearls"
+                  />
+                  <span>
+                    <strong>Situate Spine · Pearls (遗珠)</strong> — for
+                    Hemingway-style work whose merit is independent of
+                    place. Sections are deletable; coordinate is optional.{" "}
+                    <em>
+                      Editor discretion decides whether your piece actually
+                      enters the Pearls section at publication time.
+                    </em>
+                  </span>
+                </label>
+              </div>
+            </details>
             <button type="submit" style={primaryButtonStyle}>
               Start a guided draft →
             </button>
@@ -349,4 +387,30 @@ const dashboardLinkStyle: React.CSSProperties = {
 const inlineLinkStyle: React.CSSProperties = {
   color: "#1a1a1a",
   textDecoration: "underline",
+};
+const advancedDetailsStyle: React.CSSProperties = {
+  marginBottom: 12,
+  fontSize: 13,
+};
+const advancedSummaryStyle: React.CSSProperties = {
+  cursor: "pointer",
+  color: "#666",
+  fontSize: 12,
+  letterSpacing: 0.4,
+  textTransform: "uppercase",
+  marginBottom: 8,
+};
+const advancedBodyStyle: React.CSSProperties = {
+  display: "flex",
+  flexDirection: "column",
+  gap: 10,
+  padding: "10px 0 4px",
+};
+const radioRowStyle: React.CSSProperties = {
+  display: "flex",
+  gap: 10,
+  alignItems: "flex-start",
+  fontSize: 13,
+  lineHeight: 1.55,
+  color: "#444",
 };

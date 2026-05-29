@@ -44,11 +44,22 @@ export interface SectionReviewView {
   hasOwnCoord: boolean;
 }
 
+interface TraditionInfo {
+  id: string;
+  name: string;
+  /** Anchored traditions require Section 1 to have its own coordinate
+   *  at submit time; Pearls (遗珠) does not. The submit-side validation
+   *  in `submitFromDraft` is the source of truth — this just gates the
+   *  button so authors don't surprise-fail on the server. */
+  placeRequired: boolean;
+}
+
 interface Props {
   draftId: string;
   title: string;
   sections: SectionReviewView[];
   authorEmail: string;
+  tradition: TraditionInfo;
 }
 
 export function ReviewAndSubmit({
@@ -56,6 +67,7 @@ export function ReviewAndSubmit({
   title,
   sections,
   authorEmail,
+  tradition,
 }: Props) {
   const router = useRouter();
   const [relocationTest, setRelocationTest] = useState("");
@@ -93,10 +105,15 @@ export function ReviewAndSubmit({
 
   const wordsInRange = totalWords >= 800 && totalWords <= 2500;
   const relocationOk = relocationWords >= 50;
+  // Pearls (遗珠) traditions allow submit without a Section 1 coord —
+  // the carveout is exactly that the work isn't place-anchored. The
+  // server-side validation in submitFromDraft reads the same
+  // tradition.placeRequired flag, so this gate stays in sync.
+  const placeGateOk = tradition.placeRequired ? section1HasCoord : true;
   const canSubmit =
     wordsInRange &&
     relocationOk &&
-    section1HasCoord &&
+    placeGateOk &&
     attestation &&
     authorPenName.trim().length > 0 &&
     !submitting;
@@ -189,7 +206,9 @@ export function ReviewAndSubmit({
         <Link href={`/write/template/${draftId}`} style={backLinkStyle}>
           ← Back to editing
         </Link>
-        <p style={kickerStyle}>Review &amp; submit</p>
+        <p style={kickerStyle}>
+          Review &amp; submit · {tradition.name}
+        </p>
         <h1 style={h1Style}>{title || "Untitled story"}</h1>
         <p style={metaStyle}>
           {totalWords} words ·{" "}
@@ -207,7 +226,9 @@ export function ReviewAndSubmit({
         <div ref={mapContainer} style={mapStyle} />
         <p style={mapHintStyle}>
           {ownPins.length === 0
-            ? "No section has a location yet. Go back to the editor and drop a pin on Section 1 — Arrival."
+            ? tradition.placeRequired
+              ? "No section has a location yet. Go back to the editor and drop a pin on Section 1 — Arrival."
+              : "No section has a location — this is allowed for Pearls (遗珠). The piece will display off-map at 0°N 0°E."
             : ownPins.length === 1
               ? `1 location set — all sections will be filed under "${ownPins[0].resolvedPlaceDescription ?? formatCoord(ownPins[0].ownLongitude!, ownPins[0].ownLatitude!)}".`
               : `${ownPins.length} sections at distinct locations; the rest inherit.`}
@@ -350,7 +371,7 @@ export function ReviewAndSubmit({
 
         {!canSubmit && !submitting && (
           <p style={hintStyle}>
-            {!section1HasCoord
+            {!placeGateOk
               ? "Section 1 needs a location — go back to the editor and drop a pin."
               : !wordsInRange
                 ? "Word count out of the 800–2,500 range."
