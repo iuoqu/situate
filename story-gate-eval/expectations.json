@@ -1,0 +1,197 @@
+{
+  "$schema_note": "Each entry covers one specimen. Keys are paths relative to specimens/. Fields: is_story | type (失败类型) | expected_engine | confidence_band [min,max] | tradition | purpose | holdout (true = excluded from prompt-iteration feedback, used only for final scoring) | is_partial + partial_expectations (草稿专用).",
+
+  "synthetic/faqtiao/01_mood.txt": {
+    "is_story": false, "type": "随笔", "expected_engine": null,
+    "confidence_band": [0.6, 0.95], "tradition": "中国现代",
+    "purpose": "有情绪流动但无因果脊柱（旧 baseline）", "holdout": false
+  },
+  "synthetic/faqtiao/02_revelation.txt": {
+    "is_story": true, "type": null, "expected_engine": "revelation",
+    "confidence_band": [0.7, 0.95], "tradition": "中国现代",
+    "purpose": "最小可行故事，understanding 维度（旧 baseline）", "holdout": false
+  },
+  "synthetic/faqtiao/03_conflict.txt": {
+    "is_story": true, "type": null, "expected_engine": "conflict",
+    "confidence_band": [0.7, 0.95], "tradition": "现代冲突",
+    "purpose": "同题材，纯外部冲突引擎、situation 维度", "holdout": false
+  },
+  "synthetic/faqtiao/04_inevitability.txt": {
+    "is_story": true, "type": null, "expected_engine": "inevitability",
+    "confidence_band": [0.65, 0.9], "tradition": "命运式",
+    "purpose": "同题材，命运式引擎", "holdout": false
+  },
+  "synthetic/faqtiao/05_description.txt": {
+    "is_story": false, "type": "描摹", "expected_engine": null,
+    "confidence_band": [0.7, 0.95], "tradition": "中国现代",
+    "purpose": "纯描摹无事件，应识别为描摹（不是随笔）", "holdout": false
+  },
+  "synthetic/faqtiao/06_process.txt": {
+    "is_story": false, "type": "说明", "expected_engine": null,
+    "confidence_band": [0.8, 0.98], "tradition": "说明文",
+    "purpose": "同题材，指南体", "holdout": false
+  },
+
+  "synthetic/phone/01_mood.txt": {
+    "is_story": false, "type": "随笔", "expected_engine": null,
+    "confidence_band": [0.6, 0.9], "tradition": "中国现代",
+    "purpose": "情绪流动，无 D→T", "holdout": false
+  },
+  "synthetic/phone/02_revelation.txt": {
+    "is_story": true, "type": null, "expected_engine": "revelation",
+    "confidence_band": [0.75, 0.95], "tradition": "中国现代",
+    "purpose": "换题材复刻 02_revelation 结构——跨题材稳定性", "holdout": true
+  },
+  "synthetic/phone/03_inevitability.txt": {
+    "is_story": true, "type": null, "expected_engine": "inevitability",
+    "confidence_band": [0.65, 0.9], "tradition": "命运式",
+    "purpose": "命运启动（六点不响），situation+understanding 混合", "holdout": false
+  },
+  "synthetic/phone/04_process.txt": {
+    "is_story": false, "type": "说明", "expected_engine": null,
+    "confidence_band": [0.8, 0.98], "tradition": "说明文",
+    "purpose": "操作指南", "holdout": false
+  },
+
+  "synthetic/tea/01_process.txt": {
+    "is_story": false, "type": "说明", "expected_engine": null,
+    "confidence_band": [0.85, 0.98], "tradition": "说明文",
+    "purpose": "纯食谱（旧 baseline）", "holdout": false
+  },
+  "synthetic/tea/02_with_K.txt": {
+    "is_story": true, "type": null, "expected_engine": "recontextualize",
+    "confidence_band": [0.55, 0.85], "tradition": "中国现代",
+    "purpose": "process + K + understanding 微调——从'说明'升'故事'最薄边界，confidence 不应顶高", "holdout": false
+  },
+  "synthetic/tea/03_understanding_shift.txt": {
+    "is_story": true, "type": null, "expected_engine": "recontextualize",
+    "confidence_band": [0.7, 0.9], "tradition": "契诃夫式",
+    "purpose": "纯 understanding 转变、无外部冲突——验证传统中立", "holdout": true
+  },
+  "synthetic/tea/04_description.txt": {
+    "is_story": false, "type": "描摹", "expected_engine": null,
+    "confidence_band": [0.75, 0.95], "tradition": "中国现代",
+    "purpose": "纯描摹一杯茶", "holdout": false
+  },
+
+  "synthetic/journey/01_description.txt": {
+    "is_story": false, "type": "描摹", "expected_engine": null,
+    "confidence_band": [0.75, 0.95], "tradition": "中国现代",
+    "purpose": "城市景物描摹", "holdout": false
+  },
+  "synthetic/journey/02_mood.txt": {
+    "is_story": false, "type": "随笔", "expected_engine": null,
+    "confidence_band": [0.55, 0.85], "tradition": "中国现代",
+    "purpose": "走路时回忆与情绪", "holdout": false
+  },
+  "synthetic/journey/03_recontextualize.txt": {
+    "is_story": true, "type": null, "expected_engine": "recontextualize",
+    "confidence_band": [0.7, 0.9], "tradition": "现代主义",
+    "purpose": "不协调元素出现并重新框定（对面=未来的我）", "holdout": false
+  },
+  "synthetic/journey/04_conflict.txt": {
+    "is_story": true, "type": null, "expected_engine": "conflict",
+    "confidence_band": [0.8, 0.95], "tradition": "现代冲突",
+    "purpose": "纯外部冲突 + situation 维度", "holdout": false
+  },
+
+  "synthetic/canonical_style/01_chekhov_style.txt": {
+    "is_story": true, "type": null, "expected_engine": "recontextualize",
+    "confidence_band": [0.6, 0.85], "tradition": "契诃夫式",
+    "purpose": "契诃夫式 understanding 转变、无外部冲突——RUBRIC '传统中立' 命题最重要验证", "holdout": true
+  },
+  "synthetic/canonical_style/02_hemingway_style.txt": {
+    "is_story": true, "type": null, "expected_engine": "recontextualize",
+    "confidence_band": [0.5, 0.8], "tradition": "极简对话+subtext",
+    "purpose": "对话承载所有信息、subtext 浓厚——flat_subtext 诊断应为 ok", "holdout": true
+  },
+  "synthetic/canonical_style/03_classical_chinese.txt": {
+    "is_story": true, "type": null, "expected_engine": "inevitability",
+    "confidence_band": [0.6, 0.85], "tradition": "中国古典笔记小说",
+    "purpose": "聊斋式短志怪、inevitability 引擎——古文 RUBRIC 能否识别", "holdout": false
+  },
+  "synthetic/canonical_style/04_xianxia.txt": {
+    "is_story": true, "type": null, "expected_engine": "conflict",
+    "confidence_band": [0.7, 0.95], "tradition": "网文升级流",
+    "purpose": "纯冲突 + situation + 强因果——契诃夫式的对照", "holdout": false
+  },
+  "synthetic/canonical_style/05_zuihitsu.txt": {
+    "is_story": false, "type": "随笔", "expected_engine": null,
+    "confidence_band": [0.4, 0.75], "tradition": "zuihitsu / 随笔",
+    "purpose": "fragmentary 抒情体（《徒然草》传统）——边界，confidence 应明显降，borderline_note 非空", "holdout": false
+  },
+
+  "synthetic/english/01_minimalist_dialogue.txt": {
+    "is_story": true, "type": null, "expected_engine": "recontextualize",
+    "confidence_band": [0.55, 0.85], "tradition": "极简对话+subtext",
+    "purpose": "英文极简对话，配对 hemingway_style——跨语言一致性", "holdout": false
+  },
+  "synthetic/english/02_static_description.txt": {
+    "is_story": false, "type": "描摹", "expected_engine": null,
+    "confidence_band": [0.8, 0.98], "tradition": "西方静物",
+    "purpose": "纯描摹英文版", "holdout": false
+  },
+  "synthetic/english/03_pure_action.txt": {
+    "is_story": true, "type": null, "expected_engine": "conflict",
+    "confidence_band": [0.75, 0.95], "tradition": "类型小说动作",
+    "purpose": "纯动作冲突，英文", "holdout": false
+  },
+  "synthetic/english/04_revelation.txt": {
+    "is_story": true, "type": null, "expected_engine": "revelation",
+    "confidence_band": [0.8, 0.95], "tradition": "西方短篇",
+    "purpose": "信件揭真相，understanding 维度", "holdout": false
+  },
+  "synthetic/english/05_chekhovian.txt": {
+    "is_story": true, "type": null, "expected_engine": "recontextualize",
+    "confidence_band": [0.6, 0.85], "tradition": "契诃夫式",
+    "purpose": "英文契诃夫式 understanding 转变", "holdout": true
+  },
+
+  "edge/01_prose_poem.txt": {
+    "is_story": false, "type": "描摹", "expected_engine": null,
+    "confidence_band": [0.3, 0.7], "tradition": "散文诗",
+    "purpose": "意象拼贴但无叙事弧，confidence 不应顶高", "holdout": false
+  },
+  "edge/02_stream_consciousness.txt": {
+    "is_story": false, "type": "随笔", "expected_engine": null,
+    "confidence_band": [0.3, 0.7], "tradition": "意识流",
+    "purpose": "意识流，有 K 但无 D→T——能不能不硬给结论", "holdout": false
+  },
+  "edge/03_documentary.txt": {
+    "is_story": false, "type": "说明", "expected_engine": null,
+    "confidence_band": [0.55, 0.85], "tradition": "纪实",
+    "purpose": "新闻体，有事件但客观立场——应识别为非虚构、弱 K", "holdout": false
+  },
+  "edge/04_dialogue_only.txt": {
+    "is_story": true, "type": null, "expected_engine": "recontextualize",
+    "confidence_band": [0.3, 0.7], "tradition": "实验",
+    "purpose": "纯对话无旁白，结尾'不是因为你想的那个'是隐含 D 与 T——RUBRIC 在零叙述时能不能识别，confidence 应低", "holdout": true
+  },
+  "edge/05_micro.txt": {
+    "is_story": true, "type": null, "expected_engine": "recontextualize",
+    "confidence_band": [0.3, 0.7], "tradition": "极短微小说",
+    "purpose": "50 字压缩极限——RUBRIC 是否因太短而误判描摹", "holdout": false
+  },
+
+  "partial/faqtiao_02_at30.txt": {
+    "is_story": false, "type": null, "expected_engine": null,
+    "confidence_band": [0.0, 0.5], "tradition": "草稿",
+    "purpose": "完整版 30% 草稿，只有 S0——必须低 confidence、不能编出 D/T/S1",
+    "holdout": false, "is_partial": true,
+    "partial_expectations": {"S0_present": true, "D_present": false, "T_present": false, "S1_present": false}
+  },
+  "partial/faqtiao_02_at60.txt": {
+    "is_story": false, "type": null, "expected_engine": null,
+    "confidence_band": [0.0, 0.5], "tradition": "草稿",
+    "purpose": "完整版 60% 草稿，S0 充分但 D 未到——必须低 confidence",
+    "holdout": false, "is_partial": true,
+    "partial_expectations": {"S0_present": true, "D_present": false, "T_present": false, "S1_present": false}
+  },
+  "partial/faqtiao_02_at80.txt": {
+    "is_story": false, "type": null, "expected_engine": null,
+    "confidence_band": [0.0, 0.6], "tradition": "草稿",
+    "purpose": "完整版 80% 草稿，S0+D 在、T 起头未落——必须低 confidence",
+    "holdout": false, "is_partial": true,
+    "partial_expectations": {"S0_present": true, "D_present": true, "T_present": false, "S1_present": false}
+  }
+}

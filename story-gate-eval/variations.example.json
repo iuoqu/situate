@@ -1,0 +1,52 @@
+[
+  {
+    "seed": "specimens/synthetic/phone/02_revelation.txt",
+    "transform": "把引擎从 revelation 改成 conflict——母亲在电话里跟我吵起来，situation 维度，confidence 0.75-0.9",
+    "out": "specimens/synthetic/phone/05_conflict.txt"
+  },
+  {
+    "seed": "specimens/synthetic/phone/01_mood.txt",
+    "transform": "改成纯描摹——只描述这个号码、这个时间点、那个手机屏幕的样子，不带任何叙事者情绪。预期 type=描摹",
+    "out": "specimens/synthetic/phone/06_description.txt"
+  },
+  {
+    "seed": "specimens/synthetic/tea/03_understanding_shift.txt",
+    "transform": "改成 inevitability——外婆生前一直说'第三泡要等我走了你才会懂'，现在主角在喝第三泡，命运被预先启动",
+    "out": "specimens/synthetic/tea/05_inevitability.txt"
+  },
+  {
+    "seed": "specimens/synthetic/tea/02_with_K.txt",
+    "transform": "改成 revelation——主角在外婆遗物里发现一张写着泡茶要点的纸条，背面是给主角的话",
+    "out": "specimens/synthetic/tea/06_revelation.txt"
+  },
+  {
+    "seed": "specimens/synthetic/journey/03_recontextualize.txt",
+    "transform": "改成 revelation——便利店店员认出主角，说出一件主角不记得的旧事",
+    "out": "specimens/synthetic/journey/05_revelation.txt"
+  },
+  {
+    "seed": "specimens/synthetic/journey/04_conflict.txt",
+    "transform": "改成 inevitability——主角发现自己每个雨夜都被同一个人跟，三年了从没躲掉过",
+    "out": "specimens/synthetic/journey/06_inevitability.txt"
+  },
+  {
+    "seed": "specimens/synthetic/canonical_style/01_chekhov_style.txt",
+    "transform": "保持 understanding-shift 引擎，但让结尾更暧昧——李医生未必意识到自己在意识到什么。confidence 调低（0.45-0.7），借此测 RUBRIC 在 borderline 时是否硬给结论",
+    "out": "specimens/edge/06_ambiguous_chekhov.txt"
+  },
+  {
+    "seed": "specimens/synthetic/faqtiao/02_revelation.txt",
+    "transform": "压缩到 60 字以内，保持 revelation 结构。预期：能识别为 story 但 confidence 因极短而降到 [0.4, 0.7]",
+    "out": "specimens/synthetic/faqtiao/07_micro.txt"
+  },
+  {
+    "seed": "specimens/synthetic/english/04_revelation.txt",
+    "transform": "改成 inevitability——the aunt had warned in her will: 'if you find these, my sister had already known.' Mother had known all along.",
+    "out": "specimens/synthetic/english/06_inevitability.txt"
+  },
+  {
+    "seed": "specimens/synthetic/canonical_style/05_zuihitsu.txt",
+    "transform": "在结尾加一句让 understanding 真的发生转变——把 fragmentary 抒情体推过门神。预期：从 type=随笔 升级到 is_story=true，但 confidence 应该是边界（0.5-0.7）",
+    "out": "specimens/edge/07_zuihitsu_plus_turn.txt"
+  }
+]
