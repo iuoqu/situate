@@ -161,6 +161,19 @@ async function fanOutMulti(
       queue.push({ spec, providerId });
     }
   }
+  await fanOutCells(queue, concurrency, signal, onResult, onProgress);
+}
+
+// Like fanOutMulti, but takes an explicit list of (spec, providerId) cells.
+// Used by selection-based runs where the user picks which cells.
+async function fanOutCells(
+  tasks: Array<{ spec: SpecimenInfo; providerId: string }>,
+  concurrency: number,
+  signal: AbortSignal,
+  onResult: (r: ResultEvent) => void,
+  onProgress: (completed: number, total: number) => void,
+): Promise<void> {
+  const queue = [...tasks];
   let completed = 0;
   const total = queue.length;
   async function worker(): Promise<void> {
@@ -177,6 +190,16 @@ async function fanOutMulti(
   await Promise.allSettled(
     Array.from({ length: Math.min(concurrency, total) }, () => worker()),
   );
+}
+
+// Cell key = "path|providerId" — used to identify a single (spec, provider)
+// pair in the selection Set and the results map.
+function cellKey(path: string, providerId: string): string {
+  return `${path}|${providerId}`;
+}
+function parseCellKey(key: string): [string, string] {
+  const i = key.lastIndexOf("|");
+  return [key.slice(0, i), key.slice(i + 1)];
 }
 
 // ─── Auth panel ─────────────────────────────────────────────────────────────
@@ -293,6 +316,9 @@ function EvalSection({
   const [mode, setMode] = useState<"full" | "partial" | "both">("both");
   const [concurrency, setConcurrency] = useState(2);
   const [selectedIds, setSelectedIds] = useState<string[]>([]);
+  // Selected cells = "path|providerId" keys for the next run. Refresh
+  // semantics: user explicitly picks via filters or per-cell clicks.
+  const [selectedCells, setSelectedCells] = useState<Set<string>>(new Set());
   const [running, setRunning] = useState(false);
   const [progress, setProgress] = useState<ProgressEvent | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -302,8 +328,7 @@ function EvalSection({
     abortRef.current?.abort();
   }
 
-  // Initialize selection to whichever providers are available, defaulting to
-  // the canonical Anthropic one if all keys are configured.
+  // Initialize provider selection
   useEffect(() => {
     if (selectedIds.length === 0 && providers.length > 0) {
       const available = providers.filter((p) => p.available).map((p) => p.id);
@@ -320,43 +345,121 @@ function EvalSection({
       prev.includes(id) ? prev.filter((x) => x !== id) : [...prev, id],
     );
   }
-  function selectAll() {
+  function selectAllProviders() {
     setSelectedIds(providers.filter((p) => p.available).map((p) => p.id));
   }
-  function selectNone() {
+  function selectNoneProviders() {
     setSelectedIds([]);
   }
 
-  async function run() {
+  // The grid uses these specimens + selected providers
+  const gridSpecimens = useMemo(
+    () =>
+      specimens.filter((s) => {
+        if (mode === "full") return s.bucket !== "partial";
+        if (mode === "partial") return s.bucket === "partial";
+        return true;
+      }),
+    [specimens, mode],
+  );
+
+  // ─── Cell selection helpers ────────────────────────────────────────────
+  function toggleCell(path: string, providerId: string) {
+    setSelectedCells((prev) => {
+      const next = new Set(prev);
+      const k = cellKey(path, providerId);
+      if (next.has(k)) next.delete(k);
+      else next.add(k);
+      return next;
+    });
+  }
+  function selectAllCells() {
+    const all = new Set<string>();
+    for (const spec of gridSpecimens) {
+      for (const pid of selectedIds) {
+        all.add(cellKey(spec.path, pid));
+      }
+    }
+    setSelectedCells(all);
+  }
+  function selectErroredCells() {
+    const next = new Set<string>();
+    for (const spec of gridSpecimens) {
+      for (const pid of selectedIds) {
+        const r = results[spec.path]?.[pid];
+        if (r?.error) next.add(cellKey(spec.path, pid));
+      }
+    }
+    setSelectedCells(next);
+  }
+  function selectUncompletedCells() {
+    const next = new Set<string>();
+    for (const spec of gridSpecimens) {
+      for (const pid of selectedIds) {
+        const r = results[spec.path]?.[pid];
+        if (!r || r.error) next.add(cellKey(spec.path, pid));
+      }
+    }
+    setSelectedCells(next);
+  }
+  function clearCellSelection() {
+    setSelectedCells(new Set());
+  }
+
+  // ─── Result merge helper (preserves existing results) ──────────────────
+  function mergeResult(r: ResultEvent) {
+    setResults({
+      ...results,
+      [r.path]: { ...(results[r.path] ?? {}), [r.provider]: r },
+    });
+  }
+  // Live-merge during a streaming run — we need a closure-stable reference
+  // so worker callbacks pick up the latest results map without staleness.
+  const runningLocalRef = useRef<ResultsByPath>({});
+
+  // ─── Run selected cells ────────────────────────────────────────────────
+  async function runSelected() {
+    if (selectedCells.size === 0) return;
     setError(null);
     setRunning(true);
     setProgress(null);
-    setResults({});
-    setRunProviderIds(selectedIds);
+    // Track which providers got hit so PerProviderSummary can render
+    const hitProviders = new Set<string>(runProviderIds);
+    for (const key of selectedCells) {
+      const [, pid] = parseCellKey(key);
+      hitProviders.add(pid);
+    }
+    setRunProviderIds(Array.from(hitProviders));
+
+    // Seed runningLocalRef from current results — merging mode
+    runningLocalRef.current = { ...results };
 
     const ctrl = new AbortController();
     abortRef.current = ctrl;
 
-    const targets = specimens.filter((s) => {
-      if (mode === "full") return s.bucket !== "partial";
-      if (mode === "partial") return s.bucket === "partial";
-      return true;
-    });
+    const tasks: Array<{ spec: SpecimenInfo; providerId: string }> = [];
+    for (const key of selectedCells) {
+      const [path, providerId] = parseCellKey(key);
+      const spec = gridSpecimens.find((s) => s.path === path);
+      if (spec) tasks.push({ spec, providerId });
+    }
 
-    const local: ResultsByPath = {};
     try {
-      await fanOutMulti(
-        targets,
-        selectedIds,
+      await fanOutCells(
+        tasks,
         concurrency,
         ctrl.signal,
         (r) => {
+          const local = runningLocalRef.current;
           if (!local[r.path]) local[r.path] = {};
           local[r.path][r.provider] = r;
           setResults({ ...local });
         },
         (completed, total) => setProgress({ completed, total }),
       );
+      // Clear selection after a successful run so the user starts fresh
+      // (errored cells will be re-selectable via the filter)
+      setSelectedCells(new Set());
     } catch (e) {
       setError(e instanceof Error ? e.message : String(e));
     } finally {
@@ -365,12 +468,60 @@ function EvalSection({
     }
   }
 
-  const totalCalls = selectedIds.length *
-    specimens.filter((s) => {
-      if (mode === "full") return s.bucket !== "partial";
-      if (mode === "partial") return s.bucket === "partial";
-      return true;
-    }).length;
+  // Single-cell retry — fires immediately, independent of selection
+  async function retryCell(path: string, providerId: string) {
+    const spec = gridSpecimens.find((s) => s.path === path);
+    if (!spec) return;
+    // Mark as running by clearing the cell to undefined, so UI shows "—"
+    setResults({
+      ...results,
+      [path]: {
+        ...(results[path] ?? {}),
+        [providerId]: {
+          path,
+          bucket: spec.bucket,
+          run_mode: spec.bucket === "partial" ? "partial" : "full",
+          provider: providerId,
+          error: "retrying...",
+          diagnostic: null,
+          check: { ok: false, fails: ["retrying"] },
+          primary_engine: "-",
+          confidence: null,
+          expectation: spec.expectation,
+        },
+      },
+    });
+
+    const ctrl = new AbortController();
+    const result = await diagnoseOne(spec, providerId, ctrl.signal);
+    mergeResult(result);
+    // Make sure provider is in runProviderIds for summary
+    if (!runProviderIds.includes(providerId)) {
+      setRunProviderIds([...runProviderIds, providerId]);
+    }
+  }
+
+  // ─── Counts for the run controls ──────────────────────────────────────
+  const totalGridCells = gridSpecimens.length * selectedIds.length;
+  const erroredCount = useMemo(() => {
+    let n = 0;
+    for (const spec of gridSpecimens) {
+      for (const pid of selectedIds) {
+        if (results[spec.path]?.[pid]?.error) n++;
+      }
+    }
+    return n;
+  }, [results, gridSpecimens, selectedIds]);
+  const uncompletedCount = useMemo(() => {
+    let n = 0;
+    for (const spec of gridSpecimens) {
+      for (const pid of selectedIds) {
+        const r = results[spec.path]?.[pid];
+        if (!r || r.error) n++;
+      }
+    }
+    return n;
+  }, [results, gridSpecimens, selectedIds]);
 
   return (
     <Section title="Run eval" disabled={!active}>
@@ -379,10 +530,10 @@ function EvalSection({
           <span style={{ fontSize: 11, textTransform: "uppercase", letterSpacing: 1.2, color: "#665" }}>
             models
           </span>
-          <button type="button" onClick={selectAll} style={btnSubtle} disabled={running}>all available</button>
-          <button type="button" onClick={selectNone} style={btnSubtle} disabled={running}>none</button>
+          <button type="button" onClick={selectAllProviders} style={btnSubtle} disabled={running}>all available</button>
+          <button type="button" onClick={selectNoneProviders} style={btnSubtle} disabled={running}>none</button>
           <span style={{ fontSize: 11, color: "#888" }}>
-            {selectedIds.length} selected · {totalCalls} calls/run
+            {selectedIds.length} selected · {totalGridCells} total cells in grid
           </span>
         </div>
         <div style={{ display: "flex", flexDirection: "column", gap: 4 }}>
@@ -434,24 +585,58 @@ function EvalSection({
             disabled={running}
           />
         </Field>
+        {progress && (
+          <span style={{ fontSize: 13, color: "#555" }}>
+            {progress.completed} / {progress.total} done
+          </span>
+        )}
+      </div>
+
+      {/* Cell selection bar — drives the run */}
+      <div
+        style={{
+          padding: 10,
+          background: "#fafaf7",
+          border: "1px solid #e8e3d8",
+          borderRadius: 4,
+          marginBottom: 12,
+          display: "flex",
+          gap: 8,
+          alignItems: "center",
+          flexWrap: "wrap",
+        }}
+      >
+        <span style={{ fontSize: 11, textTransform: "uppercase", letterSpacing: 1.2, color: "#665", marginRight: 4 }}>
+          cells to run
+        </span>
+        <button onClick={selectAllCells} disabled={running || !active} style={btnSubtle}>
+          all
+        </button>
+        <button onClick={selectUncompletedCells} disabled={running || !active} style={btnSubtle}>
+          uncompleted ({uncompletedCount})
+        </button>
+        <button onClick={selectErroredCells} disabled={running || !active} style={btnSubtle}>
+          errored ({erroredCount})
+        </button>
+        <button onClick={clearCellSelection} disabled={running || !active} style={btnSubtle}>
+          none
+        </button>
+        <span style={{ fontSize: 13, color: "#444", marginLeft: "auto" }}>
+          <strong>{selectedCells.size}</strong> selected
+        </span>
         {!running && (
           <button
-            onClick={run}
-            disabled={!active || selectedIds.length === 0}
+            onClick={runSelected}
+            disabled={!active || selectedCells.size === 0}
             style={btnPrimary}
           >
-            run eval ({selectedIds.length})
+            run selected ({selectedCells.size})
           </button>
         )}
         {running && (
           <button onClick={stop} style={{ ...btnPrimary, background: "#7c2020" }}>
             stop
           </button>
-        )}
-        {progress && (
-          <span style={{ fontSize: 13, color: "#555" }}>
-            {progress.completed} / {progress.total} done
-          </span>
         )}
       </div>
 
@@ -465,11 +650,16 @@ function EvalSection({
         />
       )}
 
-      {Object.keys(results).length > 0 && (
-        <ComparisonTable
-          results={results}
+      {selectedIds.length > 0 && (
+        <SelectableGrid
+          specimens={gridSpecimens}
           providers={providers}
-          providerIds={runProviderIds}
+          providerIds={selectedIds}
+          results={results}
+          selectedCells={selectedCells}
+          onToggle={toggleCell}
+          onRetry={retryCell}
+          disabled={running}
         />
       )}
     </Section>
@@ -572,54 +762,130 @@ function shortProviderName(pid: string, providers: ProviderInfo[]): string {
   return parts.slice(-2).join(" ");
 }
 
-function ComparisonTable({
-  results,
+function SelectableGrid({
+  specimens,
   providers,
   providerIds,
+  results,
+  selectedCells,
+  onToggle,
+  onRetry,
+  disabled,
 }: {
-  results: ResultsByPath;
+  specimens: SpecimenInfo[];
   providers: ProviderInfo[];
   providerIds: string[];
+  results: ResultsByPath;
+  selectedCells: Set<string>;
+  onToggle: (path: string, providerId: string) => void;
+  onRetry: (path: string, providerId: string) => void;
+  disabled: boolean;
 }) {
-  const sortedPaths = Object.keys(results).sort();
+  const sortedSpecimens = [...specimens].sort((a, b) => a.path.localeCompare(b.path));
 
-  function cellFor(r: ResultEvent | undefined): React.ReactNode {
-    if (!r) return <span style={{ color: "#bbb" }}>—</span>;
-    const verdict = r.error ? "ERR" : r.check.ok ? "PASS" : "FAIL";
-    const color = r.error ? "#a05300" : r.check.ok ? "#2a5230" : "#b00020";
-    const conf = r.confidence == null ? "" : r.confidence.toFixed(2);
-    const tip = r.error
+  function GridCell({
+    spec,
+    providerId,
+  }: {
+    spec: SpecimenInfo;
+    providerId: string;
+  }) {
+    const r = results[spec.path]?.[providerId];
+    const isSelected = selectedCells.has(cellKey(spec.path, providerId));
+    const isError = !!r?.error;
+    const isRetrying = r?.error === "retrying...";
+
+    const verdict = !r ? "—" : isError ? (isRetrying ? "…" : "ERR") : r.check.ok ? "PASS" : "FAIL";
+    const verdictColor = !r
+      ? "#bbb"
+      : isError
+        ? "#a05300"
+        : r.check.ok
+          ? "#2a5230"
+          : "#b00020";
+    const conf = r?.confidence == null ? "" : r.confidence.toFixed(2);
+    const inline = r?.error
       ? r.error
-      : r.check.fails.length > 0
-        ? r.check.fails.join(", ")
-        : "ok";
-    // For errors and fails, show the message inline (truncated) below the
-    // verdict — saves a hover. Full text still in title attribute.
-    const inline = r.error
-      ? r.error
-      : !r.check.ok
+      : r && !r.check.ok
         ? r.check.fails.join(", ")
         : "";
+    const tip = r?.error
+      ? r.error
+      : r?.check.fails.length
+        ? r.check.fails.join(", ")
+        : r
+          ? "ok"
+          : "no result yet — check the box to include in next run";
+
     return (
-      <div title={tip} style={{ minWidth: 220, maxWidth: 360 }}>
-        <div style={{ color, fontWeight: 600, fontSize: 11.5 }}>
-          {verdict}
-          {conf && (
-            <span style={{ color: "#666", fontWeight: 400, marginLeft: 4 }}>
-              {conf}
-            </span>
+      <div
+        title={tip}
+        style={{
+          position: "relative",
+          minWidth: 200,
+          maxWidth: 320,
+          padding: 6,
+          paddingLeft: 28,
+          background: isSelected ? "#fff8db" : "transparent",
+          borderRadius: 3,
+          border: isSelected ? "1px solid #d4b860" : "1px solid transparent",
+          cursor: disabled ? "default" : "pointer",
+        }}
+        onClick={(e) => {
+          if (disabled) return;
+          // Don't toggle when clicking the retry button
+          if ((e.target as HTMLElement).closest("[data-retry]")) return;
+          onToggle(spec.path, providerId);
+        }}
+      >
+        <input
+          type="checkbox"
+          checked={isSelected}
+          readOnly
+          disabled={disabled}
+          style={{ position: "absolute", left: 6, top: 8, cursor: disabled ? "default" : "pointer" }}
+          onClick={(e) => {
+            e.stopPropagation();
+            if (!disabled) onToggle(spec.path, providerId);
+          }}
+        />
+        <div style={{ display: "flex", alignItems: "baseline", gap: 6 }}>
+          <span style={{ color: verdictColor, fontWeight: 600, fontSize: 11.5 }}>{verdict}</span>
+          {conf && <span style={{ color: "#666", fontSize: 11.5 }}>{conf}</span>}
+          {isError && !isRetrying && (
+            <button
+              data-retry
+              onClick={(e) => {
+                e.stopPropagation();
+                onRetry(spec.path, providerId);
+              }}
+              disabled={disabled}
+              style={{
+                marginLeft: "auto",
+                padding: "1px 8px",
+                background: "white",
+                border: "1px solid #c8c2b3",
+                borderRadius: 3,
+                fontSize: 10.5,
+                color: "#444",
+                cursor: disabled ? "default" : "pointer",
+              }}
+              title="re-run just this cell"
+            >
+              retry ↻
+            </button>
           )}
         </div>
         {inline && (
           <div
             style={{
               fontSize: 10.5,
-              color: r.error ? "#a05300" : "#7c2020",
-              marginTop: 2,
+              color: r?.error ? "#a05300" : "#7c2020",
+              marginTop: 3,
               wordBreak: "break-word",
               whiteSpace: "pre-wrap",
               lineHeight: 1.35,
-              fontFamily: r.error
+              fontFamily: r?.error
                 ? 'ui-monospace, "SF Mono", Menlo, monospace'
                 : "inherit",
             }}
@@ -644,6 +910,18 @@ function ComparisonTable({
     return <span style={{ color: "#a05300", fontWeight: 600 }}>split</span>;
   }
 
+  function selectRow(path: string) {
+    if (disabled) return;
+    // Toggle: if any cell in row is unselected, select all; else clear all
+    const rowKeys = providerIds.map((pid) => cellKey(path, pid));
+    const allSelected = rowKeys.every((k) => selectedCells.has(k));
+    rowKeys.forEach((k) => {
+      const [p, pid] = parseCellKey(k);
+      if (allSelected && selectedCells.has(k)) onToggle(p, pid);
+      if (!allSelected && !selectedCells.has(k)) onToggle(p, pid);
+    });
+  }
+
   return (
     <div style={{ overflowX: "auto" }}>
       <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 12.5 }}>
@@ -658,15 +936,22 @@ function ComparisonTable({
           </tr>
         </thead>
         <tbody>
-          {sortedPaths.map((path) => {
-            const byProvider = results[path] ?? {};
-            const anyR = Object.values(byProvider)[0];
+          {sortedSpecimens.map((spec) => {
+            const byProvider = results[spec.path] ?? {};
             return (
-              <tr key={path} style={{ borderBottom: "1px solid #f0ecdf" }}>
-                <td style={{ ...td, fontFamily: "monospace", fontSize: 11.5 }}>{path}</td>
-                <td style={td}>{anyR?.bucket ?? "-"}</td>
+              <tr key={spec.path} style={{ borderBottom: "1px solid #f0ecdf" }}>
+                <td
+                  style={{ ...td, fontFamily: "monospace", fontSize: 11.5, cursor: disabled ? "default" : "pointer" }}
+                  onClick={() => selectRow(spec.path)}
+                  title="click to toggle this row"
+                >
+                  {spec.path}
+                </td>
+                <td style={td}>{spec.bucket}</td>
                 {providerIds.map((pid) => (
-                  <td key={pid} style={td}>{cellFor(byProvider[pid])}</td>
+                  <td key={pid} style={{ ...td, verticalAlign: "top" }}>
+                    <GridCell spec={spec} providerId={pid} />
+                  </td>
                 ))}
                 <td style={td}>{agreementBadge(byProvider)}</td>
               </tr>
