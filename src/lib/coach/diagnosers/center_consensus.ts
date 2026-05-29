@@ -63,15 +63,14 @@ const FAMILIES: FamilyConfig[] = [
     // Try multiple thinking-disable conventions; the unsupported ones
     // are ignored. If thinking stays on, tool_choice="auto" keeps the
     // call valid (forced tool_choice would HTTP 400 with thinking).
-    // DeepSeek V4 /v1 endpoint validates reasoning_effort against
-    // {high, low, medium, max, xhigh}. We use "low" — combined with
-    // tool_choice="auto" this gives us a working request even when
-    // thinking stays on. The other disable conventions are kept as
-    // attempts (unknown fields are typically ignored).
+    // DeepSeek V4 Flash defaults to thinking ON. Thinking mode rejects
+    // forced tool_choice AND rejects temperature/top_p. We're using
+    // temperature 0.9 for multi-sample, so disabling thinking is
+    // mandatory. Per https://api-docs.deepseek.com/guides/thinking_mode
+    // the correct disable is { thinking: { type: "disabled" } }.
+    // tool_choice_auto stays true as belt-and-suspenders.
     extra_body: {
-      enable_thinking: false,
-      chat_template_kwargs: { enable_thinking: false },
-      reasoning_effort: "low",
+      thinking: { type: "disabled" },
     },
     tool_choice_auto: true,
   },
