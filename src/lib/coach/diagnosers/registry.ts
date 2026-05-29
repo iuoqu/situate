@@ -5,6 +5,11 @@ import {
   type CausalSpineJudgment,
 } from "./causal_spine";
 import {
+  DIAGNOSER_ID as CENTER_CONSENSUS_ID,
+  STATUS as CENTER_CONSENSUS_STATUS,
+  runCenterConsensus,
+} from "./center_consensus";
+import {
   DIAGNOSER_ID as ECONOMY_ID,
   STATUS as ECONOMY_STATUS,
   runEconomy,
@@ -65,6 +70,13 @@ export interface DiagnoserDefinition {
    * receive intent — they would only be confused by it.
    */
   requires_intent: boolean;
+  /**
+   * When false: this diagnoser ignores the UI-selected providers and
+   * runs once total, using its own internal provider (e.g.
+   * center_consensus uses qwen-plus multi-sample). When true (default):
+   * the route fans out one call per UI-selected provider.
+   */
+  provider_fanout: boolean;
   /** Runs the diagnoser against one specimen with one provider. */
   run: (
     text: string,
@@ -101,6 +113,7 @@ export const DIAGNOSERS: Record<string, DiagnoserDefinition> = {
       },
     },
     requires_intent: false,
+    provider_fanout: true,
     run: runStakesAbsent,
   },
   [CAUSAL_SPINE_ID]: {
@@ -127,6 +140,7 @@ export const DIAGNOSERS: Record<string, DiagnoserDefinition> = {
       },
     },
     requires_intent: false,
+    provider_fanout: true,
     run: runCausalSpine,
   },
   [INTENT_REALIZATION_ID]: {
@@ -137,6 +151,7 @@ export const DIAGNOSERS: Record<string, DiagnoserDefinition> = {
       "Given an author-declared intent block and prose, judges how completely the prose realizes the declared intent. Requires intent.",
     pair_axis: null, // contrast pairs don't apply — axis is per-call
     requires_intent: true,
+    provider_fanout: true,
     run: runIntentRealization,
   },
   [INFERRED_INTENT_ID]: {
@@ -147,6 +162,7 @@ export const DIAGNOSERS: Record<string, DiagnoserDefinition> = {
       "Independently reads the prose and reports the AI-inferred intent (K, transformation, setting, center of gravity, subtext signal). No verdict tier — it's an extractor, not a judge.",
     pair_axis: null,
     requires_intent: false,
+    provider_fanout: true,
     run: runInferredIntent,
   },
   [ECONOMY_ID]: {
@@ -170,7 +186,19 @@ export const DIAGNOSERS: Record<string, DiagnoserDefinition> = {
       },
     },
     requires_intent: false,
+    provider_fanout: true,
     run: runEconomy,
+  },
+  [CENTER_CONSENSUS_ID]: {
+    id: CENTER_CONSENSUS_ID,
+    display_name: "center_consensus",
+    status: CENTER_CONSENSUS_STATUS,
+    description:
+      "Multi-sample structural robustness check. Runs qwen-plus N times at high temperature, votes on the center of gravity. Tests intra-model robustness — complements inter-model consensus from inferred_intent.",
+    pair_axis: null,
+    requires_intent: false,
+    provider_fanout: false, // uses internal qwen-plus, ignores UI provider selection
+    run: runCenterConsensus,
   },
 };
 

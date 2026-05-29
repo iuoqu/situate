@@ -122,11 +122,21 @@ export async function POST(req: NextRequest) {
     );
   }
 
+  // Sentinel used as the provider key for non-fanout diagnosers
+  // (center_consensus etc.) — their result is keyed under this rather
+  // than under a real provider id, since they use their own internal
+  // model and ignore the UI provider selection.
+  const INTERNAL_PROVIDER = "__internal__";
+
   type Task = { diagnoser: DiagnoserDefinition; provider: string };
   const tasks: Task[] = [];
   for (const d of selected) {
-    for (const p of providersToRun) {
-      tasks.push({ diagnoser: d, provider: p });
+    if (d.provider_fanout === false) {
+      tasks.push({ diagnoser: d, provider: INTERNAL_PROVIDER });
+    } else {
+      for (const p of providersToRun) {
+        tasks.push({ diagnoser: d, provider: p });
+      }
     }
   }
 
@@ -151,9 +161,13 @@ export async function POST(req: NextRequest) {
         // Intent only flows to diagnosers that explicitly require it.
         // The others (stakes_absent, causal_spine) stay strictly per-axis.
         const intentForCall = t.diagnoser.requires_intent ? userIntent : undefined;
+        // For non-fanout diagnosers, providerId is not passed through —
+        // they use their own internal provider.
+        const providerForCall =
+          t.diagnoser.provider_fanout === false ? undefined : t.provider;
         const judgment = (await t.diagnoser.run(
           userText,
-          t.provider,
+          providerForCall,
           intentForCall,
         )) as {
           result: unknown;
