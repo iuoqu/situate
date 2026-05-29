@@ -193,5 +193,51 @@
     "purpose": "完整版 80% 草稿，S0+D 在、T 起头未落——必须低 confidence",
     "holdout": false, "is_partial": true,
     "partial_expectations": {"S0_present": true, "D_present": true, "T_present": false, "S1_present": false}
+  },
+
+  "$diagnoser_experiments_note": "Below: contrast-pair specimens from diagnoser_experiments/stakes_absent/. Each pair has same material × event × dialogue, only differs on K (consciousness binding). with_K → is_story=true; no_K → is_story=false + type=说明 (per RUBRIC: transformed+causal but K absent = 说明 failure type). Pair-level test: model should distinguish within each pair on the same 4-provider eval.",
+
+  "diagnoser_experiments/stakes_absent/specimens/01_father_son_with_K.txt": {
+    "is_story": true, "type": null, "expected_engine": "recontextualize",
+    "confidence_band": [0.7, 0.95], "tradition": "中国现代",
+    "purpose": "Pair 1 with-K: 父子重逢，叙事者内心承重，识别母亲注视的迟到——transformational story 完整", "holdout": false
+  },
+  "diagnoser_experiments/stakes_absent/specimens/01_father_son_no_K.txt": {
+    "is_story": false, "type": "说明", "expected_engine": null,
+    "confidence_band": [0.7, 0.95], "tradition": "中国现代",
+    "purpose": "Pair 1 no-K: 同事件外在记录，监控镜头视角——'说明'失败类型（transformed+causal 但 K 缺）", "holdout": false
+  },
+
+  "diagnoser_experiments/stakes_absent/specimens/02_mother_daughter_with_K.txt": {
+    "is_story": true, "type": null, "expected_engine": "revelation",
+    "confidence_band": [0.7, 0.95], "tradition": "中国现代",
+    "purpose": "Pair 2 with-K: 病房发现保存的画作，女儿对自己冷淡多年的清算", "holdout": false
+  },
+  "diagnoser_experiments/stakes_absent/specimens/02_mother_daughter_no_K.txt": {
+    "is_story": false, "type": "说明", "expected_engine": null,
+    "confidence_band": [0.7, 0.95], "tradition": "中国现代",
+    "purpose": "Pair 2 no-K: 病房日志体，统计语言——K 拆掉", "holdout": false
+  },
+
+  "diagnoser_experiments/stakes_absent/specimens/03_stranger_with_K.txt": {
+    "is_story": true, "type": null, "expected_engine": "recontextualize",
+    "confidence_band": [0.65, 0.9], "tradition": "中国现代",
+    "purpose": "Pair 3 with-K: 异乡人买豆腐获赠豆腐皮，领悟当地人接纳", "holdout": false
+  },
+  "diagnoser_experiments/stakes_absent/specimens/03_stranger_no_K.txt": {
+    "is_story": false, "type": "说明", "expected_engine": null,
+    "confidence_band": [0.7, 0.95], "tradition": "中国现代",
+    "purpose": "Pair 3 no-K: 居民登记表语气，统计收尾——K 拆掉", "holdout": false
+  },
+
+  "diagnoser_experiments/stakes_absent/specimens/04_old_friends_with_K.txt": {
+    "is_story": true, "type": null, "expected_engine": "recontextualize",
+    "confidence_band": [0.65, 0.9], "tradition": "中国现代",
+    "purpose": "Pair 4 with-K: 同学会认出朋友笑的方式变了，承担二十年代价", "holdout": false
+  },
+  "diagnoser_experiments/stakes_absent/specimens/04_old_friends_no_K.txt": {
+    "is_story": false, "type": "说明", "expected_engine": null,
+    "confidence_band": [0.7, 0.95], "tradition": "中国现代",
+    "purpose": "Pair 4 no-K: 行为学观察记录，面部肌肉描述——K 拆掉", "holdout": false
   }
 }
