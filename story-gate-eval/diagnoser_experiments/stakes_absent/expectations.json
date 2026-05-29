@@ -1,0 +1,55 @@
+{
+  "$schema_note": "Each entry: intended_stakes_absent (true = diagnoser should fire because K absent; false = K present, should not fire). The 'pair' field groups specimens that share material so consensus_check.py can report within-pair contrast results.",
+
+  "01_father_son_with_K.txt": {
+    "pair": 1,
+    "intended_stakes_absent": false,
+    "intended_label": "K_present",
+    "construction_notes": "First-person narrator, interior reactions (我从厨房探头/我没让到一边/没去关火), the unanswered pot of water at the end as emotional spillover, the final paragraph re-frames the photo's meaning to the narrator — K binds throughout"
+  },
+  "01_father_son_no_K.txt": {
+    "pair": 1,
+    "intended_stakes_absent": true,
+    "intended_label": "K_absent",
+    "construction_notes": "Removed first-person, replaced narrator with '门内人' / behavioral records. Added apartment structural details to dilute meaning. Same events, no consciousness for whom they weigh."
+  },
+
+  "02_mother_daughter_with_K.txt": {
+    "pair": 2,
+    "intended_stakes_absent": false,
+    "intended_label": "K_present",
+    "construction_notes": "Daughter's interior throughout — the recognition of her own neglect ('从十六岁开始，没好好看过她一眼'), the decision to leave the drawer open ('我想她下次醒来再看一眼'), the missed clocking-out time. K is the daughter's reckoning."
+  },
+  "02_mother_daughter_no_K.txt": {
+    "pair": 2,
+    "intended_stakes_absent": true,
+    "intended_label": "K_absent",
+    "construction_notes": "Hospice nursing-log voice. Quantities (150 张 / 17 年 / 12 床). The same drawer-opening event but described as procedural observation. No daughter's interior, only her behavior recorded externally."
+  },
+
+  "03_stranger_with_K.txt": {
+    "pair": 3,
+    "intended_stakes_absent": false,
+    "intended_label": "K_present",
+    "construction_notes": "Outsider's interior — the moment of recognizing the stallholder's laugh as kindness rather than confusion, the small act of hanging the tofu skin as belonging-by-imitation, the standing-still-afterward. K binds to the stranger's slow integration."
+  },
+  "03_stranger_no_K.txt": {
+    "pair": 3,
+    "intended_stakes_absent": true,
+    "intended_label": "K_absent",
+    "construction_notes": "Demographic registry voice. Same events as a procedural record. Ends with town-level statistics. No consciousness, only described actions and population metrics."
+  },
+
+  "04_old_friends_with_K.txt": {
+    "pair": 4,
+    "intended_stakes_absent": false,
+    "intended_label": "K_present",
+    "construction_notes": "Narrator recognizes the friend's laugh has changed, can't bring himself to ask why, names the cost ('我没法再问他了'). K is in the narrator's deferred grief about a friendship lost without rupture."
+  },
+  "04_old_friends_no_K.txt": {
+    "pair": 4,
+    "intended_stakes_absent": true,
+    "intended_label": "K_absent",
+    "construction_notes": "Sociological observer voice. The change in facial-muscle pattern recorded clinically ('眼周肌肉活动减少'). Reunion described with attendance statistics. No one carries the weight of recognition; the recognition is reported, not felt."
+  }
+}
