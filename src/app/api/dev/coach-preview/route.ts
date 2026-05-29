@@ -92,23 +92,35 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: parsed }, { status: 400 });
   }
 
-  const all = listDiagnosers();
-  const requestedIds = parsed.diagnoser_ids;
-  const selected: DiagnoserDefinition[] = requestedIds
-    ? all.filter((d) => requestedIds.includes(d.id))
-    : all;
-  if (selected.length === 0) {
-    return NextResponse.json(
-      { error: "no matching diagnosers" },
-      { status: 400 },
-    );
-  }
-
   // Pin narrowed fields — TS loses the parsed-is-Body narrowing across
   // the worker closure.
   const userText = parsed.text;
   const providersToRun = parsed.providers;
   const userIntent = parsed.intent?.trim() || undefined;
+
+  const all = listDiagnosers();
+  const requestedIds = parsed.diagnoser_ids;
+  const candidate: DiagnoserDefinition[] = requestedIds
+    ? all.filter((d) => requestedIds.includes(d.id))
+    : all;
+  // Drop intent-requiring diagnosers when no intent was supplied.
+  const selected = userIntent
+    ? candidate
+    : candidate.filter((d) => !d.requires_intent);
+  const skipped = candidate
+    .filter((d) => d.requires_intent && !userIntent)
+    .map((d) => d.id);
+  if (selected.length === 0) {
+    return NextResponse.json(
+      {
+        error:
+          skipped.length > 0
+            ? `all matching diagnosers require intent; provide an intent block. Skipped: ${skipped.join(", ")}`
+            : "no matching diagnosers",
+      },
+      { status: 400 },
+    );
+  }
 
   type Task = { diagnoser: DiagnoserDefinition; provider: string };
   const tasks: Task[] = [];
@@ -136,10 +148,13 @@ export async function POST(req: NextRequest) {
       const t = queue.shift();
       if (!t) return;
       try {
+        // Intent only flows to diagnosers that explicitly require it.
+        // The others (stakes_absent, causal_spine) stay strictly per-axis.
+        const intentForCall = t.diagnoser.requires_intent ? userIntent : undefined;
         const judgment = (await t.diagnoser.run(
           userText,
           t.provider,
-          userIntent,
+          intentForCall,
         )) as {
           result: unknown;
         };
@@ -166,6 +181,7 @@ export async function POST(req: NextRequest) {
     results,
     providers_run: providersToRun,
     diagnoser_ids: selected.map((d) => d.id),
+    skipped_diagnoser_ids: skipped,
     intent_used: userIntent ?? null,
   });
 }

@@ -47,8 +47,6 @@ K_absent
 
 注意：很多 prose 处于 K_implicit 和 K_present 之间。**诚实判 K_implicit**，不要把 K_implicit 误升为 K_present。
 
-如果输入包含 <intent>...</intent> 块，那是作者**声明**的意图（如"K 应落在女儿身上"）。你仍然只评估 <prose> 实际呈现的内容；但请在 evidence 字段**开头**写一句话比较实现与意图（"吻合"/"部分吻合"/"未吻合 — 模型读到 K 在 X，而非作者声明的 Y"），再写常规 evidence。不要因为作者声明就抬高 verdict——只评判实际散文。
-
 通过 submit_judgment 工具输出。`;
 
 export const TOOL_NAME = "submit_judgment";
@@ -93,7 +91,6 @@ export interface StakesAbsentJudgment {
 export async function runStakesAbsent(
   text: string,
   providerId?: string,
-  intent?: string,
 ): Promise<FocusedCallResult<StakesAbsentJudgment>> {
   return focusedCall<StakesAbsentJudgment>({
     text,
@@ -102,6 +99,5 @@ export async function runStakesAbsent(
     toolDescription: TOOL_DESCRIPTION,
     inputSchema: INPUT_SCHEMA,
     providerId,
-    intent,
   });
 }
