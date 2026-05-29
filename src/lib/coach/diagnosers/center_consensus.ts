@@ -63,10 +63,15 @@ const FAMILIES: FamilyConfig[] = [
     // Try multiple thinking-disable conventions; the unsupported ones
     // are ignored. If thinking stays on, tool_choice="auto" keeps the
     // call valid (forced tool_choice would HTTP 400 with thinking).
+    // DeepSeek V4 /v1 endpoint validates reasoning_effort against
+    // {high, low, medium, max, xhigh}. We use "low" — combined with
+    // tool_choice="auto" this gives us a working request even when
+    // thinking stays on. The other disable conventions are kept as
+    // attempts (unknown fields are typically ignored).
     extra_body: {
       enable_thinking: false,
       chat_template_kwargs: { enable_thinking: false },
-      reasoning_effort: "minimal",
+      reasoning_effort: "low",
     },
     tool_choice_auto: true,
   },
