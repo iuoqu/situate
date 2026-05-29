@@ -27,6 +27,12 @@ interface Body {
   providers: string[];
   diagnoser_ids?: string[];
   concurrency?: number;
+  /**
+   * Optional author-declared intent. Free-text block; the route passes
+   * it through verbatim to the diagnoser. The diagnoser prompts know to
+   * wrap their reading with a "prose vs intent" comparison when present.
+   */
+  intent?: string;
 }
 
 function parseBody(raw: unknown): Body | string {
@@ -45,12 +51,15 @@ function parseBody(raw: unknown): Body | string {
     )
       return "diagnoser_ids must be string[] when provided";
   }
+  if (obj.intent !== undefined && typeof obj.intent !== "string")
+    return "intent must be string when provided";
   return {
     text: obj.text,
     providers: obj.providers as string[],
     diagnoser_ids: obj.diagnoser_ids as string[] | undefined,
     concurrency:
       typeof obj.concurrency === "number" ? obj.concurrency : undefined,
+    intent: typeof obj.intent === "string" ? obj.intent : undefined,
   };
 }
 
@@ -99,6 +108,7 @@ export async function POST(req: NextRequest) {
   // the worker closure.
   const userText = parsed.text;
   const providersToRun = parsed.providers;
+  const userIntent = parsed.intent?.trim() || undefined;
 
   type Task = { diagnoser: DiagnoserDefinition; provider: string };
   const tasks: Task[] = [];
@@ -126,7 +136,11 @@ export async function POST(req: NextRequest) {
       const t = queue.shift();
       if (!t) return;
       try {
-        const judgment = (await t.diagnoser.run(userText, t.provider)) as {
+        const judgment = (await t.diagnoser.run(
+          userText,
+          t.provider,
+          userIntent,
+        )) as {
           result: unknown;
         };
         const classified =
@@ -152,5 +166,6 @@ export async function POST(req: NextRequest) {
     results,
     providers_run: providersToRun,
     diagnoser_ids: selected.map((d) => d.id),
+    intent_used: userIntent ?? null,
   });
 }

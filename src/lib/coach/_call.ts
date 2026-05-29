@@ -43,6 +43,14 @@ export interface FocusedCallOpts {
   toolDescription: string;
   inputSchema: Record<string, unknown>;
   providerId?: string;
+  /**
+   * Optional author-declared intent block. When present, the user
+   * message is wrapped as <intent>...</intent>\n<prose>...</prose> so
+   * the diagnoser can compare prose against intent. Diagnoser system
+   * prompts that want to use this should explicitly handle the
+   * <intent> block.
+   */
+  intent?: string;
 }
 
 export async function focusedCall<T>(
@@ -58,6 +66,16 @@ export async function focusedCall<T>(
     return callOpenAICompat<T>(opts, provider.id);
   }
   throw new Error(`focusedCall: unknown provider family ${provider.id}`);
+}
+
+/**
+ * Compose the user message. Bare prose when no intent declared; intent
+ * + prose blocks when the author has declared what they're attempting.
+ */
+function composeUserMessage(text: string, intent: string | undefined): string {
+  const trimmedIntent = intent?.trim();
+  if (!trimmedIntent) return text;
+  return `<intent>\n${trimmedIntent}\n</intent>\n\n<prose>\n${text}\n</prose>`;
 }
 
 async function callAnthropic<T>(
@@ -84,7 +102,9 @@ async function callAnthropic<T>(
     ],
     tools: [tool],
     tool_choice: { type: "tool", name: opts.toolName },
-    messages: [{ role: "user", content: opts.text }],
+    messages: [
+      { role: "user", content: composeUserMessage(opts.text, opts.intent) },
+    ],
   });
 
   const toolUse = response.content.find(
@@ -123,7 +143,7 @@ async function callOpenAICompat<T>(
     max_tokens: MAX_TOKENS,
     messages: [
       { role: "system", content: opts.systemPrompt },
-      { role: "user", content: opts.text },
+      { role: "user", content: composeUserMessage(opts.text, opts.intent) },
     ],
     tools: [
       {

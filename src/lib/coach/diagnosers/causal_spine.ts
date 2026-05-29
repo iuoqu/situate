@@ -57,6 +57,8 @@ causal_absent
   - 大致还行但失去了重量 → causal_implicit
   - 没差别 → causal_absent
 
+如果输入包含 <intent>...</intent> 块，那是作者**声明**的意图（如"D = 妈妈让我打开抽屉 → S1 = 我没走"）。你仍然只评估 <prose> 实际呈现的因果结构；但请在 evidence 字段**开头**写一句话比较实现与意图（"吻合"/"部分吻合 — 模型读到链条是 X，作者声明的是 Y"/"未吻合"），再写常规 evidence。不要因为作者声明就抬高 verdict——只评判实际散文。
+
 通过 submit_judgment 工具输出。`;
 
 export const TOOL_NAME = "submit_judgment";
@@ -101,6 +103,7 @@ export interface CausalSpineJudgment {
 export async function runCausalSpine(
   text: string,
   providerId?: string,
+  intent?: string,
 ): Promise<FocusedCallResult<CausalSpineJudgment>> {
   return focusedCall<CausalSpineJudgment>({
     text,
@@ -109,5 +112,6 @@ export async function runCausalSpine(
     toolDescription: TOOL_DESCRIPTION,
     inputSchema: INPUT_SCHEMA,
     providerId,
+    intent,
   });
 }
