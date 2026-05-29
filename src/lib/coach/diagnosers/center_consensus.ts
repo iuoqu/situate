@@ -39,9 +39,17 @@ interface FamilyConfig {
   /**
    * Extra request body for provider-specific knobs. DeepSeek V4 defaults
    * to thinking mode (slow + adds reasoning content); we explicitly
-   * disable for the one-quote task.
+   * disable for the one-quote task. Pass multiple conventions since
+   * different providers use different param names.
    */
   extra_body?: Record<string, unknown>;
+  /**
+   * When true, use tool_choice="auto" instead of forcing the named
+   * tool. Required for DeepSeek V4 with thinking mode: forced
+   * tool_choice + thinking returns HTTP 400. With only one tool
+   * exposed, "auto" effectively means the model still calls it.
+   */
+  tool_choice_auto?: boolean;
 }
 
 const FAMILIES: FamilyConfig[] = [
@@ -52,7 +60,15 @@ const FAMILIES: FamilyConfig[] = [
   {
     provider_id: "deepseek:deepseek-v4-flash",
     display_name: "DeepSeek V4 Flash",
-    extra_body: { enable_thinking: false },
+    // Try multiple thinking-disable conventions; the unsupported ones
+    // are ignored. If thinking stays on, tool_choice="auto" keeps the
+    // call valid (forced tool_choice would HTTP 400 with thinking).
+    extra_body: {
+      enable_thinking: false,
+      chat_template_kwargs: { enable_thinking: false },
+      reasoning_effort: "minimal",
+    },
+    tool_choice_auto: true,
   },
 ];
 
@@ -151,6 +167,7 @@ async function runFamily(
         providerId: family.provider_id,
         temperature: SAMPLE_TEMPERATURE,
         extraBody: family.extra_body,
+        toolChoiceAuto: family.tool_choice_auto,
       }),
   );
   const settled = await Promise.allSettled(calls);

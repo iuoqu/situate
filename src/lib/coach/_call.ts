@@ -64,6 +64,14 @@ export interface FocusedCallOpts {
    * for one-sentence quote tasks).
    */
   extraBody?: Record<string, unknown>;
+  /**
+   * Override the OpenAI-compat tool_choice. Default is forced (the
+   * named tool). Use "auto" for providers that don't accept forced
+   * choice in certain modes (e.g. DeepSeek V4 with thinking mode
+   * cannot accept forced tool_choice — we let it pick the only tool
+   * we expose).
+   */
+  toolChoiceAuto?: boolean;
 }
 
 export async function focusedCall<T>(
@@ -171,7 +179,9 @@ async function callOpenAICompat<T>(
         },
       },
     ],
-    tool_choice: { type: "function", function: { name: opts.toolName } },
+    tool_choice: opts.toolChoiceAuto
+      ? "auto"
+      : { type: "function", function: { name: opts.toolName } },
   };
 
   const startedAt = Date.now();
