@@ -134,6 +134,57 @@ function bucketKey(quote: string): string {
     .slice(0, 18);
 }
 
+/**
+ * Two quotes "share anchor" when one is a normalized prefix of the
+ * other. Different models often quote the same structural anchor at
+ * different sentence boundaries — e.g. one picks "下午两点。我躺在
+ * 床上刷手机。" and another picks the longer "下午两点。我躺在床上刷
+ * 手机。早餐没吃...". The longer is a continuation of the shorter;
+ * they're the same anchor.
+ *
+ * Used both for intra-family bucket merging (consolidate scattered
+ * votes that point at the same passage) and for joint-family
+ * consensus (recognize when two families converge on the same anchor
+ * even though their quote boundaries differ).
+ */
+function sharesAnchor(a: string, b: string): boolean {
+  const norm = (s: string): string =>
+    s.replace(/\s+/g, "").replace(/[。，、；：！？.,;:!?""''""'"]/g, "");
+  const na = norm(a);
+  const nb = norm(b);
+  if (na.length < 8 || nb.length < 8) return false;
+  return na.startsWith(nb) || nb.startsWith(na);
+}
+
+/**
+ * After initial bucketing, merge any pair of buckets whose quotes
+ * share an anchor (prefix-of relation). The longer quote becomes the
+ * canonical representation; vote counts are summed. Process from
+ * highest-count first so the most-supported representation tends to
+ * survive.
+ */
+function mergeFuzzyBuckets(
+  votes: Array<{ quote: string; count: number; bucket_key: string }>,
+): Array<{ quote: string; count: number; bucket_key: string }> {
+  const sorted = [...votes].sort((a, b) => b.count - a.count);
+  const merged: Array<{ quote: string; count: number; bucket_key: string }> = [];
+  for (const v of sorted) {
+    const target = merged.find((m) => sharesAnchor(m.quote, v.quote));
+    if (target) {
+      target.count += v.count;
+      // Keep the longer quote as canonical so the displayed anchor
+      // carries the most context the family produced.
+      if (v.quote.length > target.quote.length) {
+        target.quote = v.quote;
+        target.bucket_key = v.bucket_key;
+      }
+    } else {
+      merged.push({ ...v });
+    }
+  }
+  return merged.sort((a, b) => b.count - a.count);
+}
+
 async function runFamily(
   family: FamilyConfig,
   text: string,
@@ -178,9 +229,14 @@ async function runFamily(
       buckets.set(key, { quote: q, count: 1, bucket_key: key });
     }
   }
-  const votes = Array.from(buckets.values()).sort(
+  const initialVotes = Array.from(buckets.values()).sort(
     (a, b) => b.count - a.count,
   );
+  // Second pass: merge buckets whose quotes share an anchor (one is a
+  // normalized prefix of another). Different samples often quote the
+  // same passage at different sentence boundaries; without this merge
+  // the strict 18-char bucket key splits them into separate votes.
+  const votes = mergeFuzzyBuckets(initialVotes);
   const top = votes[0] ?? { quote: "", count: 0, bucket_key: "" };
 
   return {
@@ -218,23 +274,34 @@ export async function runCenterConsensus(
     FAMILIES.map((f) => runFamily(f, text)),
   );
 
-  // Joint consensus: both families strong AND same bucket
+  // Joint consensus: both families strong AND their top picks share
+  // an anchor (one is a normalized prefix of the other). Strict
+  // bucket-key equality misses cases like Qwen 7/7 on a long quote
+  // and DeepSeek 6/7 on its prefix — they point at the same anchor.
   const allStrong = familyResults.every(
     (f) => f.agreement_pct >= STRONG_THRESHOLD && f.total_samples > 0,
   );
-  const allSameBucket =
+  const allShareAnchor =
     familyResults.length > 0 &&
-    familyResults.every(
-      (f) => f.top_bucket_key === familyResults[0].top_bucket_key,
+    familyResults.every((f) =>
+      sharesAnchor(f.top_quote, familyResults[0].top_quote),
     );
-  const jointStrong = allStrong && allSameBucket;
+  const jointStrong = allStrong && allShareAnchor;
+
+  // For the canonical joint quote, pick the longest top among families
+  // — it carries the most context (the shorter ones are prefixes).
+  const jointQuote = jointStrong
+    ? familyResults
+        .map((f) => f.top_quote)
+        .reduce((longest, q) => (q.length > longest.length ? q : longest), "")
+    : "";
 
   return {
     result: {
       families: familyResults,
       joint_consensus: {
         is_strong: jointStrong,
-        quote: jointStrong ? familyResults[0].top_quote : "",
+        quote: jointQuote,
       },
     },
     raw: { familyResults },
