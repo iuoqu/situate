@@ -21,7 +21,10 @@ import { getProviderOrDefault } from "@/lib/skeleton-diagnostic/providers/regist
  * lifted into the Provider interface proper.
  */
 
-const MAX_TOKENS = 1500; // focused output is small
+// Bumped from 1500 → 3000 after inferred_intent gained the L1/L2/L3
+// schema (14 fields, some with long descriptions). 1500 was truncating
+// the output mid-JSON, which fails parsing and shows up as per-call errors.
+const MAX_TOKENS = 3000;
 const TIMEOUT_MS = 60_000;
 
 export interface FocusedCallResult<T> {

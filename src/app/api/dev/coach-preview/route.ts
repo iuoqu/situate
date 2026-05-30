@@ -19,7 +19,11 @@ import { requireBearerToken } from "@/lib/skeleton-diagnostic/auth";
  * commit to wiring it into the main /write flow.
  */
 export const runtime = "nodejs";
-export const maxDuration = 120;
+// 300s = 5 minutes. The L1/L2/L3 inferred_intent schema produces more
+// output tokens per provider, and we run ~42 calls (6 diagnosers × 7
+// providers + center_consensus internal fanout). At previous 120s
+// users hit "Failed to fetch" when Vercel cut the connection mid-run.
+export const maxDuration = 300;
 export const dynamic = "force-dynamic";
 
 interface Body {
@@ -151,7 +155,10 @@ export async function POST(req: NextRequest) {
     };
   }
 
-  const concurrency = parsed.concurrency ?? 4;
+  // 8 workers: at 7 providers × 6 diagnosers we have ~42 calls; with
+  // concurrency=4 that's ~10 batches at ~10-15s each = 100-150s and
+  // we'd hit maxDuration. 8 workers halves wall-clock to ~50-75s.
+  const concurrency = parsed.concurrency ?? 8;
   const queue = [...tasks];
   async function worker() {
     while (queue.length > 0) {
