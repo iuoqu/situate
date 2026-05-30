@@ -10,6 +10,7 @@ import {
 import { getServerSupabase } from "@/lib/supabase/server";
 
 import { ReviewAndSubmit } from "./review-client";
+import { isStaffEmail } from "@/lib/auth/staff";
 
 export const metadata = {
   title: "Review & submit · Situate Editions",
@@ -109,6 +110,7 @@ export default async function ReviewPage({ params }: { params: RouteParams }) {
       title={draft.title ?? ""}
       sections={sections}
       authorEmail={user.email ?? ""}
+      isStaff={isStaffEmail(user.email)}
       tradition={{
         id: tradition.id,
         name: tradition.name,

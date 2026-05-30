@@ -59,6 +59,10 @@ interface Props {
   title: string;
   sections: SectionReviewView[];
   authorEmail: string;
+  /** True when the viewer is on the STAFF_EMAILS list; gates the
+   *  embedded coach diagnostic surface (currently a button that hands
+   *  the joined prose off to /dev/coach-preview in a new tab). */
+  isStaff: boolean;
   tradition: TraditionInfo;
 }
 
@@ -67,6 +71,7 @@ export function ReviewAndSubmit({
   title,
   sections,
   authorEmail,
+  isStaff,
   tradition,
 }: Props) {
   const router = useRouter();
@@ -298,6 +303,10 @@ export function ReviewAndSubmit({
         })}
       </section>
 
+      {isStaff && (
+        <StaffCoachButton sections={sections} title={title} />
+      )}
+
       <section style={panelStyle} aria-label="Submission details">
         <Label>
           Why this place, in this story?
@@ -384,6 +393,94 @@ export function ReviewAndSubmit({
         )}
       </section>
     </main>
+  );
+}
+
+// ── staff diagnostic hand-off ──────────────────────────────────────────────
+
+/**
+ * Staff-only button that joins the draft's section content and hands
+ * it to /dev/coach-preview via localStorage. The dev tool then auto-
+ * loads it into the textarea on mount.
+ *
+ * Why this indirection: /dev/coach-preview is the existing coach
+ * surface and runs the full focused-diagnoser bank (stakes_absent,
+ * causal_spine, inferred_intent's L1/L2/L3, economy, center_consensus).
+ * Rather than duplicating that UI here, the staff workflow is "review
+ * → click → diagnostic opens in new tab". When the embedded coach
+ * graduates from staff-only to author-visible we'll integrate properly.
+ */
+const COACH_PREVIEW_LOCALSTORAGE_KEY = "coach-preview-pending-prose";
+
+function StaffCoachButton({
+  sections,
+  title,
+}: {
+  sections: SectionReviewView[];
+  title: string;
+}) {
+  const handleClick = () => {
+    if (typeof window === "undefined") return;
+    const labeled = sections
+      .filter((s) => (s.content ?? "").trim().length > 0)
+      .map((s) => `[${s.label}]\n${s.content.trim()}`)
+      .join("\n\n");
+    const titlePrefix = title.trim() ? `${title.trim()}\n\n` : "";
+    window.localStorage.setItem(
+      COACH_PREVIEW_LOCALSTORAGE_KEY,
+      titlePrefix + labeled,
+    );
+    window.open("/dev/coach-preview", "_blank", "noopener,noreferrer");
+  };
+  return (
+    <section
+      style={{
+        marginTop: 24,
+        padding: 16,
+        background: "#faf3e1",
+        border: "1px dashed #d4b66a",
+        borderRadius: 4,
+      }}
+    >
+      <div
+        style={{
+          fontSize: 11,
+          letterSpacing: 1.5,
+          textTransform: "uppercase",
+          color: "#8a6d20",
+          marginBottom: 6,
+          fontWeight: 600,
+        }}
+      >
+        STAFF · 实验性诊断
+      </div>
+      <p
+        style={{
+          margin: "0 0 10px",
+          fontSize: 14,
+          color: "#5a4810",
+          lineHeight: 1.55,
+        }}
+      >
+        把当前草稿（带 section 标签）发送到 /dev/coach-preview
+        跑完整 diagnoser bank。新 tab 打开。只有 STAFF_EMAILS 列表里的账号能看到这个按钮。
+      </p>
+      <button
+        onClick={handleClick}
+        style={{
+          padding: "8px 16px",
+          background: "#8a6d20",
+          color: "white",
+          border: "none",
+          borderRadius: 3,
+          fontSize: 13,
+          letterSpacing: 0.4,
+          cursor: "pointer",
+        }}
+      >
+        Run focused diagnoser bank →
+      </button>
+    </section>
   );
 }
 
