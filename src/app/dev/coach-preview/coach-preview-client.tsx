@@ -1082,10 +1082,10 @@ function InferredIntentCard({
           inferred_intent
         </h3>
         <span style={{ fontSize: 12, color: "#888" }}>
-          AI 独立从 prose 推断（不知道作者声明的意图）
+          AI 独立从 prose 推断 · 三层：L1 文本 / L2 暗示 / L3 推测
         </span>
       </div>
-      <div style={{ display: "flex", flexDirection: "column", gap: 14, marginTop: 10 }}>
+      <div style={{ display: "flex", flexDirection: "column", gap: 10, marginTop: 10 }}>
         {providersRun.map((pid) => {
           const cell = result.by_provider[pid];
           const provName = providers.find((p) => p.id === pid)?.displayName ?? pid;
@@ -1099,60 +1099,238 @@ function InferredIntentCard({
               </div>
             );
           }
-          const j = (cell.judgment ?? {}) as Record<string, unknown>;
-          const confidence = typeof j.confidence === "number" ? j.confidence.toFixed(2) : "?";
-          const fields: { key: string; label: string; highlight?: boolean }[] = [
-            { key: "k_inferred", label: "K" },
-            { key: "others_inferred", label: "其他人物" },
-            { key: "changes_inferred", label: "转变" },
-            { key: "setting_inferred", label: "设定" },
-            { key: "takeaway_inferred", label: "读者留下" },
-            { key: "center_of_gravity", label: "重心", highlight: true },
-            { key: "subtext_signal", label: "subtext", highlight: true },
-          ];
-          return (
-            <div key={pid} style={inferredProviderBlock}>
-              <div style={inferredProviderHeader}>
-                {provName}
-                <span style={{ color: "#888", fontSize: 11, fontWeight: 400, marginLeft: 8 }}>
-                  conf {confidence}
-                </span>
-              </div>
-              <table style={{ borderCollapse: "collapse", width: "100%", fontSize: 13 }}>
-                <tbody>
-                  {fields.map((f) => {
-                    const v = String(j[f.key] ?? "");
-                    if (!v) return null;
-                    return (
-                      <tr key={f.key}>
-                        <td style={{
-                          padding: "2px 8px 2px 0",
-                          color: "#888",
-                          width: 90,
-                          verticalAlign: "top",
-                          fontSize: 11,
-                          letterSpacing: 0.3,
-                        }}>
-                          {f.label}
-                        </td>
-                        <td style={{
-                          padding: "2px 0",
-                          color: f.highlight ? "#5b6f8a" : "#333",
-                          fontWeight: f.highlight ? 600 : 400,
-                          lineHeight: 1.55,
-                        }}>
-                          {v}
-                        </td>
-                      </tr>
-                    );
-                  })}
-                </tbody>
-              </table>
-            </div>
-          );
+          return <ProviderLayeredBlock key={pid} provName={provName} cell={cell} />;
         })}
       </div>
     </div>
+  );
+}
+
+const L1_FIELDS: { key: string; label: string; highlight?: boolean }[] = [
+  { key: "k_in_text", label: "K（文本）" },
+  { key: "characters_named", label: "人物" },
+  { key: "setting_in_text", label: "设定" },
+  { key: "center_of_gravity", label: "重心句", highlight: true },
+  { key: "pattern_break", label: "模式断裂" },
+];
+
+const L2_FIELDS: { key: string; label: string; highlight?: boolean }[] = [
+  { key: "what_prose_does", label: "prose 在做什么" },
+  { key: "subtext_pattern", label: "subtext 模式", highlight: true },
+  { key: "changes_inferred", label: "转变" },
+  { key: "takeaway_inferred", label: "读者留下" },
+];
+
+const L3_FIELDS: { key: string; label: string }[] = [
+  { key: "speculative_backstory", label: "推测 backstory" },
+  { key: "alternative_readings", label: "其他可能填法" },
+];
+
+function ProviderLayeredBlock({
+  provName,
+  cell,
+}: {
+  provName: string;
+  cell: CellResult;
+}) {
+  const j = (cell.judgment ?? {}) as Record<string, unknown>;
+  const confidence =
+    typeof j.confidence === "number" ? j.confidence.toFixed(2) : "?";
+  const projConfidence =
+    typeof j.projection_confidence === "number"
+      ? j.projection_confidence
+      : 0;
+  const evidence = typeof j.evidence === "string" ? j.evidence : "";
+
+  return (
+    <div style={inferredProviderBlock}>
+      <div style={inferredProviderHeader}>
+        {provName}
+        <span style={{ color: "#888", fontSize: 11, fontWeight: 400, marginLeft: 8 }}>
+          L1+L2 conf {confidence}
+        </span>
+        {evidence && (
+          <span style={{ color: "#888", fontSize: 11, fontWeight: 400, marginLeft: 8, fontStyle: "italic" }}>
+            · {evidence}
+          </span>
+        )}
+      </div>
+
+      <LayerSection
+        title="L1 · 文本说了什么"
+        bgColor="#f3f7ed"
+        accentColor="#5e8a4a"
+        fields={L1_FIELDS}
+        judgment={j}
+      />
+
+      <LayerSection
+        title="L2 · 文本暗示了什么"
+        bgColor="#faf5e9"
+        accentColor="#a07a30"
+        fields={L2_FIELDS}
+        judgment={j}
+      />
+
+      <L3Section judgment={j} projConfidence={projConfidence} />
+    </div>
+  );
+}
+
+function LayerSection({
+  title,
+  bgColor,
+  accentColor,
+  fields,
+  judgment,
+}: {
+  title: string;
+  bgColor: string;
+  accentColor: string;
+  fields: { key: string; label: string; highlight?: boolean }[];
+  judgment: Record<string, unknown>;
+}) {
+  const hasContent = fields.some((f) => String(judgment[f.key] ?? "").trim());
+  if (!hasContent) return null;
+
+  return (
+    <div
+      style={{
+        background: bgColor,
+        padding: "8px 10px",
+        marginTop: 6,
+        borderRadius: 3,
+        borderLeft: `2px solid ${accentColor}`,
+      }}
+    >
+      <div
+        style={{
+          fontSize: 10,
+          color: accentColor,
+          fontWeight: 700,
+          marginBottom: 5,
+          letterSpacing: 0.4,
+        }}
+      >
+        {title}
+      </div>
+      <table style={{ borderCollapse: "collapse", width: "100%", fontSize: 13 }}>
+        <tbody>
+          {fields.map((f) => {
+            const v = String(judgment[f.key] ?? "");
+            if (!v.trim()) return null;
+            return (
+              <tr key={f.key}>
+                <td
+                  style={{
+                    padding: "2px 8px 2px 0",
+                    color: "#888",
+                    width: 110,
+                    verticalAlign: "top",
+                    fontSize: 11,
+                    letterSpacing: 0.3,
+                  }}
+                >
+                  {f.label}
+                </td>
+                <td
+                  style={{
+                    padding: "2px 0",
+                    color: f.highlight ? accentColor : "#333",
+                    fontWeight: f.highlight ? 600 : 400,
+                    lineHeight: 1.55,
+                  }}
+                >
+                  {v}
+                </td>
+              </tr>
+            );
+          })}
+        </tbody>
+      </table>
+    </div>
+  );
+}
+
+function L3Section({
+  judgment,
+  projConfidence,
+}: {
+  judgment: Record<string, unknown>;
+  projConfidence: number;
+}) {
+  const hasContent = L3_FIELDS.some((f) =>
+    String(judgment[f.key] ?? "").trim(),
+  );
+  if (!hasContent && projConfidence === 0) return null;
+
+  return (
+    <details
+      style={{
+        marginTop: 6,
+        padding: "6px 10px",
+        background: "#f5f4f0",
+        border: "1px dashed #c8c4b8",
+        borderRadius: 3,
+      }}
+    >
+      <summary
+        style={{
+          fontSize: 11,
+          color: "#7a6c4a",
+          fontWeight: 600,
+          cursor: "pointer",
+          letterSpacing: 0.2,
+          listStyle: "none",
+        }}
+      >
+        ⚠ L3 · AI 推测的 backstory（文本未明说，展开查看）
+        <span style={{ marginLeft: 8, color: "#a07a30", fontWeight: 400, fontSize: 10 }}>
+          投射 conf {projConfidence.toFixed(2)}
+        </span>
+      </summary>
+      <table
+        style={{
+          borderCollapse: "collapse",
+          width: "100%",
+          fontSize: 13,
+          marginTop: 6,
+        }}
+      >
+        <tbody>
+          {L3_FIELDS.map((f) => {
+            const v = String(judgment[f.key] ?? "");
+            if (!v.trim()) return null;
+            return (
+              <tr key={f.key}>
+                <td
+                  style={{
+                    padding: "2px 8px 2px 0",
+                    color: "#888",
+                    width: 110,
+                    verticalAlign: "top",
+                    fontSize: 11,
+                    letterSpacing: 0.3,
+                  }}
+                >
+                  {f.label}
+                </td>
+                <td
+                  style={{
+                    padding: "2px 0",
+                    color: "#666",
+                    fontStyle: "italic",
+                    lineHeight: 1.55,
+                  }}
+                >
+                  {v}
+                </td>
+              </tr>
+            );
+          })}
+        </tbody>
+      </table>
+    </details>
   );
 }
 

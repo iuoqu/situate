@@ -1,124 +1,180 @@
 import { focusedCall, type FocusedCallResult } from "../_call";
 
 /**
- * inferred_intent — independent reader-side inference.
+ * inferred_intent — independent reader-side inference, output in
+ * three explicit layers.
  *
- * The other focused diagnosers EVALUATE the prose on a specific axis.
- * This one is different: it INFERS — independently reads the prose and
- * reports what it thinks the story is actually doing. No verdict tier,
- * no axis judgment, no comparison with author intent. Pure read.
+ * L1 (textual)         — what's literally in the prose. Quotes required.
+ * L2 (direct inference) — what careful readers conclude from L1 elements.
+ *                         No external knowledge or off-page filling-in.
+ * L3 (projective fill-in) — AI's speculation about not-stated backstory.
+ *                          Required to list alternative readings so a
+ *                          single speculation doesn't masquerade as fact.
  *
- * Why: the author has two intents — what they declare (the intent card)
- * and what they actually wrote. These two diverge constantly. The
- * reader (and a careful AI) can see only the second. Surfacing the
- * AI-inferred intent gives the author a mirror onto their executed
- * intent, separately from their declared one.
+ * The split addresses the failure mode shown in the 旧友 long sample:
+ * four models converged on "他病了，可能是癌症" — but "癌症" is
+ * filled-in backstory, not text. Mixing it with L1/L2 observations
+ * misleads the writer into thinking the AI "read the prose" when it
+ * actually projected one of several possible explanations.
  *
- * Critical design choice: the model must NOT default to statistical
- * averaging. The "center of gravity" of a short narrative is usually
- * the sentence that breaks pattern, not the sentence that repeats.
- * Three sentences saying "I love my dog" + one saying "I hit my dog"
- * is a story about hitting the dog. The prompt explicitly fights the
- * majority-vote tendency.
+ * Anti-statistical principle preserved: the structural center is the
+ * line that breaks pattern, not the most-repeated content. Repetition
+ * is recoded as device when paired with an unexplained break.
  */
 
 export const DIAGNOSER_ID = "inferred_intent";
 export const STATUS = "experimental";
 
-export const SYSTEM_PROMPT = `你只做一件事：读这段散文，独立推断这位作者**实际在写**什么。
+export const SYSTEM_PROMPT = `你只做一件事：读这段散文，独立报告它**说了什么**、**暗示了什么**、**AI 又补了什么**。**严格分三层输出**。
 
-不是评判好坏，不是判断 axis 在不在。是回答：如果一位读者读完这段，他会读出什么故事？
+L1 — 文本说了什么（textual）
+只能写 prose 里**明确呈现**的字句、人物、动作、时空。**必须能引原文**。
+例：「瘦了二十斤」「他只吃两口」「我没有告诉他，我看出来了」
 
-**关键反统计原则**
+L2 — 文本暗示了什么（direct inference）
+careful reader 几乎都会得出的推断。**由 L1 元素的组合直接产生**，不需要补外部知识或填入未明说的具体身份/因。
+例：「这是病人的瘦，不是普通的瘦」「信封是某种托付」「两人在共谋维持表面体面」
 
-故事的"重心"不在出现频率最高的内容，而在**与周围语义断裂的那一句**。
-- 如果文本里有任何一句突然出现、未被解释、或与表面情绪相反，那一句通常就是真正的 D（扰动）
-- 重复的叙述声调（如三遍"我爱"）往往是为了**对冲**那一处断裂——是 subtext 的征兆，不是 K 的确认
-- 推断时优先报告这种张力，**不要按统计平均推断**
+L3 — AI 推测的 backstory（projective fill-in）
+AI 在补**文本没说**的具体身份、原因、过往、隐藏的因果链。不同 AI 会补出不同版本。
+例：「可能是癌症」「信封里是遗嘱」「上次手术留下的印记」「准备临终告别」
 
-例：四句里有三句"我爱我的狗"和一句"下午打了一下我的狗"——故事是关于那一句"打"的，不是关于三句"爱"的。center_of_gravity = "下午打了一下"，subtext_signal = "重复的爱意宣告是对冲愧疚的仪式"。
+**关键规则**
+- L1 字段**不能用 L2 措辞**——"病人的瘦"是 L2，不能放进 L1
+- L2 字段**不能补具体 backstory**——"是病人"可以，"是癌症"不行
+- L3 字段**必须列 alternative_readings**——不允许单一投射伪装成确定结论
+- L3 不允许偷偷重复 L1 引文来表演权威性
 
-如果文本里没有任何断裂、就是平静的均衡（如纪录片、纯描述），坦诚报告——center_of_gravity 可以写"无单一重心"，subtext_signal 留空。不要硬造 subtext。
+**反统计原则**
+故事的"重心"不在出现频率最高的内容，而在**与周围语义断裂**的那一句。
+- 重复声调（如三遍"我爱"）+ 单一断裂句 = 重复是 device，重心在断裂句
+- 如果文本是平静均衡的纪录片调，pattern_break 写"无明显断裂"，L3 整层留空
 
-输出字段
-- k_inferred: 谁是承担者。可以是叙事者、显式人物、或"隐含读者"
-- others_inferred: 其他出现的人物，及相对位置（背景/对手/共同承担者）
-- changes_inferred: 转变是什么——读完之后，世界/某人/读者的理解发生了什么
-- setting_inferred: 时空设定
-- takeaway_inferred: 读者读完会留下什么（情绪、领悟、未解之结）
-- center_of_gravity: 重心**落在哪一句**。引文一处
-- subtext_signal: 如果检测到 subtext（声调与事件错位、未解释的断裂、反复声张的反面），描述。否则空字符串
+**分层置信度**
+- confidence: L1 + L2 整体置信度
+- projection_confidence: L3 单独的置信度（通常更低，可以是 0）
 
 通过 submit_inference 工具输出。`;
 
 export const TOOL_NAME = "submit_inference";
 export const TOOL_DESCRIPTION =
-  "Submit your independent inference of what this prose is actually doing.";
+  "Submit your layered inference: what the prose says, what it implies, what AI speculates.";
 
 export const INPUT_SCHEMA = {
   type: "object",
   additionalProperties: false,
   properties: {
-    k_inferred: {
+    // ── L1: textual ──
+    k_in_text: {
       type: "string",
-      description: "Who carries the weight of the transformation.",
+      description:
+        "L1. The consciousness explicitly present in the text, with a quoted phrase. If none, write '无明确承担者，纯观察视角'.",
     },
-    others_inferred: {
+    characters_named: {
       type: "string",
-      description: "Other persons present and their relational position.",
+      description:
+        "L1. People the text explicitly names or describes. No backstory.",
     },
-    changes_inferred: {
+    setting_in_text: {
       type: "string",
-      description: "What transforms between start and end of the prose.",
-    },
-    setting_inferred: {
-      type: "string",
-      description: "Where and when.",
-    },
-    takeaway_inferred: {
-      type: "string",
-      description: "What the reader is left with.",
+      description:
+        "L1. Time/place markers actually stated in the prose.",
     },
     center_of_gravity: {
       type: "string",
       description:
-        "Quote one sentence/phrase the prose actually pivots on. May be the least frequent line.",
+        "L1. Quote the single sentence/phrase that is the structural pivot. May be the least frequent line. Or '无单一重心' if the prose has no clear structural center.",
     },
-    subtext_signal: {
+    pattern_break: {
       type: "string",
       description:
-        "If you detect tonal/event mismatch, unexplained breaks, or repeated assertion contradicted by a small moment — describe. Empty string if none.",
+        "L1. Structural observation: which sentence breaks pattern with the surrounding rhythm/voice. Describe the break, do not interpret why. Or '无明显断裂' if none.",
     },
+
+    // ── L2: direct inference ──
+    what_prose_does: {
+      type: "string",
+      description:
+        "L2. What a careful reader concludes the prose is doing — supported by L1 elements, no external knowledge required.",
+    },
+    subtext_pattern: {
+      type: "string",
+      description:
+        "L2. The subtext pattern detected (e.g., 'repetition as overcompensation', 'parallel listing as decorative slack'). Describe the mechanism, not specific filled-in content. Empty string if no subtext.",
+    },
+    changes_inferred: {
+      type: "string",
+      description:
+        "L2. The transformation careful readers see — what shifts between start and end, well-supported by text.",
+    },
+    takeaway_inferred: {
+      type: "string",
+      description:
+        "L2. What the reader leaves with — affect, recognition, unresolved tension.",
+    },
+
+    // ── L3: projective fill-in ──
+    speculative_backstory: {
+      type: "string",
+      description:
+        "L3. AI's projection of off-page facts (specific illness, exact event, character history) that the prose hints at but doesn't state. Empty string if no projection warranted.",
+    },
+    alternative_readings: {
+      type: "string",
+      description:
+        "L3. Brief list of other plausible fill-ins for the same L1+L2 evidence. Required when speculative_backstory is non-empty. Empty string only when L3 is empty.",
+    },
+    projection_confidence: {
+      type: "number",
+      description:
+        "L3-specific confidence (0.0–1.0). Should be lower than L1+L2 confidence. 0 if L3 is empty.",
+    },
+
+    // ── meta ──
     confidence: {
       type: "number",
-      description: "0.0–1.0",
+      description: "L1+L2 overall confidence (0.0–1.0).",
     },
     evidence: {
       type: "string",
-      description: "1 sentence on how you arrived at the inference.",
+      description: "One sentence summary of how you arrived at the inference.",
     },
   },
   required: [
-    "k_inferred",
-    "others_inferred",
-    "changes_inferred",
-    "setting_inferred",
-    "takeaway_inferred",
+    "k_in_text",
+    "characters_named",
+    "setting_in_text",
     "center_of_gravity",
-    "subtext_signal",
+    "pattern_break",
+    "what_prose_does",
+    "subtext_pattern",
+    "changes_inferred",
+    "takeaway_inferred",
+    "speculative_backstory",
+    "alternative_readings",
+    "projection_confidence",
     "confidence",
     "evidence",
   ],
 };
 
 export interface InferredIntentResult {
-  k_inferred: string;
-  others_inferred: string;
-  changes_inferred: string;
-  setting_inferred: string;
-  takeaway_inferred: string;
+  // L1
+  k_in_text: string;
+  characters_named: string;
+  setting_in_text: string;
   center_of_gravity: string;
-  subtext_signal: string;
+  pattern_break: string;
+  // L2
+  what_prose_does: string;
+  subtext_pattern: string;
+  changes_inferred: string;
+  takeaway_inferred: string;
+  // L3
+  speculative_backstory: string;
+  alternative_readings: string;
+  projection_confidence: number;
+  // meta
   confidence: number;
   evidence: string;
 }
