@@ -329,6 +329,19 @@ export function CoachPreviewClient({
   const intentBlock = useMemo(() => formatIntent(intent), [intent]);
   const hasIntent = intentBlock.length > 0;
 
+  // Hand-off from /write review: if the staff button on the review
+  // page stashed prose in localStorage, load it into the textarea
+  // on mount and clear the key. The key name has to match
+  // COACH_PREVIEW_LOCALSTORAGE_KEY in review-client.tsx.
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    const pending = window.localStorage.getItem("coach-preview-pending-prose");
+    if (pending) {
+      setText(pending);
+      window.localStorage.removeItem("coach-preview-pending-prose");
+    }
+  }, []);
+
   // Fetch providers + diagnosers once token is set
   useEffect(() => {
     if (!tokenSet) return;
