@@ -155,6 +155,24 @@ export default async function WritePage() {
           </form>
         </li>
 
+        <li style={cardStyle}>
+          <div style={cardKickerStyle}>内测版 · Free</div>
+          <h2 style={cardTitleStyle}>🪞 Guided write</h2>
+          <p style={cardBodyStyle}>
+            For when you have a story in your head but don&rsquo;t know how
+            to start writing it. A 6-stage conversation: anchor → specifics →
+            free write → AI reads back what it sees → finish. AI works as a
+            mirror, not a ghostwriter.
+          </p>
+          <p style={cardComingSoonStyle}>
+            内测版 — feedback welcome. Built for novice writers; works for
+            seasoned ones too.
+          </p>
+          <Link href="/write/guided" style={secondaryButtonStyle}>
+            Try guided write →
+          </Link>
+        </li>
+
         <li style={cardStyleMuted}>
           <div style={cardKickerStyle}>Premium · $10/mo</div>
           <h2 style={cardTitleStyle}>🎤 Speak it</h2>
