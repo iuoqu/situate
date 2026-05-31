@@ -4,6 +4,8 @@ Status: captured end of May 2026, after PRs #31-#32 closed the path-B core loop.
 
 Updated to include user-raised additions: 架空设定一致性 / 故事活力预测 / 人物-情节冗余压缩.
 
+**Update after METHODOLOGY v1.0**: items P1.1, P1.2, P1.3, P1.4, P1.5, P1.7, P1.8, P1.9, P1.10, P1.12 are **not atoms** — they are parts of the situate.map module. See `situate-map-spec-v1.md` for the consolidated spec and 7-phase implementation TODO. Cross-references retained below for traceability.
+
 ---
 
 ## Pre-writing (写之前)
