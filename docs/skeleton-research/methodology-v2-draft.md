@@ -387,10 +387,14 @@ Newly resolved decisions (locked):
 - **DQ4 — RESOLVED**: Yes, surface once as Socratic question when user declares 初心 + 媒介目标 with apparent tension. This fires at declaration moment (permitted) — not from subsequent behavior. See §18.10 distinction.
 - **AQ1 — RESOLVED**: situate.act runs for both art-purposeful and commercial-purposeful. UI text adds one line: "If you write genre fiction, you may already be familiar with the structural conventions for your genre. You can use them to fill in the 4 estimates" — but NO specific genre templates listed (no thriller-3-act / romance-5-beat etc., as that would imply AI expertise the tool does not claim).
 
-Open decisions still needed before §18 canonization:
+Final two resolved decisions (locked):
 
-- **AQ3**: Does situate.act spawn its own diagnoser `scene_belongs_to_segment` that validates each draft against its declared segment? (Initial position: no for v2.0. User-declared assignment; AI only surfaces distribution facts e.g. "段 3 is empty.")
-- **AQ4 (re-scoped)**: For "unknown" drive projects, the deferred drive-ask and the act-estimate ask both fire around scene 3. Do they bundle into a single observation, or surface separately? (Note: only applies to unknown-drive opt-in users, since other drives don't get the drive-ask. Initial position: bundle — single moment, fewer interruptions.)
+- **AQ3 — RESOLVED**: No diagnoser for v2.0. Segment assignment is user-declared. AI only surfaces distribution facts ("段 3 is empty" / "段 1 has 5 scenes, you said 4-5"). A `scene_belongs_to_segment` diagnoser may be added in v2.5 if user feedback shows segment-function-vs-scene drift is a real felt problem.
+- **AQ4 — RESOLVED**: Bundle into single observation. At the moment when "unknown"-drive opt-in users hit 3 completed drafts, AI surfaces one combined observation covering both: inferred drive type + suggested act estimate path. Single interruption.
+
+**All open methodology v2 questions resolved as of this point.** Document
+is ready for canonization. See `missing-modules-v1.md` §B.0 for
+canonization TODO.
 
 ---
 

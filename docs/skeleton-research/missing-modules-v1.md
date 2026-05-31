@@ -132,8 +132,8 @@ Total: ~32h focused work (expanded from 24h after worked-example simulation reve
 
 - **AQ1 — RESOLVED**: situate.act runs for both art-purposeful and commercial-purposeful. UI adds one line acknowledging genre conventions exist for commercial fiction without listing specific templates.
 - **AQ2 — RESOLVED**: preserve old segment assignments on revision.
-- **AQ3**: Does situate.act produce its own diagnoser (e.g., `scene_belongs_to_segment`)? Initial position: not for v2.0. The assignment is user-declared, AI only surfaces structural facts about the assignment distribution (e.g., "段 3 has 0 scenes; you said it would have 8-15 scenes"). STILL OPEN.
-- **AQ4 (re-scoped)**: For "unknown" drive projects only (the only case where there's even a drive-ask at scene 3), do the deferred drive-ask and the deferred act-ask bundle into one observation? Initial position: bundle. STILL OPEN.
+- **AQ3 — RESOLVED**: No diagnoser for v2.0. User-declared segment assignment is authoritative. AI surfaces distribution facts only. Reconsider in v2.5 if real-user feedback shows segment-function vs scene drift is a felt problem.
+- **AQ4 — RESOLVED**: Bundle into single observation. For "unknown"-drive opt-in users at 3rd draft, AI surfaces one combined observation covering both inferred drive + suggested act path. One interruption only.
 
 ### A.9 Retroactive Check mechanism (NEW from worked-example)
 
@@ -271,12 +271,14 @@ user gives specifics" (proposed for methodology v2 §14).
 Blocked on user approval of `methodology-v2-draft.md`. Once canonized:
 
 ### B.0 Methodology canonization (~1h)
-- [ ] **B.0.1** Merge approved §3 extension, §15 invariant 6, §18 into `METHODOLOGY.md` (canonical)
-- [x] **B.0.2** RESOLVED: DQ1 (3 drafts) / DQ2 (Settings button, no auto re-surface) / DQ3 (Settings only, no proactive) / DQ4 (Surface once at declaration moment)
-- [ ] **B.0.3** Still open: AQ3 (scene_belongs_to_segment diagnoser?), AQ4 (bundle drive + act asks?). AQ1 (run for commercial) / AQ2 (preserve) resolved.
-- [x] **B.0.4** RESOLVED: name is `situate.act` (will also serve as teaching/curriculum component)
-- [x] **B.0.5** RESOLVED: §3 extension adds "Aggregation is not verdict" clarification
-- [x] **B.0.6** RESOLVED: §18.10 added — "Declaration vs Behavior" principle. AI may surface consequences at declaration moment; may not second-guess past declarations based on subsequent behavior except when user opted in (unknown drive) or explicitly requested (Settings button).
+- [ ] **B.0.1** Merge approved §3 extension, §15 invariant 6, §18 into `METHODOLOGY.md` (canonical) — **READY NOW: all open questions resolved**
+- [x] **B.0.2** RESOLVED: DQ1 (3 drafts) / DQ2 (Settings button) / DQ3 (Settings only) / DQ4 (Surface once at declaration)
+- [x] **B.0.3** RESOLVED: AQ1 (commercial yes) / AQ2 (preserve) / AQ3 (no diagnoser v2.0) / AQ4 (bundle)
+- [x] **B.0.4** RESOLVED: name is `situate.act`
+- [x] **B.0.5** RESOLVED: §3 extension "Aggregation is not verdict"
+- [x] **B.0.6** RESOLVED: §18.10 "Declaration vs Behavior" principle
+- [x] **B.0.7** RESOLVED: §18.9 "AI gives categories, user gives specifics" principle
+- [x] **B.0.8** RESOLVED: §17 promise extension "Tool promises clarity, not results"
 
 ### B.1 L1.1 — vitality readiness-signal refactor (~3h)
 The current `vitality` module ranks prose with "vital/borderline/flat" verdicts — methodologically forbidden (§3.4 + §13). After §18 canonized:
