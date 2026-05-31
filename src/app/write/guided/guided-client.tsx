@@ -4,6 +4,7 @@ import { useRouter } from "next/navigation";
 import { useEffect, useMemo, useState } from "react";
 
 import { ObservationList } from "@/components/coach/observation-list";
+import { VitalityBadge } from "@/components/coach/vitality-badge";
 import {
   type LayObservation,
   type PreviewCellResult,
@@ -11,6 +12,7 @@ import {
   type PreviewResponse as SharedPreviewResponse,
   translateBankToLay,
 } from "@/lib/coach/lay-translator";
+import { computeVitality } from "@/lib/coach/meta/vitality";
 
 import { createGuidedDraft } from "./actions";
 
@@ -431,6 +433,7 @@ export function GuidedWriteClient({ userEmail }: { userEmail: string }) {
       {stage === "mirror" && bankResponse && (
         <MirrorStage
           response={bankResponse}
+          intent={formatIntent() || undefined}
           onAddMore={() => setStage("freedump")}
           onRestart={restart}
           onFinish={() => setStage("finish")}
@@ -913,21 +916,30 @@ function ContextSummary({ anchor, drill }: { anchor: string; drill: Drill }) {
 
 function MirrorStage({
   response,
+  intent,
   onAddMore,
   onRestart,
   onFinish,
 }: {
   response: PreviewResponse;
+  intent?: string;
   onAddMore: () => void;
   onRestart: () => void;
   onFinish: () => void;
 }) {
   const observations = useMemo(() => translateBankToLay(response), [response]);
+  const vitality = useMemo(
+    () => computeVitality(response, intent),
+    [response, intent],
+  );
   const [showRaw, setShowRaw] = useState(false);
   return (
     <section>
       <h2 style={h2Style}>第四步：AI 读了，告诉你它读到什么</h2>
       <div style={{ marginTop: 10 }}>
+        <VitalityBadge result={vitality} />
+      </div>
+      <div style={{ marginTop: 14 }}>
         <ObservationList observations={observations} />
       </div>
 
