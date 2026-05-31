@@ -2,8 +2,14 @@
 
 > The architecture module. Spec for the half of the product that doesn't exist yet.
 > Status: spec only — zero code in repo at time of writing (end of May 2026).
-> Drives from METHODOLOGY.md v1.0. Every section here cites the methodology
-> section that authorizes it.
+> Drives from **METHODOLOGY.md v2.0** (canonical at `docs/METHODOLOGY.md`). Every section here cites the methodology section that authorizes it.
+>
+> **v2.0 Scope correction**: situate.map serves **art-purposeful drive only**. Per §18.4:
+> - Purposeful (commercial): writers self-route, use intent + media_goal, skip situate.map
+> - Entangled: writers wander; compression destroys the purity of that drive — skip situate.map
+> - Unknown: defer until drive declared
+>
+> The `/write` entry routing logic must respect this. Network material alone does not route to situate.map — only `(network material) AND (drive = purposeful-art)`.
 
 ---
 
@@ -14,15 +20,15 @@ people, threads, time spans) and compresses it into a writable map. Output
 is a `project_map` JSON object that persists across all subsequent writing
 sessions for the same project.
 
-It is the peer module to situate.at (cultivation). Per METHODOLOGY §2 they
-share a 5-step DNA but operate on opposite scales:
+**v2.0 architecture context** (§18.4a): the product is three layers, not two.
 
-| | situate.map | situate.at |
-|---|---|---|
-| Direction | Subtraction / completion (horizontal across network) | Depth (vertical into one point) |
-| Once per | Project | Scene |
-| Currently exists? | **No** | Yes (`/write/guided` + 2 others) |
-| Output | `project_map` (db) | `storyDrafts` row (db) |
+| Layer | Operation | Once per | Currently exists? | Output |
+|---|---|---|---|---|
+| **situate.map** | Network → core (subtraction/completion) | Project | **No** | `project_map` |
+| **situate.act** | Core → timeline / segments (director's view) | Project (revisable) | **No** | `act_estimates` |
+| **situate.at** | Timeline point → prose (cultivation) | Scene | Yes (`/write/guided` + 2 others) | `storyDrafts` row |
+
+situate.map and situate.at share a 5-step DNA per METHODOLOGY §4. situate.act has a different shape (4 estimate questions) per §18.4a.
 
 The TODO doc `missing-modules-v1.md` lists P1.1, P1.2, P1.3, P1.4, P1.5,
 P1.7, P1.8, P1.9, P1.10, P1.12 as atoms. **They are not atoms.** They are
@@ -35,14 +41,18 @@ the parts of this one module. This spec consolidates them.
 Every implementation decision passes the §1 test: "make the user think more
 clearly before they write, never write for them."
 
-Specifically map must NOT (METHODOLOGY §13):
+Specifically map must NOT (METHODOLOGY §13 v2.0):
 - generate literary prose (no "example scene", no sample passage)
 - rank user choices (no "this center is better")
 - recommend a single option (always 2-3 minimum, or none)
 - volunteer aesthetic judgments
 - praise users
 - repeat challenges (one challenge per decision, then accept)
-- reference specific authors/works to validate choices
+- reference specific authors/works to validate choices in user-facing surfaces (§15 invariant 6)
+- suggest one drive type / media goal is more serious or artistic (v2.0)
+- second-guess user's prior declarations based on subsequent behavior (v2.0 §18.10)
+- default any scale field to a value that assumes a particular scale (v2.0 §3 Scale Neutrality)
+- use prior user choices to push toward a default scale (Scale Neutrality)
 
 map MUST (METHODOLOGY §14):
 - surface structural facts about the material
@@ -51,11 +61,21 @@ map MUST (METHODOLOGY §14):
 - reflect user's own previous words back to them
 - distinguish AI-inferred content from user-supplied content (visually, in UI and exports — §15 invariant 3)
 - accept user decisions even when they look mistaken
+- give categories, not specifics (v2.0 §18.9) — AI provides scaffolding (categories, structural consequences), user instantiates with material-specific content
 
 The Socratic discipline (§6) is the spine of step 2: AI asks questions
 drawn from §7's 8 universal angles. AI **never** lists candidate centers
 with reasoning — that shapes possibility space. The synthesis algorithm
 (§8) reflects the user's own repeated words back. User names. AI never names.
+
+### Aesthetic, scale, and aggregation neutrality (v2.0)
+
+The map module operates within METHODOLOGY §3 Aesthetic Neutrality and Scale
+Neutrality:
+
+- **No scale defaults**: when surfacing the consequences of `core_circle.size` or material density, AI does NOT compare against a typical baseline ("most stories work with 3-4 in core"). AI reports count + structural cost (each core character requires depth = more backstory work to maintain) and asks the user to confirm scope. AI does not provide a comparison number.
+- **No literary canon names** in any user-facing UI text or LLM-visible prompt (§15 invariant 6). Equivalent neutral phrasing where lineage was used in v1 spec drafts.
+- **Aggregation views are permitted** but not as verdict — surfacing "5 angles selected, 4 produced converging answers" is a structural fact, not a quality score.
 
 ---
 
@@ -65,27 +85,43 @@ with reasoning — that shapes possibility space. The synthesis algorithm
 /write
   │
   ▼
-"You have network material?"
+[v2.0] Drive type selection (purposeful / entangled / unknown)
   │
-  ├── Yes → /map/new
-  │          │
-  │          ▼
-  │       5-step wizard (10-25 min)
-  │          │
-  │          ▼
-  │       project_map persisted → /map/[projectId]
-  │          │
-  │          ▼
-  │       [Write a scene] → /write/guided?project=ID
+  ├── purposeful → declare 初心 (+ 媒介目标 if commercial)
+  │     │
+  │     ▼
+  │   "You have network material?"
+  │     │
+  │     ├── Yes + art-purposeful → /map/new
+  │     │     │
+  │     │     ▼
+  │     │   5-step wizard (10-25 min)
+  │     │     │
+  │     │     ▼
+  │     │   project_map persisted → /map/[projectId]
+  │     │     │
+  │     │     ▼
+  │     │   [v2.0] situate.act estimate wizard (4 questions, ~10 min)
+  │     │     │
+  │     │     ▼
+  │     │   [Write a scene] → /write/guided?project=ID
+  │     │
+  │     └── No / commercial → /write/guided (anchor-only)
   │
-  └── No, single anchor → /write/guided (anchor-only, today's flow)
+  ├── entangled → declare 那一行字 → /write/guided (skip both map and act)
+  │
+  └── unknown → /write/guided (skip both; AI asks driver after 3 drafts)
 ```
 
-Each subsequent scene for the same project reuses the map (per §10):
+Each subsequent scene for an art-purposeful project with `project_map` reuses the map (per §10):
 - map shown as pinned, collapsible header
-- mode prefilled
-- character_interview filtered to core_circle
+- mode prefilled (per scene, user can override)
+- character_interview filtered to `core_circle`
 - mirror gains "服务于中心问题" feedback (5th category)
+
+If the project also has `act_estimates` (per situate-act spec), each scene additionally shows:
+- current segment label + user-declared segment function (verbatim echo, no AI paraphrase — §A.11)
+- progress against estimated total (e.g., "1/22 scenes")
 
 ---
 
@@ -186,11 +222,13 @@ Tap fallback for mobile (drag → tap chip → tap target column).
 
 **AI action**: detect named entities only. **Never** propose initial
 assignment. AI surfaces structural facts when user finishes:
-- "5 in core_circle is unusual; most stories work with 3-4" (a fact, not a judgment)
-- "X appears in 80% of material but is in background"
-- "Y has 40 words of material but is in core_circle" (density signal, §9)
+- "core_circle has N entries. Each requires depth — N entries means N backstories to maintain across the project. Is this the scope you intend?" (NO baseline comparison — Scale Neutrality §3)
+- "X appears in 80% of material but is in background" (density vs assignment fact)
+- "Y has 40 words of material but is in core_circle" (density signal, §9 — let user decide if intentional)
 
 Surfacing is one-time per session. After user persists, AI accepts (§9).
+
+**v2.0 Scale Neutrality compliance**: AI does NOT say "most stories work with 3-4" or any baseline. AI reports counts and consequences; the user judges what scope is appropriate.
 
 **Output state**:
 ```
@@ -463,6 +501,7 @@ draft's recorded version < current map version).
 | 3. AI-inferred content visually distinguishable | Recurring phrases, structural facts shown in distinct UI block with "AI" badge; persists to project_map.selected_angles |
 | 4. Character limits are hard limits | Server validates `central_question ≤ 50`, `motto ≤ 200` |
 | 5. project_map cannot be edited by AI | No AI-callable mutation path. All writes via `/api/map/finalize` and `/map/[id]/edit` user actions |
+| 6. No canon names in user-facing surfaces (v2.0) | System prompts and UI text use neutral phrasing. "8 angles" instead of "8 Lukács-style angles". Lineage stays in `docs/` and code comments only. |
 
 ---
 
@@ -522,19 +561,35 @@ working sessions.
 
 ### Phase 6: Validation (~4h)
 - [ ] **6.1** Hand-test with a real network-material project (e.g., a real family-history corpus)
-- [ ] **6.2** Verify §13 forbiddens: no candidate lists, no rankings, no AI prose, no praise
-- [ ] **6.3** Verify §15 invariants: prompts constants, char caps enforced, AI cannot mutate map, AI-inferred content visually distinct
-- [ ] **6.4** Contrast pairs for `serves_central_question` (2-3 pairs minimum)
-- [ ] **6.5** Smoke test: map → guided → mirror, end-to-end with project_map context
+- [ ] **6.2** Verify §13 forbiddens: no candidate lists, no rankings, no AI prose, no praise, no drive/scale hierarchy
+- [ ] **6.3** Verify §15 invariants: prompts constants, char caps enforced, AI cannot mutate map, AI-inferred content visually distinct, no canon names in user-facing surfaces
+- [ ] **6.4** Verify §18.9 compliance: every AI surface gives categories or structural consequences, never specific scene content / specific characters / specific plot beats
+- [ ] **6.5** Verify §18.10 compliance: no second-guessing of user's declared drive
+- [ ] **6.6** Verify Scale Neutrality: no defaults pre-selected, no baseline comparisons ("most stories work with 3-4")
+- [ ] **6.7** Contrast pairs for `serves_central_question` (2-3 pairs minimum)
+- [ ] **6.8** Smoke test: map → act → guided → mirror, end-to-end with project_map + act_estimates context
+- [ ] **6.9** Drive-routing test: verify entangled / commercial / unknown drives bypass map correctly
 
-### Phase 7: methodology audit of existing code (~4h, parallel)
-- [ ] **7.1** Rewrite `vitality` to remove total-score verdict (per last audit)
-- [ ] **7.2** Audit `lay-translator.ts` — remove "可以试 X" prescriptions; replace with "structural fact + consequence"
-- [ ] **7.3** Audit `the_turn` lay copy
-- [ ] **7.4** Audit existing diagnosers for §13 violations (system prompts mentioning "lands", "better", "powerful")
+### Phase 7: methodology audit of existing code (~4h, parallel) — SUPERSEDED
+
+This phase is now §B of `missing-modules-v1.md`. Refer there for the
+v2.0 audit work (vitality / lay-translator / the_turn / `/write` entry
+redesign). Some items already partially completed in pre-canonization
+audit commits (see `f0bf01c`).
+
+### Phase 3.5 — situate.act gating (NEW v2.0)
+
+Between Phase 3 (project dashboard) and Phase 4 (integration into write),
+the project dashboard must hand off to situate.act for art-purposeful
+projects:
+
+- [ ] **3.5.1** `/map/[projectId]` overview page adds CTA: "Set act estimates →" → `/act/[projectId]` (per situate-act-spec)
+- [ ] **3.5.2** `[Write a scene]` CTA on overview page is enabled only when both `project_map` AND `act_estimates` exist; otherwise prompts user to set act estimates first
+- [ ] **3.5.3** Per-drive routing: only art-purposeful projects see this gate. Other drives go straight to write.
 
 ### Total
-~42h focused work, single dev. Realistic calendar ~3-4 weeks part-time.
+~42h focused work for situate.map proper. situate.act (~32h per §A.7)
+and §B post-canon audit work (~30h aggregate) tracked separately.
 
 ---
 
@@ -557,8 +612,29 @@ These need a decision before Phase 1:
 - `transformational-v0.md` — underlying framework
 - `canonical-validation-v1.md` — validation harness (applies to new diagnosers)
 - `long-form-handling.md` — long-form architecture (overlaps with §9 failure modes)
-- The methodology document the user shared (METHODOLOGY.md v1.0) — drives every section here
+- `METHODOLOGY.md` v2.0 (canonical at `/docs/METHODOLOGY.md`) — drives every section here
 
 ---
 
-*End of situate-map-spec-v1.md*
+## Appendix: v2.0 audit summary
+
+This spec was originally written against METHODOLOGY v1.0. After v2.0
+canonization, this audit pass added:
+
+| § | Change |
+|---|---|
+| Header | Bumped to v2.0; scoped to art-purposeful drive only |
+| §1 | Updated architecture table to three layers (added situate.act) |
+| §2 | Added v2.0 forbiddens (drive/scale hierarchy, declaration second-guessing, scale defaults); added §18.9 §18.10 Scale Neutrality compliance subsection |
+| §3 | User journey now starts with drive selection. Routing differs per drive. Mentions situate.act handoff. |
+| §3 Step 3 | Removed "most stories work with 3-4" baseline language (Scale Neutrality violation). AI reports counts + consequences without baselines. |
+| §10 | Added Engineering Invariant 6 (no canon names in user-facing surfaces) |
+| §11 Phase 3.5 | New phase for situate.act gating |
+| §11 Phase 6 | Validation now includes §18.9 / §18.10 / Scale Neutrality / drive routing checks |
+| §11 Phase 7 | SUPERSEDED by `missing-modules-v1.md` §B |
+
+The spec is now methodology-v2-compliant. Implementation can proceed against this spec without further audit-back-checking against v1.0.
+
+---
+
+*End of situate-map-spec-v1.md (v2.0-audited)*
