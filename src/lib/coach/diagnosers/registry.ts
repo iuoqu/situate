@@ -10,6 +10,11 @@ import {
   runCenterConsensus,
 } from "./center_consensus";
 import {
+  DIAGNOSER_ID as CHARACTER_INTERVIEW_ID,
+  STATUS as CHARACTER_INTERVIEW_STATUS,
+  runCharacterInterview,
+} from "./character_interview";
+import {
   DIAGNOSER_ID as ECONOMY_ID,
   STATUS as ECONOMY_STATUS,
   runEconomy,
@@ -25,6 +30,11 @@ import {
   STATUS as INTENT_REALIZATION_STATUS,
   runIntentRealization,
 } from "./intent_realization";
+import {
+  DIAGNOSER_ID as PLACE_INTERVIEW_ID,
+  STATUS as PLACE_INTERVIEW_STATUS,
+  runPlaceInterview,
+} from "./place_interview";
 import {
   DIAGNOSER_ID as STAKES_ABSENT_ID,
   STATUS as STAKES_ABSENT_STATUS,
@@ -199,6 +209,28 @@ export const DIAGNOSERS: Record<string, DiagnoserDefinition> = {
     requires_intent: false,
     provider_fanout: false, // uses internal qwen-plus, ignores UI provider selection
     run: runCenterConsensus,
+  },
+  [CHARACTER_INTERVIEW_ID]: {
+    id: CHARACTER_INTERVIEW_ID,
+    display_name: "character_interview",
+    status: CHARACTER_INTERVIEW_STATUS,
+    description:
+      "Generative — asks the writer 8 Stanislavski/Slumdog-style character backstory questions. Output is questions, not verdicts. Used in the guided write flow as an optional deep-dive workshop.",
+    pair_axis: null,
+    requires_intent: false,
+    provider_fanout: false, // uses internal Sonnet
+    run: runCharacterInterview,
+  },
+  [PLACE_INTERVIEW_ID]: {
+    id: PLACE_INTERVIEW_ID,
+    display_name: "place_interview",
+    status: PLACE_INTERVIEW_STATUS,
+    description:
+      "Generative — asks the writer 8 place backstory questions (history/sensory/time/secrets/physical/others/marking events/boundaries). Maps to Situate's place-anchored mission: place has its own arc.",
+    pair_axis: null,
+    requires_intent: false,
+    provider_fanout: false, // uses internal Sonnet
+    run: runPlaceInterview,
   },
 };
 
