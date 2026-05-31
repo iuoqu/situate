@@ -255,6 +255,43 @@ purposeful and entangled modes:
 The drives change what the tool's framing serves. The discipline that
 governs how AI behaves under that framing is invariant.
 
+### §18.9 Operational principle: AI gives categories, user gives specifics
+
+A meta-principle that operationalizes §3.1 + §3.3 across all three layers
+(map / act / at):
+
+> AI provides categorization scaffolding. The user instantiates each
+> category with specific content drawn from their own materials and
+> creative intent.
+
+Examples of the principle in action:
+
+| Layer | AI gives | User gives |
+|---|---|---|
+| situate.map step 2 | 5-6 angles from the 8 universal angles | Specific answers about which person resonates |
+| situate.map step 4 | 5 conflict slots (internal/structural/relational/alliance/temporal) | Specific conflicts in this project |
+| situate.act commitment confirmation | "10+ year scope opens: physical change / perspective change / relationship change" | Specific events (if any) the writer plans |
+| situate.act candidate earlier scenes | "Functional categories: initial state / routine / early hint" | Specific 2011 moments from this writer's materials |
+| situate.at mirror | "K is character/image/place/narrator" carrier type | Which one this draft uses |
+
+What is NOT permitted:
+- AI listing specific scene candidates ("2011.04 入职第一天 / 2011.夏 加班晚上")
+- AI listing specific story beats ("she will marry, have kids, lose her parents")
+- AI writing inner monologue for hypothetical scenes ("she already knew vaguely, just wouldn't let herself think")
+- AI naming specific characters not in the user's materials
+- AI naming canonical works as targets to emulate (overlap with §15 invariant 6)
+
+What IS permitted:
+- AI listing functional categories with neutral labels
+- AI listing structural consequences in abstract language ("the protagonist must age across this span")
+- AI listing constraint implications ("this length × this span = high compression")
+- AI surfacing tension between user's declared frames ("your stated reader and stated media goal pull in different directions")
+
+This principle is the engineering rule that makes the tool's ethical
+bottom line operational. Without it, every prompt drift toward
+ghostwriting. With it, the tool stays scaffolding regardless of how
+elaborate the AI's surface output becomes.
+
 ---
 
 ## Effect on existing methodology sections
@@ -270,8 +307,11 @@ following existing sections need follow-up edits:
   serves all four drive types.
 - **§13 (Forbidden)**: Add: "AI suggests one drive type is more serious or
   one media goal is more artistic."
-- **§14 (Permitted)**: Add: "AI surfaces drive-related observations as
-  one-time prompts after sufficient signal accumulation."
+- **§14 (Permitted)**: Add:
+  - "AI surfaces drive-related observations as one-time prompts after sufficient signal accumulation."
+  - "AI may surface category-level scaffolding (functional categories, constraint implications, frame tensions) that the user instantiates with material-specific content. See §18.9."
+- **§17 (The Promise)**: Add a second promise alongside "I wrote every word":
+  - **The tool promises clarity, not results.** It does not promise a publishable book, a sold book, a prize-winning book, or even a finished book. It promises that at every point in the process, the writer knows what they're doing and why. This is the only promise the tool can honestly make.
 
 ---
 

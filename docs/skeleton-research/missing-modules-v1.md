@@ -56,9 +56,27 @@ maintenance**:
 
 ### A.3 Triggers
 
-- **Main**: after situate.map completes, before first situate.at session
-- **Return**: explicit "back to act view" link from any situate.at session
-- **Deferred ask**: if user picked "我不知道" initially, after 3 completed scenes AI surfaces a one-time prompt "your scenes are forming a shape — give an estimate now?"
+Three entry paths, each with distinct UX:
+
+**Main trigger**: after situate.map completes, before first situate.at session. Standard 4-question wizard.
+
+**Return trigger**: explicit "back to act view" link from any situate.at session. Loads current estimates for revision.
+
+**Deferred-ask trigger**: if user picked "我不知道" initially, after 3 completed drafts AI surfaces a one-time prompt "your scenes are forming a shape — give an estimate now?"
+
+**Late-invocation trigger** (NEW from worked-example simulation): user enters situate.act for the first time AFTER 1+ drafts already exist. This is a common real path — many writers start writing, then realize they want director-view. Late invocation has its own UX:
+
+1. Acknowledgment screen — does NOT blame the user for skipping the layer
+   ```
+   你已经写了 N 个场景，但还没有做幕结构估计。这意味着场景
+   是在没有整本书尺度感的情况下写的。这不是问题——很多作
+   者也是这样开始的。但现在做估计会改变你接下来怎么走，做
+   完之后我们会回头检查已完成场景在新结构里的位置是否合适。
+   ```
+2. User goes through standard 4-question wizard
+3. **Forced Retroactive Check** (§A.9) — every completed draft gets reviewed against new segment structure
+
+Late invocation is a first-class flow, not edge case.
 
 ### A.4 Integration with situate.at
 
@@ -96,24 +114,155 @@ ALTER TABLE story_drafts ADD COLUMN act_segment_index INT NULL;
 
 Sized like situate.map spec. Blocked on methodology v2.0 canonization.
 
-- [ ] **A.7.1** Spec authoring: `situate-act-spec-v1.md` modelled on `situate-map-spec-v1.md` (~3h)
+- [ ] **A.7.1** Spec authoring: `situate-act-spec-v1.md` modelled on `situate-map-spec-v1.md` (~4h, expanded scope)
 - [ ] **A.7.2** DB schema additions (~1h)
 - [ ] **A.7.3** Routes `/act/[projectId]/*` and API (~3h)
-- [ ] **A.7.4** 4-question wizard UI + AI consequence panel (~5h)
-- [ ] **A.7.5** Bird's-eye view component reused in `/write/guided` (~3h)
+- [ ] **A.7.4** 4-question wizard UI + AI consequence panel + Commitment Confirmation primitive (§A.10) (~6h, expanded)
+- [ ] **A.7.5** Bird's-eye view component reused in `/write/guided` + per-scene segment-function strip (§A.11) (~4h, expanded)
 - [ ] **A.7.6** Per-draft segment assignment UI (~2h)
 - [ ] **A.7.7** Deferred-ask trigger after 3 completed scenes (~2h)
 - [ ] **A.7.8** Estimate revision behavior (AQ2 RESOLVED: preserve old segment assignments; new segment blank; user manually drags any drafts that should move) (~2h)
-- [ ] **A.7.9** Hand-test with 蒋某 project (~2h)
+- [ ] **A.7.9** Late-invocation acknowledgment + forced retroactive check flow (§A.3 / §A.9) (~4h, NEW)
+- [ ] **A.7.10** Honest-pacing UX strings: "40-60 会话 / 2-4 年" framing wherever total scenes/length is shown (§A.12) (~1h, NEW)
+- [ ] **A.7.11** Hand-test with 蒋某 project worked example (§A.13) (~3h)
 
-Total: ~24h focused work. Blocked on §B.0 (methodology canon).
+Total: ~32h focused work (expanded from 24h after worked-example simulation revealed more required surface). Blocked on §B.0 (methodology canon).
 
 ### A.8 Open design questions
 
 - **AQ1**: Is segment count counted across both purposeful-art and purposeful-commercial, or only art? Initial position: both — commercial fiction also has act structure (thriller 3-act, romance 5-beat, etc.); we just don't pretend expertise in commercial conventions.
-- **AQ2**: When user revises segment count from 3 to 4, do completed scenes' segment assignments get reset or preserved? Initial position: preserved; new segment is empty; user manually drags any scenes that should move.
+- **AQ2 — RESOLVED**: preserve old segment assignments on revision.
 - **AQ3**: Does situate.act produce its own diagnoser (e.g., `scene_belongs_to_segment`)? Initial position: not for v2.0. The assignment is user-declared, AI only surfaces structural facts about the assignment distribution (e.g., "段 3 has 0 scenes; you said it would have 8-15 scenes").
 - **AQ4**: For entangled drive, the deferred-ask at scene #3 happens together with the §18.3 drive-confirmation ask? Initial position: yes — both come at the same moment, presented as a single observation.
+
+### A.9 Retroactive Check mechanism (NEW from worked-example)
+
+When situate.act is established or revised AFTER any drafts exist, the
+system performs Retroactive Check: every completed draft is reviewed
+against the new/revised segment structure.
+
+The check has fixed shape:
+
+1. **Time-window verification**: does the draft's declared time fit within its assigned segment's time window?
+2. **Position-within-segment surfacing**: is the draft at the beginning, middle, or end of its segment's time window?
+3. **Segment-function comparison**: does the draft fulfill the user-declared function of its assigned segment? (Structural fact-check, NOT creative judgment. Compares prose against user's own declared function — same shape as `character_consistency` diagnoser.)
+
+Each check surfaces one or more of these structural observations. Each
+observation comes with **three response options**, never one
+recommendation:
+
+- (A) Accept the reframe (e.g., move scene from segment-1 start to segment-1 end)
+- (B) Revise the segment function so the existing scene fits
+- (C) Rewrite the scene to fit the declared function
+
+User picks. AI accepts.
+
+**Why this is the killer feature**: late invocation forces conscious
+review of work already done, but reframes (not blames) it. The writer
+discovers structure they didn't have before, applied to work they did
+have. This is the central UX promise of the act layer.
+
+### A.10 Commitment Confirmation primitive (NEW)
+
+Pattern: after the user picks a structurally significant value (e.g., time
+span = "10+ years"), AI surfaces **what that choice opens up** as a
+category-level consequence list, then asks "你接受这个尺度吗？"
+
+Strictly category-level, NEVER specific story content. Example:
+
+Compliant:
+```
+10+ 年跨度意味着主人公会经历**时间尺度上的转变**：
+- 物质层面的变化
+- 视角层面的变化
+- 周围人物的更换
+
+这些未必都写进书里——但作为可能性被打开了。这是这个尺
+度承担的代价：你要构建一个 14 年跨度的可信存在，即使读
+者只看到其中 22 个时刻。
+
+你准备好处理这个尺度的 backstage 重量吗？
+```
+
+Forbidden (§3.3 violation):
+```
+她可能会结婚、生孩子、离婚、失业、再就业、搬家、生病、
+失去父母——
+```
+
+The primitive is shared with situate.map (same pattern applies to: mode
+selection, center choice, central question — each can surface category-
+level consequences and re-consent).
+
+### A.11 Per-scene segment function visibility (NEW)
+
+Every situate.at session, when entered with `?project=ID` (i.e., from a
+project with project_map AND act_estimates), shows in the persistent
+header strip:
+
+- Drive type
+- Central question (or haunting_image for entangled)
+- Current segment + that segment's USER-DECLARED function
+
+Example header (Jiang case, scene #2):
+```
+蒋某 | 段 1 — 不明白 | 中心问题：她是从哪一刻起明白...
+📍 这个场景在段 1。段 1 的功能：让读者在不知情的状态下喜欢上她的工作。
+```
+
+The segment function text is **echoed verbatim from what the user wrote
+in situate.act step 3**. AI does not rephrase, summarize, or "improve"
+this text. Reflection per §6 (Socratic discipline) + §15 invariant 5
+(AI never writes to user state).
+
+### A.12 Honest-pacing UX (NEW)
+
+The tool acknowledges scale honestly in UI. Wherever total scenes or
+total length is surfaced, accompany it with realistic time framing:
+
+```
+总计 22 场景 / 65,000 字
+约 40-60 个写作会话 / 2-4 年完成
+（每个场景约 45-90 分钟，加间隔思考）
+```
+
+Purpose: prevent the writer from being misled by tools that imply
+"finish a literary work this evening." The tool serves real book-writing,
+which is a multi-year endeavor. Honest pacing UI sets that expectation.
+
+This UX touch is methodology-load-bearing: it makes the tool's value
+proposition match reality. Without it, the writer may abandon prematurely
+when month 6 of writing yields only 10 of 22 scenes.
+
+### A.13 Worked example: Jiang case (compliant rewrites)
+
+The simulation user produced for the Jiang project surfaced 4 specific
+methodology violations. The compliant equivalents are recorded here as
+spec source material — future contributors writing situate.act UI strings
+should pattern-match these:
+
+**Q1 time-span alternative descriptions:**
+
+Violating: "极短：整本书发生在 2011.12.20 这一天，'明白'是她当晚回到出租屋时的某个瞬间——她已经隐约知道了，只是不让自己想。"
+
+Compliant: "极短：整本书发生在 24 小时内的范围。这意味着'明白'必须在没有 2014 事件作为催化的情况下发生——明白会更内向、更隐微，且没有外部事件给它命名。"
+
+**Difference**: structural constraint (24 hours / no catalyst / no external naming), NOT specific scene content (returning to apartment / wouldn't let herself think).
+
+**Q3 candidate-scenes list:**
+
+Violating: lists 5 specific candidate scenes (入职第一天 / 加班晚上 / 第一次打电话 / 年会 / 接到任务的早上).
+
+Compliant: lists 3 **functional categories** ("初始状态 / 例行公事 / 早期暗示") and asks the user to instantiate from their materials. AI provides scaffolding, USER provides scene-specific content.
+
+**Scene #1 retroactive check:**
+
+Violating: "场景 #1 让读者认识了一个有不安感的蒋某" — AI is paraphrasing/interpreting prose.
+
+Compliant: quote actual sentences from the prose, present them alongside the user's declared segment function, ask the user to compare: "你写的这段（引用）跟你声明的段 1 功能（引用）——对你自己读起来吻合度如何？"
+
+These patterns instantiate the broader principle "AI gives categories,
+user gives specifics" (proposed for methodology v2 §14).
 
 ---
 
