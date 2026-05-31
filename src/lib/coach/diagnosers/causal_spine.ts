@@ -51,7 +51,7 @@ causal_absent
   （事件并列，无任何一项的存在依赖于另一项；可以任意重排）
 
 注意
-- 中文文学传统里，causal_implicit 是主流写法——不要把缺少"因此/所以"字面误判为 causal_absent
+- causal_implicit 在很多 prose 里是主流写法（事件并置但不点破因果）——不要把缺少"因此/所以"字面误判为 causal_absent
 - 检验题：**如果把第二个事件挪到第四个事件之后，文本还讲得通吗？**
   - 完全讲不通 → causal_present
   - 大致还行但失去了重量 → causal_implicit

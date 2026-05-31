@@ -218,7 +218,7 @@ function characterNotFlat(
       id: "character_not_flat",
       label: "人物不扁",
       state: true,
-      reason: "intent 里你给了角色具体 backstory（Stanislavski「given circumstances」）。",
+      reason: "intent 里你给了角色具体 backstory（角色已知 given circumstances）。",
       suggestion: "",
     };
   }

@@ -139,8 +139,8 @@ export default async function WritePage() {
                   />
                   <span>
                     <strong>Situate Spine · Pearls (遗珠)</strong> — for
-                    Hemingway-style work whose merit is independent of
-                    place. Sections are deletable; coordinate is optional.{" "}
+                    work whose merit is independent of place anchoring.
+                    Sections are deletable; coordinate is optional.{" "}
                     <em>
                       Editor discretion decides whether your piece actually
                       enters the Pearls section at publication time.
@@ -165,8 +165,8 @@ export default async function WritePage() {
             mirror, not a ghostwriter.
           </p>
           <p style={cardComingSoonStyle}>
-            内测版 — feedback welcome. Built for novice writers; works for
-            seasoned ones too.
+            内测版 — feedback welcome. Designed for writers who want
+            structural feedback before submitting.
           </p>
           <Link href="/write/guided" style={secondaryButtonStyle}>
             Try guided write →
@@ -203,9 +203,11 @@ export default async function WritePage() {
       </ol>
 
       <p style={footerNoteStyle}>
-        All three paths land in the same editorial review. Free or paid,
-        all writers are eligible for the Prize and the anthology — only
-        the writing tools differ.
+        All three paths land in the same editorial review. Pieces
+        submitted to Situate Editions are considered for the Prize and
+        the anthology under our editorial criteria. The writing tools
+        themselves do not impose these criteria — they help you write
+        clearly, regardless of where you intend to publish.
       </p>
 
       <p style={dashboardLinkStyle}>

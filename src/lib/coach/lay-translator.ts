@@ -67,17 +67,17 @@ export function translateBankToLay(
       } else if (presentCount > implicitCount + absentCount) {
         out.push({
           kind: "working",
-          text: `读者多数看到 ta 在承担这件事，但不是所有人都完全感觉到（${presentCount}/${total}）。如果想更清楚，可以多写 ta 的内心动作或反应。`,
+          text: `读者多数看到 ta 在承担这件事，但不是所有人都完全感觉到（${presentCount}/${total}）。`,
         });
       } else if (implicitCount >= total / 2) {
         out.push({
           kind: "consider",
-          text: `你说到的人在场，但读者感觉 ta 还没有真正"承受"这件事——好像只是个旁观者。是有意留白吗？还是想让 ta 更明显地在承担？`,
+          text: `你说到的人在场，但读者感觉 ta 还没有真正"承受"这件事——更像是个旁观者。这是你想要的吗？`,
         });
       } else if (absentCount >= total / 2) {
         out.push({
           kind: "missing",
-          text: `读者读完，没感觉到任何人在承受这件事——像在看外面的事，不像在 inside someone。如果想让读者跟着一个人感受，可以加 ta 的内心活动或具体反应。`,
+          text: `读者读完，没感觉到任何人在承受这件事——文本读起来像在叙述外部事件，而不是在某个意识内部。这是这一段的结构事实。`,
         });
       }
     }
@@ -157,7 +157,7 @@ export function translateBankToLay(
     if (total > 0 && absentCount >= total / 2) {
       out.push({
         kind: "missing",
-        text: `读者觉得你的事情之间没有"因此"——只是"然后再然后"。如果想让读者跟随你的故事推进，可以让某些动作明确导致后面的事。`,
+        text: `读者读到的事件之间没有"因此"——只是"然后再然后"。事件可被重排而不影响整体——这是这段的结构事实。`,
       });
     }
   }
@@ -168,7 +168,7 @@ export function translateBankToLay(
     if (slacks.length >= 2) {
       out.push({
         kind: "consider",
-        text: `AI 觉得有些细节没起到作用：${slacks[0].slice(0, 100)}。可以删，也可以加深让它们承重。`,
+        text: `AI 标出了一些没承担明确作用的细节：${slacks[0].slice(0, 100)}。它们是有意的留白，还是可以承担更多？`,
       });
     }
   }
@@ -268,19 +268,19 @@ export function translateBankToLay(
     if (arcAbsent >= arcTypes.length / 2) {
       out.push({
         kind: "consider",
-        text: `你这段里地点是 backdrop，不是参与者。如果想让地点有自己的弧光（在不同时刻呈现不同状态），可以试试让事件标记它，或在不同时刻重新观察它。`,
+        text: `这段里地点是 backdrop，不参与叙事变化。这是有意的吗？还是你想让地点也跟着事件被标记？`,
       });
     } else if (arcStatic >= arcTypes.length / 2) {
       out.push({
         kind: "consider",
-        text: `你的地点是静态的，人物在变。这是个有效的 device（地点作为"不动的见证者"）——确认是你想要的就好。`,
+        text: `地点是静态的，人物在变——地点作为"不动的见证者"。确认这是你想要的结构。`,
       });
     } else if (
       relTypes.filter((r) => r === "contrast").length >= relTypes.length / 2
     ) {
       out.push({
         kind: "working",
-        text: `你的地点弧光跟人物弧光是**反向**的——这是文学上很有力的张力模式。`,
+        text: `你的地点弧光跟人物弧光是**反向**的——结构事实：两条变化轨迹相向。`,
       });
     }
   }
@@ -313,12 +313,12 @@ export function translateBankToLay(
       } else if (absentCount >= total / 2) {
         out.push({
           kind: "missing",
-          text: `结尾只是收尾 / 总结，没让前文意义重排。读者读完不会想回头重读开头。如果想让结尾"落"得更重，可以试：让一个具体动作（不可逆的）压住前面所有铺垫，或让结尾揭示一个让前文重新解读的事实。`,
+          text: `结尾是 summary 或停笔，没让前文意义重排——读完后开头那句话还是原来那个意思。这是这段结尾的结构事实。`,
         });
       } else {
         out.push({
           kind: "consider",
-          text: `结尾有一丝"转"的痕迹，但还没真正完成。读者要做大部分功——可以让那个落点更具体（一个动作 / 形象 / 决定），而不是指向。`,
+          text: `结尾的转有痕迹但未完成。读者要做大部分功才能让"转"落地——你想要的就是这种含蓄的指向，还是想让它更落得下来？`,
         });
       }
     }
@@ -327,7 +327,7 @@ export function translateBankToLay(
   if (out.length === 0) {
     out.push({
       kind: "working",
-      text: "AI 没找到明显问题，也没找到特别突出的支点。这是稳定的中性写作——可以接着写，也可以等有具体方向再回来。",
+      text: "AI 没读出突出的支点，也没读出明显的结构问题。当前这段在结构层面没有强信号——继续写，或回头看你想突出什么。",
     });
   }
 
