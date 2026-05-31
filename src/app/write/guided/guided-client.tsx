@@ -504,7 +504,7 @@ function ModeStage({ onSelect }: { onSelect: (m: Mode) => void }) {
       id: "blend",
       title: "介于两者之间",
       subtitle:
-        "很多写作都是这样——一部分是真的，一部分是改过/想象的。大多数文学短篇属于这一类。",
+        "一部分是真的，一部分是改过 / 想象的——真实素材跟虚构成分混合的写作。",
     },
   ];
   return (

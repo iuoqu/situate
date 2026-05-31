@@ -236,10 +236,28 @@ when month 6 of writing yields only 10 of 22 scenes.
 
 ### A.13 Worked example: Jiang case (compliant rewrites)
 
-The simulation user produced for the Jiang project surfaced 4 specific
+The simulation user produced for the Jiang project surfaced specific
 methodology violations. The compliant equivalents are recorded here as
 spec source material — future contributors writing situate.act UI strings
-should pattern-match these:
+should pattern-match these.
+
+**⚠ The original simulation ALSO contained Scale Neutrality violations
+that are flagged but NOT yet rewritten below.** The 4 estimate questions
+in the simulation had:
+- Default radio button selections (● "长河 10+ 年" pre-selected)
+- AI reasoning that pushed toward a specific scale ("默认建议是长河，因为你的中心问题指向延时认识")
+- Treatment of one scale as the recommended path
+
+Per METHODOLOGY §3 Scale Neutrality (v2.0), all of these are forbidden.
+The rewrite must:
+- Remove all default selections (all radios start empty)
+- Remove all AI reasoning that recommends one scale based on prior choices
+- Show structural implications of EACH scale equally — not just the "default"
+- Specifically remove phrases like "你的中心问题暗示了至少两端" used to push toward a longer scale
+
+**TODO**: A.13.scale-rewrite — rewrite the 4 estimate question UI strings to be scale-neutral. Source the rewrites against §3 Scale Neutrality. (~2h)
+
+The non-scale violations (§3.1 / §3.3) follow below:
 
 **Q1 time-span alternative descriptions:**
 
