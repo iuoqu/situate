@@ -10,6 +10,12 @@ import {
   runCenterConsensus,
 } from "./center_consensus";
 import {
+  DIAGNOSER_ID as CHARACTER_CONSISTENCY_ID,
+  STATUS as CHARACTER_CONSISTENCY_STATUS,
+  runCharacterConsistency,
+  type CharacterConsistencyJudgment,
+} from "./character_consistency";
+import {
   DIAGNOSER_ID as CHARACTER_INTERVIEW_ID,
   STATUS as CHARACTER_INTERVIEW_STATUS,
   runCharacterInterview,
@@ -30,6 +36,12 @@ import {
   STATUS as INTENT_REALIZATION_STATUS,
   runIntentRealization,
 } from "./intent_realization";
+import {
+  DIAGNOSER_ID as PLACE_ARC_ID,
+  STATUS as PLACE_ARC_STATUS,
+  runPlaceArc,
+  type PlaceArcJudgment,
+} from "./place_arc";
 import {
   DIAGNOSER_ID as PLACE_INTERVIEW_ID,
   STATUS as PLACE_INTERVIEW_STATUS,
@@ -231,6 +243,54 @@ export const DIAGNOSERS: Record<string, DiagnoserDefinition> = {
     requires_intent: false,
     provider_fanout: false, // uses internal Sonnet
     run: runPlaceInterview,
+  },
+  [CHARACTER_CONSISTENCY_ID]: {
+    id: CHARACTER_CONSISTENCY_ID,
+    display_name: "character_consistency",
+    status: CHARACTER_CONSISTENCY_STATUS,
+    description:
+      "Compares declared character backstory (in the intent block) against the prose. Flags drift — places where prose contradicts or has no backstory support. Requires intent.",
+    pair_axis: {
+      positive_suffix: "_consistent.txt",
+      negative_suffix: "_drift.txt",
+      classify_judgment: (judgment) => {
+        const j = judgment as Partial<CharacterConsistencyJudgment>;
+        if (j.verdict === "character_consistency_present") return "positive";
+        if (
+          j.verdict === "character_consistency_implicit" ||
+          j.verdict === "character_consistency_absent"
+        )
+          return "negative";
+        return "ambiguous";
+      },
+    },
+    requires_intent: true,
+    provider_fanout: true,
+    run: runCharacterConsistency,
+  },
+  [PLACE_ARC_ID]: {
+    id: PLACE_ARC_ID,
+    display_name: "place_arc",
+    status: PLACE_ARC_STATUS,
+    description:
+      "Reads the prose and identifies whether the central place has its own arc, what type (convergent/divergent/static/shifting/absent), and how it relates to the character arc. Works best on 1500+ char prose.",
+    pair_axis: {
+      positive_suffix: "_with_arc.txt",
+      negative_suffix: "_static.txt",
+      classify_judgment: (judgment) => {
+        const j = judgment as Partial<PlaceArcJudgment>;
+        if (j.verdict === "place_arc_present") return "positive";
+        if (
+          j.verdict === "place_arc_implicit" ||
+          j.verdict === "place_arc_absent"
+        )
+          return "negative";
+        return "ambiguous";
+      },
+    },
+    requires_intent: false,
+    provider_fanout: true,
+    run: runPlaceArc,
   },
 };
 
