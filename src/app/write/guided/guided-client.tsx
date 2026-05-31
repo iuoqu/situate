@@ -303,6 +303,7 @@ export function GuidedWriteClient({ userEmail }: { userEmail: string }) {
             "economy",
             "inferred_intent",
             "center_consensus",
+            "the_turn",
             ...(intent ? ["intent_realization"] : []),
           ],
           ...(intent ? { intent } : {}),

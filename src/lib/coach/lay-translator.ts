@@ -49,6 +49,7 @@ export function translateBankToLay(
   const realization = response.results.intent_realization;
   const charConsistency = response.results.character_consistency;
   const placeArc = response.results.place_arc;
+  const theTurn = response.results.the_turn;
 
   // 1. K presence (stakes_absent)
   if (stakes) {
@@ -281,6 +282,45 @@ export function translateBankToLay(
         kind: "working",
         text: `你的地点弧光跟人物弧光是**反向**的——这是文学上很有力的张力模式。`,
       });
+    }
+  }
+
+  // 11. The turn (closure)
+  if (theTurn) {
+    const verdicts = collectVerdicts(theTurn);
+    const presentCount = verdicts.filter((v) => v === "turn_present").length;
+    const absentCount = verdicts.filter((v) => v === "turn_absent").length;
+    const total = verdicts.length;
+    if (total > 0) {
+      if (presentCount >= total / 2) {
+        const cell = Object.values(theTurn.by_provider).find((c) => {
+          const j = (c?.judgment ?? {}) as Record<string, unknown>;
+          return (
+            typeof j.turn_location === "string" &&
+            j.turn_location.trim().length > 0 &&
+            j.turn_location.trim() !== "无"
+          );
+        });
+        const location = cell
+          ? ((cell.judgment as Record<string, unknown>).turn_location as string)
+          : "";
+        out.push({
+          kind: "working",
+          text: location
+            ? `你的结尾完成了"转"——读完后回头看开头，意义变了。落点在：「${location.trim().slice(0, 80)}」`
+            : `你的结尾完成了"转"——读完后回头看开头，意义变了。`,
+        });
+      } else if (absentCount >= total / 2) {
+        out.push({
+          kind: "missing",
+          text: `结尾只是收尾 / 总结，没让前文意义重排。读者读完不会想回头重读开头。如果想让结尾"落"得更重，可以试：让一个具体动作（不可逆的）压住前面所有铺垫，或让结尾揭示一个让前文重新解读的事实。`,
+        });
+      } else {
+        out.push({
+          kind: "consider",
+          text: `结尾有一丝"转"的痕迹，但还没真正完成。读者要做大部分功——可以让那个落点更具体（一个动作 / 形象 / 决定），而不是指向。`,
+        });
+      }
     }
   }
 

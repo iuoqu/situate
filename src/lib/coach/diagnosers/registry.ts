@@ -53,6 +53,12 @@ import {
   runStakesAbsent,
   type StakesAbsentJudgment,
 } from "./stakes_absent";
+import {
+  DIAGNOSER_ID as THE_TURN_ID,
+  STATUS as THE_TURN_STATUS,
+  runTheTurn,
+  type TheTurnJudgment,
+} from "./the_turn";
 
 /**
  * Registry of focused diagnosers. The /api/dev/run-diagnoser endpoint
@@ -267,6 +273,30 @@ export const DIAGNOSERS: Record<string, DiagnoserDefinition> = {
     requires_intent: true,
     provider_fanout: true,
     run: runCharacterConsistency,
+  },
+  [THE_TURN_ID]: {
+    id: THE_TURN_ID,
+    display_name: "the_turn",
+    status: THE_TURN_STATUS,
+    description:
+      "Judges whether the ending performs a turn — recontextualization, decisive close, reversal, or image-as-meaning — or merely summarizes / stops. Promised by transformational-v0 as a load-bearing axis.",
+    pair_axis: {
+      // contrast pairs to author: *_turn.txt (lands a turn) vs
+      // *_summary.txt (ends with summary/restate). Until corpus exists
+      // pair-test returns "no pairs found".
+      positive_suffix: "_turn.txt",
+      negative_suffix: "_summary.txt",
+      classify_judgment: (judgment) => {
+        const j = judgment as Partial<TheTurnJudgment>;
+        if (j.verdict === "turn_present") return "positive";
+        if (j.verdict === "turn_implicit" || j.verdict === "turn_absent")
+          return "negative";
+        return "ambiguous";
+      },
+    },
+    requires_intent: false,
+    provider_fanout: true,
+    run: runTheTurn,
   },
   [PLACE_ARC_ID]: {
     id: PLACE_ARC_ID,

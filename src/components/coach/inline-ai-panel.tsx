@@ -36,6 +36,7 @@ const DEFAULT_DIAGNOSER_IDS = [
   "inferred_intent",
   "center_consensus",
   "place_arc",
+  "the_turn",
 ];
 
 export function InlineAIPanel({
