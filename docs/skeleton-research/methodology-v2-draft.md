@@ -155,9 +155,25 @@ stable cross-draft signal). The signal is computed from two sources:
   - Mixed → keep observing
 - **recurrent_image** (new cross-draft diagnoser): identifies images/moments/details that recur across multiple drafts in a way that suggests they are load-bearing for the writer (not just for any one story). If recurrence is strong, entangled drive is more likely.
 
-When a user declared purposeful but observations suggest entangled (or
-vice versa), AI surfaces this as a one-time observation. Never as a
-correction. Never auto-switches. User decides.
+**Critical boundary** (settled decision from Q5/Q6 review):
+
+AI surfaces drive observations ONLY in two cases:
+1. The user explicitly chose "unknown" drive at project creation (i.e., user opted into deferred observation). AI surfaces the inferred drive once, after 3 drafts.
+2. The user manually requests re-detection via a Settings button.
+
+AI does NOT proactively re-surface drive mismatches against drives the
+user has already declared. Once the user has answered the drive
+question, the answer is treated as authoritative — second-guessing it
+based on behavioral evidence would be a form of AI surveillance the
+methodology forbids.
+
+This is a sharper reading of §13 ("AI does not volunteer opinions when
+not asked") + §9 ("one challenge per decision, then accept"):
+- Surface at declaration moment: permitted (it's part of the conversation that produced the declaration)
+- Surface during opt-in observation period: permitted (user requested observation by choosing "unknown")
+- Surface after explicit user declaration based on subsequent behavior: FORBIDDEN
+
+See §18.X "Declaration vs Behavior" principle below.
 
 ### §18.4 What each drive uses as its anchor
 
@@ -292,6 +308,46 @@ bottom line operational. Without it, every prompt drift toward
 ghostwriting. With it, the tool stays scaffolding regardless of how
 elaborate the AI's surface output becomes.
 
+### §18.10 Declaration vs Behavior (NEW)
+
+A complementary principle surfaced from the Q5 + Q6 review:
+
+> AI may surface consequences at the moment a user declares a choice.
+> AI may NOT surface observations that contradict the user's prior
+> declarations based on the user's subsequent behavior — except when the
+> user explicitly opted into behavioral observation.
+
+The distinction:
+
+| Moment | AI action permitted |
+|---|---|
+| User just declared X at the moment of choice | Surface consequences of X (Commitment Confirmation, see §A.10) |
+| User declared X earlier, then writes prose suggesting Y | NO — do not second-guess. Trust the declaration. |
+| User declared "unknown" / "I don't know" | YES — user opted into observation. Surface inferred answer once after sufficient signal. |
+| User manually clicks "re-detect" in Settings | YES — user explicitly requested re-analysis. |
+
+Why this matters: the alternative (AI quietly comparing prose against
+prior declarations and resurfacing "I think you're wrong about X") is a
+form of surveillance over the writer's mind. It frames AI as a corrective
+authority over the writer's self-knowledge. This violates the tool's
+position as scaffolding/copilot rather than judge/coach.
+
+The writer is the authority on their own work and intentions. AI's role
+is to provide structural facts that support the writer's own judgment,
+not to monitor whether the writer is "really" what they declared.
+
+Practical consequence for situate.act late invocation: the retroactive
+check (§A.9) compares scene against user's OWN declared segment function
+— not against an AI-inferred function. AI never says "I think segment 1
+should really be about X" when user declared Y. The scaffolding is
+always user-declared.
+
+Practical consequence for hybrid projects: the "consider splitting"
+suggestion (Q6) is NOT proactively surfaced. It only appears in project
+Settings when the user goes to look at it. Same logic — user declared
+the drives per draft; AI doesn't override that with "I think you should
+reorganize."
+
 ---
 
 ## Effect on existing methodology sections
@@ -324,14 +380,17 @@ Resolved decisions (locked, kept here for historical traceability):
 - **(Q-Naming) — RESOLVED**: `situate.act`. Confirmed naming for the third architectural layer (between map and at). Will also serve as a teaching/curriculum component.
 - **(Q-SegmentRevision) — RESOLVED**: Option A — preserve old segment assignments when user revises segment count. New segments are blank; user manually drags any drafts that should move. Lowest user-surprise; doesn't force re-review.
 
+Newly resolved decisions (locked):
+
+- **DQ2 — RESOLVED**: AI does NOT proactively re-surface drive mismatches against declared drives. After initial observation (only for opt-in "unknown" drive type users), further re-detection only via user-clicked Settings button. Encoded in §18.3 (critical boundary) and §18.10 (Declaration vs Behavior principle).
+- **DQ3 — RESOLVED**: Hybrid project "consider splitting" suggestion is NOT proactively surfaced. Only visible when user enters project Settings. AI never overrides user's per-draft drive declarations with reorganization advice.
+- **DQ4 — RESOLVED**: Yes, surface once as Socratic question when user declares 初心 + 媒介目标 with apparent tension. This fires at declaration moment (permitted) — not from subsequent behavior. See §18.10 distinction.
+- **AQ1 — RESOLVED**: situate.act runs for both art-purposeful and commercial-purposeful. UI text adds one line: "If you write genre fiction, you may already be familiar with the structural conventions for your genre. You can use them to fill in the 4 estimates" — but NO specific genre templates listed (no thriller-3-act / romance-5-beat etc., as that would imply AI expertise the tool does not claim).
+
 Open decisions still needed before §18 canonization:
 
-- **DQ2**: When a user-declared drive conflicts with strong AI-observed signal, does the observation surface once and never again, or surface again if signal strengthens further? (Initial position: once, never again, unless user re-declares and the new declaration also conflicts.)
-- **DQ3**: For hybrid projects (mixed drive drafts), is the "consider splitting" suggestion shown only on the project dashboard, or also inside the mirror stage of a deviant draft? (Initial position: dashboard only — mirror should stay focused on the prose.)
-- **DQ4**: For commercial-purposeful drafts where the writer's declared 初心 conflicts with their 媒介目标 (e.g., "I want to write about loss, and I want this to hit a fast-fiction market"), does AI surface the tension? (Initial position: yes, once, as a Socratic question — "Your stated reader is X but your stated media goal targets Y. They might align — but they might pull in different directions.")
-- **AQ1**: Does situate.act run for commercial-purposeful drafts, or only art-purposeful? (Initial position: yes, runs for both — but the consequence-surfacing copy is frame-aware.)
 - **AQ3**: Does situate.act spawn its own diagnoser `scene_belongs_to_segment` that validates each draft against its declared segment? (Initial position: no for v2.0. User-declared assignment; AI only surfaces distribution facts e.g. "段 3 is empty.")
-- **AQ4**: For "unknown" drive projects, the deferred drive-ask and the deferred act-estimate-ask both fire around scene 3. Do they bundle into a single observation, or surface separately? (Initial position: bundle — single moment, fewer interruptions.)
+- **AQ4 (re-scoped)**: For "unknown" drive projects, the deferred drive-ask and the act-estimate ask both fire around scene 3. Do they bundle into a single observation, or surface separately? (Note: only applies to unknown-drive opt-in users, since other drives don't get the drive-ask. Initial position: bundle — single moment, fewer interruptions.)
 
 ---
 

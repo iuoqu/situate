@@ -130,10 +130,10 @@ Total: ~32h focused work (expanded from 24h after worked-example simulation reve
 
 ### A.8 Open design questions
 
-- **AQ1**: Is segment count counted across both purposeful-art and purposeful-commercial, or only art? Initial position: both — commercial fiction also has act structure (thriller 3-act, romance 5-beat, etc.); we just don't pretend expertise in commercial conventions.
+- **AQ1 — RESOLVED**: situate.act runs for both art-purposeful and commercial-purposeful. UI adds one line acknowledging genre conventions exist for commercial fiction without listing specific templates.
 - **AQ2 — RESOLVED**: preserve old segment assignments on revision.
-- **AQ3**: Does situate.act produce its own diagnoser (e.g., `scene_belongs_to_segment`)? Initial position: not for v2.0. The assignment is user-declared, AI only surfaces structural facts about the assignment distribution (e.g., "段 3 has 0 scenes; you said it would have 8-15 scenes").
-- **AQ4**: For entangled drive, the deferred-ask at scene #3 happens together with the §18.3 drive-confirmation ask? Initial position: yes — both come at the same moment, presented as a single observation.
+- **AQ3**: Does situate.act produce its own diagnoser (e.g., `scene_belongs_to_segment`)? Initial position: not for v2.0. The assignment is user-declared, AI only surfaces structural facts about the assignment distribution (e.g., "段 3 has 0 scenes; you said it would have 8-15 scenes"). STILL OPEN.
+- **AQ4 (re-scoped)**: For "unknown" drive projects only (the only case where there's even a drive-ask at scene 3), do the deferred drive-ask and the deferred act-ask bundle into one observation? Initial position: bundle. STILL OPEN.
 
 ### A.9 Retroactive Check mechanism (NEW from worked-example)
 
@@ -272,10 +272,11 @@ Blocked on user approval of `methodology-v2-draft.md`. Once canonized:
 
 ### B.0 Methodology canonization (~1h)
 - [ ] **B.0.1** Merge approved §3 extension, §15 invariant 6, §18 into `METHODOLOGY.md` (canonical)
-- [ ] **B.0.2** Answer DQ2/DQ3/DQ4 (DQ1 resolved: 3 drafts)
-- [ ] **B.0.3** Answer AQ1/AQ3/AQ4 (AQ2 resolved: preserve old segment assignments)
+- [x] **B.0.2** RESOLVED: DQ1 (3 drafts) / DQ2 (Settings button, no auto re-surface) / DQ3 (Settings only, no proactive) / DQ4 (Surface once at declaration moment)
+- [ ] **B.0.3** Still open: AQ3 (scene_belongs_to_segment diagnoser?), AQ4 (bundle drive + act asks?). AQ1 (run for commercial) / AQ2 (preserve) resolved.
 - [x] **B.0.4** RESOLVED: name is `situate.act` (will also serve as teaching/curriculum component)
 - [x] **B.0.5** RESOLVED: §3 extension adds "Aggregation is not verdict" clarification
+- [x] **B.0.6** RESOLVED: §18.10 added — "Declaration vs Behavior" principle. AI may surface consequences at declaration moment; may not second-guess past declarations based on subsequent behavior except when user opted in (unknown drive) or explicitly requested (Settings button).
 
 ### B.1 L1.1 — vitality readiness-signal refactor (~3h)
 The current `vitality` module ranks prose with "vital/borderline/flat" verdicts — methodologically forbidden (§3.4 + §13). After §18 canonized:
@@ -319,6 +320,11 @@ After §18 canonized:
 - [ ] **B.5.3** New endpoint `/api/coach/recurrent` accepting draft_ids[]
 - [ ] **B.5.4** New cross-draft analyzer module at `src/lib/coach/cross-draft/`
 - [ ] **B.5.5** Drive-detection signal aggregator: combines k_carrier distribution + recurrent_image strength → suggested drive type
+- [ ] **B.5.6** Surface gating per §18.3 + §18.10:
+  - For "unknown" drive: aggregator runs after 3 drafts, surfaces ONCE
+  - For declared drive: aggregator runs only when user clicks Settings "重新检测驱动" button
+  - For hybrid project split suggestion: only shown in project Settings, never proactively
+- [ ] **B.5.7** Settings UI for manual re-detection button
 
 ### B.6 New diagnoser: the_thing_arrived (~6h)
 Critical for entangled drive feedback. Hardest prompt engineering of v2.0.
