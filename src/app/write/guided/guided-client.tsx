@@ -66,11 +66,26 @@ interface ProviderInfo {
   available: boolean;
 }
 
+interface InterviewQuestion {
+  category: string;
+  question: string;
+  why_matters: string;
+}
+
+interface Workshop {
+  focal: string;
+  rationale: string;
+  questions: InterviewQuestion[];
+  answers: string[]; // parallel array to questions
+}
+
 interface PersistedState {
   mode: Mode | null;
   anchor: string;
   drill: Drill;
   prose: string;
+  characterWorkshop: Workshop | null;
+  placeWorkshop: Workshop | null;
 }
 
 export function GuidedWriteClient() {
@@ -84,6 +99,12 @@ export function GuidedWriteClient() {
   const [providers, setProviders] = useState<ProviderInfo[]>([]);
   const [tokenSet, setTokenSet] = useState(true);
   const [tokenInput, setTokenInput] = useState("");
+  const [characterWorkshop, setCharacterWorkshop] = useState<Workshop | null>(
+    null,
+  );
+  const [placeWorkshop, setPlaceWorkshop] = useState<Workshop | null>(null);
+  const [characterLoading, setCharacterLoading] = useState(false);
+  const [placeLoading, setPlaceLoading] = useState(false);
 
   // Restore from localStorage on mount
   useEffect(() => {
@@ -96,6 +117,8 @@ export function GuidedWriteClient() {
         if (s.anchor) setAnchor(s.anchor);
         if (s.drill) setDrill(s.drill);
         if (s.prose) setProse(s.prose);
+        if (s.characterWorkshop) setCharacterWorkshop(s.characterWorkshop);
+        if (s.placeWorkshop) setPlaceWorkshop(s.placeWorkshop);
         // Resume to the furthest stage that has content
         if (s.prose) setStage("freedump");
         else if (s.drill && Object.values(s.drill).some((v) => v))
@@ -111,9 +134,16 @@ export function GuidedWriteClient() {
   // Persist on change
   useEffect(() => {
     if (typeof window === "undefined") return;
-    const s: PersistedState = { mode, anchor, drill, prose };
+    const s: PersistedState = {
+      mode,
+      anchor,
+      drill,
+      prose,
+      characterWorkshop,
+      placeWorkshop,
+    };
     window.localStorage.setItem(LOCAL_KEY, JSON.stringify(s));
-  }, [mode, anchor, drill, prose]);
+  }, [mode, anchor, drill, prose, characterWorkshop, placeWorkshop]);
 
   // Fetch providers on mount (need token)
   useEffect(() => {
@@ -151,7 +181,94 @@ export function GuidedWriteClient() {
     if (drill.changes.trim()) lines.push(`转变：${drill.changes.trim()}`);
     if (drill.why_remember.trim())
       lines.push(`读者留下：${drill.why_remember.trim()}`);
+
+    // Append character backstory if author did the workshop
+    if (characterWorkshop) {
+      const answered = characterWorkshop.questions
+        .map((q, i) => ({ q, a: characterWorkshop.answers[i] }))
+        .filter((p) => p.a?.trim());
+      if (answered.length > 0) {
+        lines.push("");
+        lines.push(`【作者的人物 backstory · ${characterWorkshop.focal}】`);
+        for (const p of answered) {
+          lines.push(`  - [${p.q.category}] ${p.q.question} → ${p.a.trim()}`);
+        }
+      }
+    }
+    if (placeWorkshop) {
+      const answered = placeWorkshop.questions
+        .map((q, i) => ({ q, a: placeWorkshop.answers[i] }))
+        .filter((p) => p.a?.trim());
+      if (answered.length > 0) {
+        lines.push("");
+        lines.push(`【作者的地点 backstory · ${placeWorkshop.focal}】`);
+        for (const p of answered) {
+          lines.push(`  - [${p.q.category}] ${p.q.question} → ${p.a.trim()}`);
+        }
+      }
+    }
     return lines.join("\n");
+  }
+
+  async function runWorkshop(
+    kind: "character" | "place",
+  ): Promise<void> {
+    const text = composeText() || anchor;
+    if (!text.trim()) {
+      setError("写点内容（哪怕只是 anchor）AI 才能识别角色 / 地点");
+      return;
+    }
+    setError(null);
+    if (kind === "character") setCharacterLoading(true);
+    else setPlaceLoading(true);
+
+    try {
+      const resp = await fetch("/api/dev/coach-preview", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          text,
+          providers: ["anthropic:claude-sonnet-4-6"], // overridden by provider_fanout: false
+          diagnoser_ids: [
+            kind === "character" ? "character_interview" : "place_interview",
+          ],
+        }),
+        credentials: "same-origin",
+      });
+      if (!resp.ok) {
+        const body = await resp.text();
+        throw new Error(`HTTP ${resp.status}: ${body.slice(0, 200)}`);
+      }
+      const data = (await resp.json()) as PreviewResponse;
+      const diagId =
+        kind === "character" ? "character_interview" : "place_interview";
+      const result = data.results[diagId];
+      const cell = result ? Object.values(result.by_provider)[0] : undefined;
+      if (!cell || cell.error) {
+        throw new Error(cell?.error ?? "no questions returned");
+      }
+      const j = cell.judgment as {
+        focal_character?: string;
+        focal_place?: string;
+        rationale?: string;
+        questions?: InterviewQuestion[];
+      };
+      const focal =
+        kind === "character" ? j.focal_character ?? "" : j.focal_place ?? "";
+      const workshop: Workshop = {
+        focal,
+        rationale: j.rationale ?? "",
+        questions: j.questions ?? [],
+        answers: new Array(j.questions?.length ?? 0).fill(""),
+      };
+      if (kind === "character") setCharacterWorkshop(workshop);
+      else setPlaceWorkshop(workshop);
+    } catch (e) {
+      setError(e instanceof Error ? e.message : String(e));
+    } finally {
+      if (kind === "character") setCharacterLoading(false);
+      else setPlaceLoading(false);
+    }
   }
 
   function composeText(): string {
@@ -228,6 +345,8 @@ export function GuidedWriteClient() {
     setDrill(EMPTY_DRILL);
     setProse("");
     setBankResponse(null);
+    setCharacterWorkshop(null);
+    setPlaceWorkshop(null);
     setStage("mode");
     setError(null);
     if (typeof window !== "undefined") {
@@ -306,6 +425,26 @@ export function GuidedWriteClient() {
           setProse={setProse}
           onContinue={runBank}
           onBack={() => setStage("drill")}
+          characterWorkshop={characterWorkshop}
+          placeWorkshop={placeWorkshop}
+          characterLoading={characterLoading}
+          placeLoading={placeLoading}
+          onRunCharacterWorkshop={() => runWorkshop("character")}
+          onRunPlaceWorkshop={() => runWorkshop("place")}
+          onUpdateCharacterAnswer={(idx, v) => {
+            if (!characterWorkshop) return;
+            const next = { ...characterWorkshop };
+            next.answers = [...next.answers];
+            next.answers[idx] = v;
+            setCharacterWorkshop(next);
+          }}
+          onUpdatePlaceAnswer={(idx, v) => {
+            if (!placeWorkshop) return;
+            const next = { ...placeWorkshop };
+            next.answers = [...next.answers];
+            next.answers[idx] = v;
+            setPlaceWorkshop(next);
+          }}
         />
       )}
 
@@ -509,6 +648,14 @@ function FreedumpStage({
   setProse,
   onContinue,
   onBack,
+  characterWorkshop,
+  placeWorkshop,
+  characterLoading,
+  placeLoading,
+  onRunCharacterWorkshop,
+  onRunPlaceWorkshop,
+  onUpdateCharacterAnswer,
+  onUpdatePlaceAnswer,
 }: {
   mode: Mode;
   anchor: string;
@@ -517,6 +664,14 @@ function FreedumpStage({
   setProse: (s: string) => void;
   onContinue: () => void;
   onBack: () => void;
+  characterWorkshop: Workshop | null;
+  placeWorkshop: Workshop | null;
+  characterLoading: boolean;
+  placeLoading: boolean;
+  onRunCharacterWorkshop: () => void;
+  onRunPlaceWorkshop: () => void;
+  onUpdateCharacterAnswer: (idx: number, value: string) => void;
+  onUpdatePlaceAnswer: (idx: number, value: string) => void;
 }) {
   return (
     <section>
@@ -540,6 +695,72 @@ function FreedumpStage({
       <p style={{ fontSize: 12, color: "#888", marginTop: 6 }}>
         当前 ~{countWords(prose)} 字。一般 300-800 字 AI 就能给出有用反馈。
       </p>
+
+      <div
+        style={{
+          marginTop: 18,
+          padding: 14,
+          background: "#fbf8f1",
+          border: "1px dashed #d4b66a",
+          borderRadius: 5,
+        }}
+      >
+        <div
+          style={{
+            fontSize: 11,
+            letterSpacing: 1.2,
+            textTransform: "uppercase",
+            color: "#8a6d20",
+            fontWeight: 600,
+            marginBottom: 8,
+          }}
+        >
+          可选 · 深入了解你的角色 / 地点
+        </div>
+        <p style={{ fontSize: 13, color: "#5a4810", lineHeight: 1.6, margin: "0 0 10px" }}>
+          AI 会问你 8 个具体问题——关于这个角色 / 地点的过去、细节、习惯。
+          答了能帮你 prose 写得更具体（不必每个都答，多少都行）。
+        </p>
+        <div style={{ display: "flex", gap: 10, flexWrap: "wrap" }}>
+          {!characterWorkshop ? (
+            <button
+              onClick={onRunCharacterWorkshop}
+              disabled={characterLoading}
+              style={characterLoading ? btnPrimaryDisabled : btnSecondary}
+            >
+              {characterLoading
+                ? "AI 在生成问题……"
+                : "📋 想想你的角色 →"}
+            </button>
+          ) : null}
+          {!placeWorkshop ? (
+            <button
+              onClick={onRunPlaceWorkshop}
+              disabled={placeLoading}
+              style={placeLoading ? btnPrimaryDisabled : btnSecondary}
+            >
+              {placeLoading ? "AI 在生成问题……" : "🗺️ 想想你的地点 →"}
+            </button>
+          ) : null}
+        </div>
+      </div>
+
+      {characterWorkshop && (
+        <WorkshopPanel
+          workshop={characterWorkshop}
+          kind="character"
+          onUpdateAnswer={onUpdateCharacterAnswer}
+        />
+      )}
+
+      {placeWorkshop && (
+        <WorkshopPanel
+          workshop={placeWorkshop}
+          kind="place"
+          onUpdateAnswer={onUpdatePlaceAnswer}
+        />
+      )}
+
       <div style={navRow}>
         <button onClick={onBack} style={btnGhost}>
           ← 返回
@@ -553,6 +774,103 @@ function FreedumpStage({
         </button>
       </div>
     </section>
+  );
+}
+
+function WorkshopPanel({
+  workshop,
+  kind,
+  onUpdateAnswer,
+}: {
+  workshop: Workshop;
+  kind: "character" | "place";
+  onUpdateAnswer: (idx: number, value: string) => void;
+}) {
+  const title = kind === "character" ? "📋 角色 workshop" : "🗺️ 地点 workshop";
+  const accent = kind === "character" ? "#8a6d20" : "#3a6d8a";
+  const bg = kind === "character" ? "#fef9e8" : "#eef4f7";
+  return (
+    <div
+      style={{
+        marginTop: 14,
+        padding: 14,
+        background: bg,
+        border: `1px solid ${accent}40`,
+        borderLeft: `3px solid ${accent}`,
+        borderRadius: 4,
+      }}
+    >
+      <div style={{ marginBottom: 12 }}>
+        <div style={{ fontSize: 12, color: accent, fontWeight: 600, letterSpacing: 0.3 }}>
+          {title}
+        </div>
+        <div
+          style={{
+            fontSize: 15,
+            color: "#1a1a1a",
+            fontFamily: 'Georgia, "Times New Roman", serif',
+            margin: "4px 0 6px",
+            fontWeight: 500,
+          }}
+        >
+          {workshop.focal}
+        </div>
+        {workshop.rationale && (
+          <div style={{ fontSize: 12, color: "#666", lineHeight: 1.55, fontStyle: "italic" }}>
+            {workshop.rationale}
+          </div>
+        )}
+      </div>
+      <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
+        {workshop.questions.map((q, i) => (
+          <div
+            key={i}
+            style={{
+              padding: "8px 10px",
+              background: "white",
+              border: "1px solid #e0dccb",
+              borderRadius: 3,
+            }}
+          >
+            <div style={{ display: "flex", gap: 8, alignItems: "baseline", marginBottom: 4 }}>
+              <span
+                style={{
+                  fontSize: 10,
+                  color: accent,
+                  fontWeight: 600,
+                  letterSpacing: 0.3,
+                  textTransform: "uppercase",
+                }}
+              >
+                {q.category}
+              </span>
+              <span style={{ fontSize: 13, color: "#1a1a1a", fontWeight: 500, lineHeight: 1.5 }}>
+                {q.question}
+              </span>
+            </div>
+            <div style={{ fontSize: 11, color: "#999", lineHeight: 1.5, marginBottom: 5 }}>
+              {q.why_matters}
+            </div>
+            <textarea
+              value={workshop.answers[i] ?? ""}
+              onChange={(e) => onUpdateAnswer(i, e.target.value)}
+              rows={2}
+              placeholder="（可以跳过）"
+              style={{
+                width: "100%",
+                padding: 8,
+                fontSize: 13,
+                border: "1px solid #d4cdb8",
+                borderRadius: 3,
+                fontFamily: "Georgia, serif",
+                lineHeight: 1.6,
+                resize: "vertical",
+              }}
+            />
+          </div>
+        ))}
+      </div>
+    </div>
   );
 }
 
@@ -1146,6 +1464,16 @@ const btnGhost: React.CSSProperties = {
   border: "1px solid #ccc",
   borderRadius: 3,
   fontSize: 13,
+  cursor: "pointer",
+};
+const btnSecondary: React.CSSProperties = {
+  padding: "9px 16px",
+  background: "#8a6d20",
+  color: "white",
+  border: "none",
+  borderRadius: 3,
+  fontSize: 13,
+  letterSpacing: 0.3,
   cursor: "pointer",
 };
 const navRow: React.CSSProperties = {
