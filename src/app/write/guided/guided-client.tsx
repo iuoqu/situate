@@ -1,23 +1,38 @@
 "use client";
 
+import { useRouter } from "next/navigation";
 import { useEffect, useMemo, useState } from "react";
 
-import { saveDevToken } from "../../dev/eval/actions";
+import { createGuidedDraft } from "./actions";
 
 /**
- * GuidedWriteClient — 5-stage conversational write surface.
+ * GuidedWriteClient — 6-stage conversational write surface.
  *
- * Reuses /api/dev/coach-preview for the bank call (staff-only via dev
- * token cookie). The translation layer (`translateBankToLay`) turns
- * bank's technical output into friend-asking observations and
- * questions — no K_present / causal_implicit jargon hits the user.
+ * Open to all logged-in users as 内测版 (internal beta). Uses the
+ * user-facing /api/coach/diagnose endpoint (Supabase session auth).
  *
- * State is held in component memory + localStorage backup, no DB
- * persistence yet.
+ * Stages:
+ *   1. mode select
+ *   2. anchor capture
+ *   3. concrete drill
+ *   4. free dump + optional workshops
+ *   5. AI mirror (lay-language observations)
+ *   6. finish — readiness assessment + save as draft → /review
+ *
+ * State: component memory + localStorage backup. Save action persists
+ * to DB via createGuidedDraft server action, then redirects to the
+ * existing template editor's /review screen for submission.
  */
 
 type Mode = "memoir" | "fiction" | "blend";
-type Stage = "mode" | "anchor" | "drill" | "freedump" | "running" | "mirror";
+type Stage =
+  | "mode"
+  | "anchor"
+  | "drill"
+  | "freedump"
+  | "running"
+  | "mirror"
+  | "finish";
 
 interface Drill {
   who: string;
@@ -88,7 +103,8 @@ interface PersistedState {
   placeWorkshop: Workshop | null;
 }
 
-export function GuidedWriteClient() {
+export function GuidedWriteClient({ userEmail }: { userEmail: string }) {
+  const router = useRouter();
   const [stage, setStage] = useState<Stage>("mode");
   const [mode, setMode] = useState<Mode | null>(null);
   const [anchor, setAnchor] = useState("");
@@ -97,14 +113,13 @@ export function GuidedWriteClient() {
   const [error, setError] = useState<string | null>(null);
   const [bankResponse, setBankResponse] = useState<PreviewResponse | null>(null);
   const [providers, setProviders] = useState<ProviderInfo[]>([]);
-  const [tokenSet, setTokenSet] = useState(true);
-  const [tokenInput, setTokenInput] = useState("");
   const [characterWorkshop, setCharacterWorkshop] = useState<Workshop | null>(
     null,
   );
   const [placeWorkshop, setPlaceWorkshop] = useState<Workshop | null>(null);
   const [characterLoading, setCharacterLoading] = useState(false);
   const [placeLoading, setPlaceLoading] = useState(false);
+  const [savingDraft, setSavingDraft] = useState(false);
 
   // Restore from localStorage on mount
   useEffect(() => {
@@ -145,30 +160,21 @@ export function GuidedWriteClient() {
     window.localStorage.setItem(LOCAL_KEY, JSON.stringify(s));
   }, [mode, anchor, drill, prose, characterWorkshop, placeWorkshop]);
 
-  // Fetch providers on mount (need token)
-  useEffect(() => {
-    fetch("/api/dev/providers", { credentials: "same-origin" })
-      .then((r) => {
-        if (r.status === 401) {
-          setTokenSet(false);
-          return null;
-        }
-        if (!r.ok) throw new Error(`providers HTTP ${r.status}`);
-        return r.json();
-      })
-      .then((data: { providers: ProviderInfo[] } | null) => {
-        if (data) setProviders(data.providers);
-      })
-      .catch((e) => setError(e instanceof Error ? e.message : String(e)));
-  }, [tokenSet]);
+  // Provider list is hardcoded for the guided flow — users don't pick
+  // models, the system uses the strongest 4 (and center_consensus uses
+  // its own cheap families internally). Keeps the UX simple and
+  // bounds cost predictably.
+  const TARGET_PROVIDERS = [
+    "anthropic:claude-sonnet-4-6",
+    "anthropic:claude-opus-4-7",
+    "deepseek:deepseek-chat",
+    "alibaba:qwen3-max",
+  ];
 
-  async function handleSaveToken(e: React.FormEvent) {
-    e.preventDefault();
-    if (!tokenInput.trim()) return;
-    await saveDevToken(tokenInput.trim());
-    setTokenSet(true);
-    setTokenInput("");
-  }
+  // Suppress unused warnings — providers state kept in case we surface
+  // model attribution later.
+  void providers;
+  void setProviders;
 
   function formatIntent(): string {
     const lines: string[] = [];
@@ -223,7 +229,7 @@ export function GuidedWriteClient() {
     else setPlaceLoading(true);
 
     try {
-      const resp = await fetch("/api/dev/coach-preview", {
+      const resp = await fetch("/api/coach/diagnose", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
@@ -288,27 +294,14 @@ export function GuidedWriteClient() {
     setStage("running");
 
     const intent = formatIntent();
-    const availableProviderIds = providers
-      .filter((p) => p.available)
-      .map((p) => p.id);
-    const targetProviders = availableProviderIds.filter((id) =>
-      [
-        "anthropic:claude-sonnet-4-6",
-        "anthropic:claude-opus-4-7",
-        "deepseek:deepseek-chat",
-        "alibaba:qwen3-max",
-      ].includes(id),
-    );
-    const fallbackProviders =
-      targetProviders.length > 0 ? targetProviders : availableProviderIds.slice(0, 4);
 
     try {
-      const resp = await fetch("/api/dev/coach-preview", {
+      const resp = await fetch("/api/coach/diagnose", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           text: composeText(),
-          providers: fallbackProviders,
+          providers: TARGET_PROVIDERS,
           diagnoser_ids: [
             "stakes_absent",
             "causal_spine",
@@ -354,33 +347,13 @@ export function GuidedWriteClient() {
     }
   }
 
-  if (!tokenSet) {
-    return (
-      <main style={mainStyle}>
-        <h1 style={h1Style}>Guided write (staff)</h1>
-        <p style={leadStyle}>
-          需要 dev token cookie（同 /dev/eval / /dev/coach-preview）。粘进来一次即可。
-        </p>
-        <form onSubmit={handleSaveToken} style={{ display: "flex", gap: 8 }}>
-          <input
-            type="password"
-            value={tokenInput}
-            onChange={(e) => setTokenInput(e.target.value)}
-            placeholder="DIAGNOSTIC_INTERNAL_TOKEN"
-            style={tokenInputStyle}
-          />
-          <button type="submit" style={btnPrimary}>
-            Save
-          </button>
-        </form>
-      </main>
-    );
-  }
+  // Suppress unused warning for userEmail; kept for future personalization
+  void userEmail;
 
   return (
     <main style={mainStyle}>
       <header style={{ marginBottom: 24 }}>
-        <p style={kickerStyle}>STAFF · GUIDED PROTOTYPE</p>
+        <p style={kickerStyle}>BETA · 内测版 · 引导写作</p>
         <h1 style={h1Style}>引导写作</h1>
         <p style={leadStyle}>
           5 步对话——你不需要知道 K、center、subtext 这些词。AI 在后台读你的文字，用日常话告诉你它读到什么。
@@ -464,6 +437,36 @@ export function GuidedWriteClient() {
           response={bankResponse}
           onAddMore={() => setStage("freedump")}
           onRestart={restart}
+          onFinish={() => setStage("finish")}
+        />
+      )}
+
+      {stage === "finish" && bankResponse && (
+        <FinishStage
+          response={bankResponse}
+          prose={prose}
+          anchor={anchor}
+          savingDraft={savingDraft}
+          onSaveAsDraft={async () => {
+            setSavingDraft(true);
+            setError(null);
+            try {
+              const result = await createGuidedDraft({
+                prose,
+                anchor,
+                title: undefined,
+              });
+              if (typeof window !== "undefined") {
+                window.localStorage.removeItem(LOCAL_KEY);
+              }
+              router.push(`/write/template/${result.draftId}/review`);
+            } catch (e) {
+              setError(e instanceof Error ? e.message : String(e));
+              setSavingDraft(false);
+            }
+          }}
+          onBackToMirror={() => setStage("mirror")}
+          onAddMore={() => setStage("freedump")}
         />
       )}
 
@@ -916,10 +919,12 @@ function MirrorStage({
   response,
   onAddMore,
   onRestart,
+  onFinish,
 }: {
   response: PreviewResponse;
   onAddMore: () => void;
   onRestart: () => void;
+  onFinish: () => void;
 }) {
   const observations = useMemo(() => translateBankToLay(response), [response]);
   const [showRaw, setShowRaw] = useState(false);
@@ -952,14 +957,17 @@ function MirrorStage({
           下一步？
         </h3>
         <div style={{ display: "flex", gap: 10, flexWrap: "wrap" }}>
-          <button onClick={onAddMore} style={btnPrimary}>
-            回去再加 / 改一些 →
+          <button onClick={onFinish} style={btnPrimary}>
+            收尾 / 准备投稿 →
+          </button>
+          <button onClick={onAddMore} style={btnGhost}>
+            回去再加 / 改一些
           </button>
           <button onClick={onRestart} style={btnGhost}>
             从头开始
           </button>
           <button onClick={() => setShowRaw(!showRaw)} style={btnGhost}>
-            {showRaw ? "隐藏" : "显示"} AI 原始输出（debug）
+            {showRaw ? "隐藏" : "显示"} AI 原始输出
           </button>
         </div>
       </div>
@@ -985,6 +993,375 @@ function MirrorStage({
           </pre>
         </details>
       )}
+    </section>
+  );
+}
+
+// ─── Finish stage: readiness assessment + save-as-draft ───────────────────
+
+interface ReadinessSignal {
+  passed: boolean;
+  label: string;
+  detail: string;
+}
+
+interface Readiness {
+  signals: ReadinessSignal[];
+  passedCount: number;
+  totalCount: number;
+  wordCount: number;
+  level: "ready" | "almost" | "sketch";
+  headline: string;
+}
+
+function assessReadiness(
+  response: PreviewResponse,
+  prose: string,
+): Readiness {
+  const signals: ReadinessSignal[] = [];
+
+  // 1. K presence
+  const stakes = response.results.stakes_absent;
+  if (stakes) {
+    const verdicts = Object.values(stakes.by_provider)
+      .map((c) => {
+        const j = (c?.judgment ?? {}) as Record<string, unknown>;
+        return typeof j.verdict === "string" ? j.verdict : "";
+      })
+      .filter(Boolean);
+    const presentCount = verdicts.filter((v) => v === "K_present").length;
+    const passed = presentCount >= Math.max(2, Math.floor(verdicts.length / 2));
+    signals.push({
+      passed,
+      label: "有人在承担这件事",
+      detail: passed
+        ? `${presentCount}/${verdicts.length} 个 AI 读者明确感觉到承担者在场`
+        : `读者读不出谁在承受——故事还像观察，不像 inside someone`,
+    });
+  }
+
+  // 2. Causal coherence
+  const causal = response.results.causal_spine;
+  if (causal) {
+    const verdicts = Object.values(causal.by_provider)
+      .map((c) => {
+        const j = (c?.judgment ?? {}) as Record<string, unknown>;
+        return typeof j.verdict === "string" ? j.verdict : "";
+      })
+      .filter(Boolean);
+    const goodCount = verdicts.filter(
+      (v) => v === "causal_present" || v === "causal_implicit",
+    ).length;
+    const passed = goodCount >= Math.max(2, Math.floor(verdicts.length / 2));
+    signals.push({
+      passed,
+      label: "事件之间有'因此'",
+      detail: passed
+        ? "事件不能任意重排——构成因果链"
+        : "读者觉得事件是'然后'，不是'因此'——可能还是流水账",
+    });
+  }
+
+  // 3. Structural center
+  const intent = response.results.inferred_intent;
+  const center = response.results.center_consensus;
+  let hasCenter = false;
+  let centerDetail = "";
+  if (center) {
+    const cell = Object.values(center.by_provider)[0];
+    if (cell && !cell.error) {
+      const j = (cell.judgment ?? {}) as {
+        joint_consensus?: { is_strong: boolean; quote: string };
+      };
+      if (j.joint_consensus?.is_strong) {
+        hasCenter = true;
+        centerDetail = `结构支点：「${j.joint_consensus.quote.trim().slice(0, 50)}…」`;
+      }
+    }
+  }
+  if (!hasCenter && intent) {
+    // Fallback — see if at least 2/N expensive models picked a similar center
+    const centers = Object.values(intent.by_provider)
+      .map((c) => {
+        const j = (c?.judgment ?? {}) as Record<string, unknown>;
+        return typeof j.center_of_gravity === "string"
+          ? j.center_of_gravity.trim()
+          : "";
+      })
+      .filter(Boolean);
+    const counts = new Map<string, number>();
+    for (const c of centers) {
+      const key = c.slice(0, 14).replace(/[^一-龥a-zA-Z0-9]/g, "");
+      counts.set(key, (counts.get(key) ?? 0) + 1);
+    }
+    const top = Array.from(counts.entries()).sort((a, b) => b[1] - a[1])[0];
+    if (top && top[1] >= 2) {
+      hasCenter = true;
+      const fullQuote = centers.find(
+        (c) => c.slice(0, 14).replace(/[^一-龥a-zA-Z0-9]/g, "") === top[0],
+      );
+      centerDetail = `多个读者读到的支点：「${fullQuote?.slice(0, 50)}…」`;
+    }
+  }
+  signals.push({
+    passed: hasCenter,
+    label: "有一个结构性支点",
+    detail: hasCenter
+      ? centerDetail
+      : "AI 读者还没找到这段的支点——可能是分布式情感地形（也合法），也可能是想强调的还没立出来",
+  });
+
+  // 4. Economy
+  const economy = response.results.economy;
+  if (economy) {
+    const verdicts = Object.values(economy.by_provider)
+      .map((c) => {
+        const j = (c?.judgment ?? {}) as Record<string, unknown>;
+        return typeof j.verdict === "string" ? j.verdict : "";
+      })
+      .filter(Boolean);
+    const goodCount = verdicts.filter(
+      (v) => v === "economy_present" || v === "economy_implicit",
+    ).length;
+    const passed = goodCount >= Math.max(2, Math.floor(verdicts.length / 2));
+    signals.push({
+      passed,
+      label: "节奏适宜，没有大量装饰冗余",
+      detail: passed
+        ? "每个细节基本都挣到位置"
+        : "AI 觉得有些细节没起作用——可以删，也可以加深让它们承重",
+    });
+  }
+
+  // 5. Word count
+  const wordCount = countWords(prose);
+  const inRange = wordCount >= 800 && wordCount <= 2500;
+  signals.push({
+    passed: inRange,
+    label: "字数适宜",
+    detail: `当前 ${wordCount} 字。投稿要求 800-2500 字。${
+      wordCount < 800
+        ? "还需要再写一些（至少 800）"
+        : wordCount > 2500
+          ? "建议压缩到 2500 以内"
+          : "在范围内 ✓"
+    }`,
+  });
+
+  const passedCount = signals.filter((s) => s.passed).length;
+  const totalCount = signals.length;
+  const level: Readiness["level"] =
+    passedCount === totalCount
+      ? "ready"
+      : passedCount >= totalCount - 1
+        ? "almost"
+        : "sketch";
+  const headline =
+    level === "ready"
+      ? "这段已经是一个完整的故事"
+      : level === "almost"
+        ? "接近成形，差一点"
+        : "还在 sketch 阶段，再深一点";
+
+  return { signals, passedCount, totalCount, wordCount, level, headline };
+}
+
+function FinishStage({
+  response,
+  prose,
+  anchor,
+  savingDraft,
+  onSaveAsDraft,
+  onBackToMirror,
+  onAddMore,
+}: {
+  response: PreviewResponse;
+  prose: string;
+  anchor: string;
+  savingDraft: boolean;
+  onSaveAsDraft: () => void;
+  onBackToMirror: () => void;
+  onAddMore: () => void;
+}) {
+  const readiness = useMemo(
+    () => assessReadiness(response, prose),
+    [response, prose],
+  );
+
+  const levelColor =
+    readiness.level === "ready"
+      ? "#5e8a4a"
+      : readiness.level === "almost"
+        ? "#a07a30"
+        : "#a04040";
+  const levelBg =
+    readiness.level === "ready"
+      ? "#f3f7ed"
+      : readiness.level === "almost"
+        ? "#faf5e9"
+        : "#faf0e9";
+  const levelEmoji =
+    readiness.level === "ready" ? "✓" : readiness.level === "almost" ? "◐" : "○";
+
+  return (
+    <section>
+      <h2 style={h2Style}>第五步：收尾</h2>
+
+      <div
+        style={{
+          background: levelBg,
+          borderLeft: `4px solid ${levelColor}`,
+          padding: "14px 16px",
+          borderRadius: 4,
+          marginBottom: 18,
+        }}
+      >
+        <div
+          style={{
+            fontSize: 13,
+            color: levelColor,
+            fontWeight: 700,
+            letterSpacing: 0.5,
+            textTransform: "uppercase",
+            marginBottom: 6,
+          }}
+        >
+          {levelEmoji} {readiness.passedCount}/{readiness.totalCount} 通过
+        </div>
+        <div
+          style={{
+            fontSize: 18,
+            color: "#1a1a1a",
+            fontFamily: 'Georgia, "Times New Roman", serif',
+            marginBottom: 12,
+          }}
+        >
+          {readiness.headline}
+        </div>
+        <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+          {readiness.signals.map((s, i) => (
+            <div key={i} style={{ display: "flex", gap: 10, alignItems: "baseline" }}>
+              <span
+                style={{
+                  color: s.passed ? "#5e8a4a" : "#a04040",
+                  fontSize: 16,
+                  fontWeight: 700,
+                  minWidth: 18,
+                }}
+              >
+                {s.passed ? "✓" : "✗"}
+              </span>
+              <div style={{ flex: 1 }}>
+                <div style={{ fontSize: 14, color: "#1a1a1a", fontWeight: 500 }}>
+                  {s.label}
+                </div>
+                <div
+                  style={{
+                    fontSize: 12,
+                    color: "#666",
+                    lineHeight: 1.55,
+                    marginTop: 2,
+                  }}
+                >
+                  {s.detail}
+                </div>
+              </div>
+            </div>
+          ))}
+        </div>
+      </div>
+
+      {anchor.trim() && (
+        <div
+          style={{
+            fontSize: 12,
+            color: "#888",
+            marginBottom: 6,
+            letterSpacing: 0.3,
+          }}
+        >
+          你最开始抓的：
+        </div>
+      )}
+      {anchor.trim() && (
+        <div
+          style={{
+            background: "#faf8f3",
+            border: "1px solid #e7e1d3",
+            padding: "8px 12px",
+            borderRadius: 3,
+            fontStyle: "italic",
+            color: "#555",
+            fontSize: 13,
+            marginBottom: 14,
+            fontFamily: 'Georgia, "Times New Roman", serif',
+          }}
+        >
+          「{anchor.trim()}」
+        </div>
+      )}
+
+      <details style={{ marginBottom: 18 }}>
+        <summary style={{ fontSize: 13, color: "#666", cursor: "pointer" }}>
+          预览整段文本（{countWords(prose)} 字）
+        </summary>
+        <div
+          style={{
+            marginTop: 8,
+            padding: 12,
+            background: "white",
+            border: "1px solid #e0dccb",
+            borderRadius: 3,
+            fontSize: 14,
+            lineHeight: 1.8,
+            fontFamily: 'Georgia, "Times New Roman", serif',
+            whiteSpace: "pre-wrap",
+            color: "#333",
+            maxHeight: 400,
+            overflowY: "auto",
+          }}
+        >
+          {prose}
+        </div>
+      </details>
+
+      <div
+        style={{
+          padding: 16,
+          background: "#faf8f3",
+          border: "1px solid #e7e1d3",
+          borderRadius: 5,
+        }}
+      >
+        <h3 style={{ margin: "0 0 10px", fontSize: 15, fontWeight: 500 }}>
+          {readiness.level === "ready"
+            ? "保存为草稿，进入投稿管道"
+            : readiness.level === "almost"
+              ? "保存为草稿（或回去再调一调）"
+              : "建议再深一点（也可以强制保存）"}
+        </h3>
+        <p style={{ fontSize: 13, color: "#666", margin: "0 0 14px", lineHeight: 1.6 }}>
+          保存后会跳到 review 页面——你可以在那里把文章拆成 5 节（Arrival /
+          Inhabitants 等），加位置，最后投稿。
+        </p>
+        <div style={{ display: "flex", gap: 10, flexWrap: "wrap" }}>
+          <button
+            onClick={onSaveAsDraft}
+            disabled={savingDraft || !prose.trim()}
+            style={
+              savingDraft || !prose.trim() ? btnPrimaryDisabled : btnPrimary
+            }
+          >
+            {savingDraft ? "保存中…" : "保存为草稿，进入投稿 →"}
+          </button>
+          <button onClick={onAddMore} style={btnGhost}>
+            回去再写一些
+          </button>
+          <button onClick={onBackToMirror} style={btnGhost}>
+            ← 回看 AI 反馈
+          </button>
+        </div>
+      </div>
     </section>
   );
 }
@@ -1320,6 +1697,7 @@ function Progress({ current }: { current: Stage }) {
     { id: "drill", label: "3. 具体" },
     { id: "freedump", label: "4. 写" },
     { id: "mirror", label: "5. AI 读" },
+    { id: "finish", label: "6. 收尾" },
   ];
   const currentIdx =
     current === "running"
