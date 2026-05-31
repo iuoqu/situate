@@ -158,6 +158,33 @@ methods), it does not serve entangled (compression destroys the purity of
 that drive), it does not serve unknown (the architecture would presuppose
 purpose). Routing logic at `/write` entry must respect this.
 
+### §18.4a Three-layer architecture (NEW with v2.0)
+
+The product is three layers, not two. They sit between project creation and
+scene-level writing:
+
+| Layer | Operation | Direction | Output |
+|---|---|---|---|
+| situate.map | Network → core (subtraction/completion) | Horizontal across the network | project_map |
+| situate.act | Core → timeline / segments / shape | Director's view of the whole | act_estimates |
+| situate.at | Timeline point → prose (depth) | Vertical into one moment | draft |
+
+situate.act is a NEW layer (not in v1). It maintains the writer's
+awareness of the work's whole-scale shape (time span, length, segment
+count, structural template) without forcing premature commitment. The
+writer declares **estimates** that can be revised at any time. AI flags
+structural consequences of the declared shape (e.g., "5万字 + 14 年时间
+跨度 = 大量时间被省略而不是叙述") without ranking which shape is
+better.
+
+Per-drive defaults:
+- Purposeful (art/commercial): situate.act runs fully
+- Entangled: defaults to "我不知道" for all estimates; deferred ask after 3 completed scenes
+- Unknown: skipped entirely
+
+Detailed spec lives in `missing-modules-v1.md` §A and (when authored)
+`situate-act-spec-v1.md`.
+
 ### §18.5 Feedback differs by drive
 
 The mirror stage at situate.at end-of-draft applies different framings:
