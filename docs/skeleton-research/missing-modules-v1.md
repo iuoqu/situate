@@ -103,7 +103,7 @@ Sized like situate.map spec. Blocked on methodology v2.0 canonization.
 - [ ] **A.7.5** Bird's-eye view component reused in `/write/guided` (~3h)
 - [ ] **A.7.6** Per-draft segment assignment UI (~2h)
 - [ ] **A.7.7** Deferred-ask trigger after 3 completed scenes (~2h)
-- [ ] **A.7.8** Estimate revision → completed-scene re-survey logic (~3h)
+- [ ] **A.7.8** Estimate revision behavior (AQ2 RESOLVED: preserve old segment assignments; new segment blank; user manually drags any drafts that should move) (~2h)
 - [ ] **A.7.9** Hand-test with 蒋某 project (~2h)
 
 Total: ~24h focused work. Blocked on §B.0 (methodology canon).
@@ -123,17 +123,28 @@ Blocked on user approval of `methodology-v2-draft.md`. Once canonized:
 
 ### B.0 Methodology canonization (~1h)
 - [ ] **B.0.1** Merge approved §3 extension, §15 invariant 6, §18 into `METHODOLOGY.md` (canonical)
-- [ ] **B.0.2** Answer DQ1-DQ4 (decision questions from v2-draft)
-- [ ] **B.0.3** Answer AQ1-AQ4 (situate.act decision questions)
-- [ ] **B.0.4** Decide naming: keep `situate.act` or alternative (e.g., `situate.arc`, `situate.shape`)
+- [ ] **B.0.2** Answer DQ2/DQ3/DQ4 (DQ1 resolved: 3 drafts)
+- [ ] **B.0.3** Answer AQ1/AQ3/AQ4 (AQ2 resolved: preserve old segment assignments)
+- [x] **B.0.4** RESOLVED: name is `situate.act` (will also serve as teaching/curriculum component)
+- [x] **B.0.5** RESOLVED: §3 extension adds "Aggregation is not verdict" clarification
 
-### B.1 L1.1 — vitality wholesale rewrite (~4h)
+### B.1 L1.1 — vitality readiness-signal refactor (~3h)
 The current `vitality` module ranks prose with "vital/borderline/flat" verdicts — methodologically forbidden (§3.4 + §13). After §18 canonized:
-- [ ] **B.1.1** Decide whether `vitality` survives at all
-  - Option A: delete entirely. Frame-aware structural reports already exist via lay-translator.
-  - Option B: replace with "readiness signals" report — 5 signals listed neutrally as facts, no aggregate score, no aesthetic label, framed by drive type.
-- [ ] **B.1.2** Implement chosen option
-- [ ] **B.1.3** Remove `VitalityBadge` component + integration points
+- [x] **B.1.1** RESOLVED: Option B — readiness signals report. Keep 5-signal aggregation UI; remove verdict label. Per "Aggregation is not verdict" clarification, the writer reads signal counts as copilot data, not as a quality grade.
+- [ ] **B.1.2** Rewrite `computeVitality()` to return signal report without verdict
+  - Drop `verdict: "vital" | "borderline" | "flat"` from `VitalityResult`
+  - Drop `summary` aesthetic phrasing ("有活力" / "活力不足" / "像小学生日记")
+  - Keep `signals[]` structure showing each per-signal status (firing / missing / unavailable)
+  - Replace `summary` with neutral fact-string: "5 项就绪信号中，3 项当前 firing" or similar
+- [ ] **B.1.3** Rewrite `VitalityBadge` UI:
+  - Drop verdict color palette (vital green / flat red)
+  - Single neutral panel header: "结构就绪信号" (5/5 firing) or similar
+  - Per-signal rows with √/✗/· glyphs and one-line reason
+  - No "好/坏" implication anywhere
+- [ ] **B.1.4** Drive-aware: under entangled drive, swap signal set
+  - Purposeful: K / 因果 / 人物 / 设定 / subtext (current 5)
+  - Entangled: K_carrier=image-or-narrator / recurrent_image_strength / haunting_image_presence (the_thing_arrived axes)
+- [ ] **B.1.5** Test wording with first internal user — does it read as "tool reports state" not "tool grades me"?
 
 ### B.2 L1.2 (post-canon) — frame-aware lay-translator (~5h)
 After L1.2 partial cleanup (already done), still need:

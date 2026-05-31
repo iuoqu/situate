@@ -49,6 +49,20 @@ goals — these are accepted, but the platform does not pretend to offer
 expertise it does not have. Transparency about positioning is not a
 violation of neutrality. Disparaging other positions is.
 
+**Aggregation is not verdict.** A summary UI that shows the writer how many
+structural signals are currently firing (e.g., "5 of 5 readiness signals
+showing positive state", "3 of 5 showing missing state") is permitted,
+because the writer carries final responsibility for the work and benefits
+from a glanceable copilot view. What is forbidden is the tool issuing a
+quality verdict (e.g., "your work is vital" / "your work is flat"). The
+distinction:
+- Showing the writer signal counts and per-signal status = aggregation
+- Assigning a quality label to the aggregate = verdict
+- Aggregation is permitted; verdict is forbidden under §3.4 + §13.
+
+The writer reads aggregated signals as part of their own judgment about
+whether to submit. The tool does not judge for them.
+
 ---
 
 ## §15 invariant 6: No canon names in user-facing surfaces
@@ -131,7 +145,9 @@ Drive type is set at three moments:
 2. **Per-draft override** — each new draft inherits but may override.
 3. **AI observation** — for "unknown" drive type, AI observes the first 3 drafts and, when the signal is strong enough, surfaces a one-time prompt: "Your drafts suggest you may be writing in [X] drive. Want to confirm?"
 
-The observation signal is computed from two sources:
+The observation triggers after the writer has completed **3 independent
+drafts** (settled decision; 3 chosen as the smallest count that gives a
+stable cross-draft signal). The signal is computed from two sources:
 
 - **k_carrier** (new field on `stakes_absent` diagnoser output): which kind of element carries K — `character` / `image_object` / `place_moment` / `narrator_self` / `diffuse`. Distribution across drafts indicates drive type:
   - 60%+ `character` → purposeful indicated
@@ -261,12 +277,21 @@ following existing sections need follow-up edits:
 
 ## Open questions still requiring decision
 
-Decisions needed before §18 can be canonized:
+Resolved decisions (locked, kept here for historical traceability):
 
-- **DQ1**: For "unknown" drive projects, are the 3 drafts used for k_carrier accumulation counted as 3 separate draft IDs in the same project, or 3 sections of one draft? (Initial position: 3 separate drafts; cross-draft signal is more reliable than within-draft signal.)
+- **DQ1 — RESOLVED**: 3 independent drafts (chosen over 2 drafts / 5 drafts / prose word-count threshold). Cross-draft signal is more stable than within-draft. 3 is the smallest count that gives reliable signal. Threshold can be tuned later.
+- **(Q-Vitality) — RESOLVED**: Option B — vitality keeps aggregation UI (5-signal readiness report) but removes the verdict label (vital / borderline / flat). Rationale: aggregation is a copilot view, not a verdict. The writer carries final responsibility; a glanceable summary serves the writer's judgment. See §3 extension "Aggregation is not verdict".
+- **(Q-Naming) — RESOLVED**: `situate.act`. Confirmed naming for the third architectural layer (between map and at). Will also serve as a teaching/curriculum component.
+- **(Q-SegmentRevision) — RESOLVED**: Option A — preserve old segment assignments when user revises segment count. New segments are blank; user manually drags any drafts that should move. Lowest user-surprise; doesn't force re-review.
+
+Open decisions still needed before §18 canonization:
+
 - **DQ2**: When a user-declared drive conflicts with strong AI-observed signal, does the observation surface once and never again, or surface again if signal strengthens further? (Initial position: once, never again, unless user re-declares and the new declaration also conflicts.)
 - **DQ3**: For hybrid projects (mixed drive drafts), is the "consider splitting" suggestion shown only on the project dashboard, or also inside the mirror stage of a deviant draft? (Initial position: dashboard only — mirror should stay focused on the prose.)
 - **DQ4**: For commercial-purposeful drafts where the writer's declared 初心 conflicts with their 媒介目标 (e.g., "I want to write about loss, and I want this to hit a fast-fiction market"), does AI surface the tension? (Initial position: yes, once, as a Socratic question — "Your stated reader is X but your stated media goal targets Y. They might align — but they might pull in different directions.")
+- **AQ1**: Does situate.act run for commercial-purposeful drafts, or only art-purposeful? (Initial position: yes, runs for both — but the consequence-surfacing copy is frame-aware.)
+- **AQ3**: Does situate.act spawn its own diagnoser `scene_belongs_to_segment` that validates each draft against its declared segment? (Initial position: no for v2.0. User-declared assignment; AI only surfaces distribution facts e.g. "段 3 is empty.")
+- **AQ4**: For "unknown" drive projects, the deferred drive-ask and the deferred act-estimate-ask both fire around scene 3. Do they bundle into a single observation, or surface separately? (Initial position: bundle — single moment, fewer interruptions.)
 
 ---
 
