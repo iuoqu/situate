@@ -3,6 +3,15 @@
 import { useRouter } from "next/navigation";
 import { useEffect, useMemo, useState } from "react";
 
+import { ObservationList } from "@/components/coach/observation-list";
+import {
+  type LayObservation,
+  type PreviewCellResult,
+  type PreviewDiagnoserResult,
+  type PreviewResponse as SharedPreviewResponse,
+  translateBankToLay,
+} from "@/lib/coach/lay-translator";
+
 import { createGuidedDraft } from "./actions";
 
 /**
@@ -52,27 +61,13 @@ const EMPTY_DRILL: Drill = {
 
 const LOCAL_KEY = "write-guided-state-v1";
 
-interface CellResult {
-  judgment: unknown;
-  classified: "positive" | "negative" | "ambiguous" | null;
-  error?: string;
-}
-
-interface DiagnoserResult {
-  id: string;
-  display_name: string;
-  status: string;
-  description: string;
-  by_provider: Record<string, CellResult>;
-}
-
-interface PreviewResponse {
-  results: Record<string, DiagnoserResult>;
-  providers_run: string[];
-  diagnoser_ids: string[];
-  skipped_diagnoser_ids?: string[];
-  intent_used: string | null;
-}
+// File-local type aliases for the shared types, so the rest of the
+// file keeps its existing names. Tiny indirection; not worth a wider
+// rename.
+type CellResult = PreviewCellResult;
+type DiagnoserResult = PreviewDiagnoserResult;
+type PreviewResponse = SharedPreviewResponse;
+type Observation = LayObservation;
 
 interface ProviderInfo {
   id: string;
@@ -931,17 +926,8 @@ function MirrorStage({
   return (
     <section>
       <h2 style={h2Style}>第四步：AI 读了，告诉你它读到什么</h2>
-      <div
-        style={{
-          display: "flex",
-          flexDirection: "column",
-          gap: 12,
-          marginTop: 10,
-        }}
-      >
-        {observations.map((o, i) => (
-          <ObservationBox key={i} observation={o} />
-        ))}
+      <div style={{ marginTop: 10 }}>
+        <ObservationList observations={observations} />
       </div>
 
       <div
@@ -1366,327 +1352,6 @@ function FinishStage({
   );
 }
 
-// ─── Lay translation ───────────────────────────────────────────────────────
-
-interface Observation {
-  /** ✓ working / ? missing / ! consider / @ projection note */
-  kind: "working" | "missing" | "consider" | "projection";
-  text: string;
-}
-
-function translateBankToLay(response: PreviewResponse): Observation[] {
-  const out: Observation[] = [];
-
-  const intent = response.results.inferred_intent;
-  const stakes = response.results.stakes_absent;
-  const causal = response.results.causal_spine;
-  const economy = response.results.economy;
-  const center = response.results.center_consensus;
-  const realization = response.results.intent_realization;
-
-  // 1. K 承担 — from stakes_absent
-  if (stakes) {
-    const verdicts = Object.values(stakes.by_provider)
-      .map((c) => {
-        const j = (c?.judgment ?? {}) as Record<string, unknown>;
-        return typeof j.verdict === "string" ? j.verdict : "";
-      })
-      .filter(Boolean);
-    const presentCount = verdicts.filter((v) => v === "K_present").length;
-    const implicitCount = verdicts.filter((v) => v === "K_implicit").length;
-    const absentCount = verdicts.filter((v) => v === "K_absent").length;
-    const total = verdicts.length;
-    if (total > 0) {
-      if (presentCount === total) {
-        out.push({
-          kind: "working",
-          text: `你说到的人，读者感觉到 ta 真的在场，事情真的压在 ta 身上。这一层 ${total}/${total} 个 AI 读者都看到了。`,
-        });
-      } else if (presentCount > implicitCount + absentCount) {
-        out.push({
-          kind: "working",
-          text: `读者多数看到 ta 在承担这件事，但不是所有人都完全感觉到（${presentCount}/${total}）。如果想更清楚，可以多写 ta 的内心动作或反应。`,
-        });
-      } else if (implicitCount >= total / 2) {
-        out.push({
-          kind: "consider",
-          text: `你说到的人在场，但读者感觉 ta 还没有真正"承受"这件事——好像只是个旁观者。是有意留白吗？还是想让 ta 更明显地在承担？`,
-        });
-      } else if (absentCount >= total / 2) {
-        out.push({
-          kind: "missing",
-          text: `读者读完，没感觉到任何人在承受这件事——像在看外面的事，不像在 inside someone。如果你想让读者跟着一个人感受，可以加 ta 的内心活动或具体反应。`,
-        });
-      }
-    }
-  }
-
-  // 2. Center of gravity — from center_consensus + inferred_intent
-  if (center) {
-    const cell = Object.values(center.by_provider)[0];
-    if (cell && !cell.error) {
-      const j = (cell.judgment ?? {}) as {
-        joint_consensus?: { is_strong: boolean; quote: string };
-      };
-      if (j.joint_consensus?.is_strong && j.joint_consensus.quote) {
-        out.push({
-          kind: "working",
-          text: `你这段最重的一句话，AI 读到的是：「${j.joint_consensus.quote.trim()}」——这是你这段的"支点"。`,
-        });
-      }
-    }
-  } else if (intent) {
-    const centers = Object.values(intent.by_provider)
-      .map((c) => {
-        const j = (c?.judgment ?? {}) as Record<string, unknown>;
-        return typeof j.center_of_gravity === "string"
-          ? j.center_of_gravity.trim()
-          : "";
-      })
-      .filter(Boolean);
-    if (centers.length > 0) {
-      const counts = new Map<string, number>();
-      for (const c of centers) {
-        const key = c.slice(0, 12).replace(/[^一-龥a-zA-Z0-9]/g, "");
-        counts.set(key, (counts.get(key) ?? 0) + 1);
-      }
-      const top = Array.from(counts.entries()).sort((a, b) => b[1] - a[1])[0];
-      if (top && top[1] >= 2) {
-        const fullQuote = centers.find((c) =>
-          c.slice(0, 12).replace(/[^一-龥a-zA-Z0-9]/g, "") === top[0],
-        );
-        if (fullQuote) {
-          out.push({
-            kind: "working",
-            text: `你这段最重的一句话，多数读者读到的是：「${fullQuote}」`,
-          });
-        }
-      } else {
-        out.push({
-          kind: "consider",
-          text: `AI 读者们对"这段最重的一句"看法不一——这可能意味着你这段没有单一支点（rich emotional terrain，可以是优点），也可能意味着想强调的还没立出来。看你写的是哪种。`,
-        });
-      }
-    }
-  }
-
-  // 3. Pattern break — from inferred_intent
-  if (intent) {
-    const breaks = Object.values(intent.by_provider)
-      .map((c) => {
-        const j = (c?.judgment ?? {}) as Record<string, unknown>;
-        return typeof j.pattern_break === "string" ? j.pattern_break.trim() : "";
-      })
-      .filter((b) => b && b !== "无明显断裂");
-    if (breaks.length > 0) {
-      out.push({
-        kind: "consider",
-        text: `AI 注意到你这一段里有一处跟周围不太一样的地方——${breaks[0].slice(0, 80)}。这是你想强调的吗？`,
-      });
-    }
-  }
-
-  // 4. Subtext pattern
-  if (intent) {
-    const subtexts = Object.values(intent.by_provider)
-      .map((c) => {
-        const j = (c?.judgment ?? {}) as Record<string, unknown>;
-        return typeof j.subtext_pattern === "string"
-          ? j.subtext_pattern.trim()
-          : "";
-      })
-      .filter(Boolean);
-    if (subtexts.length >= 2) {
-      out.push({
-        kind: "consider",
-        text: `AI 读到你在用一种 pattern：${subtexts[0].slice(0, 100)}。是有意的吗？`,
-      });
-    }
-  }
-
-  // 5. Causal
-  if (causal) {
-    const verdicts = Object.values(causal.by_provider)
-      .map((c) => {
-        const j = (c?.judgment ?? {}) as Record<string, unknown>;
-        return typeof j.verdict === "string" ? j.verdict : "";
-      })
-      .filter(Boolean);
-    const absentCount = verdicts.filter((v) => v === "causal_absent").length;
-    const total = verdicts.length;
-    if (total > 0 && absentCount >= total / 2) {
-      out.push({
-        kind: "missing",
-        text: `读者觉得你的事情之间没有"因此"——只是"然后再然后"。如果想让读者跟随你的故事推进，可以让某些动作明确导致后面的事。`,
-      });
-    }
-  }
-
-  // 6. Economy slack
-  if (economy) {
-    const slacks = Object.values(economy.by_provider)
-      .map((c) => {
-        const j = (c?.judgment ?? {}) as Record<string, unknown>;
-        return typeof j.slack === "string" ? j.slack.trim() : "";
-      })
-      .filter(Boolean);
-    if (slacks.length >= 2) {
-      out.push({
-        kind: "consider",
-        text: `AI 觉得有些细节没起到作用：${slacks[0].slice(0, 100)}。这些可以删，也可以加深让它们承重。`,
-      });
-    }
-  }
-
-  // 7. L3 projection
-  if (intent) {
-    const projections = Object.values(intent.by_provider)
-      .map((c) => {
-        const j = (c?.judgment ?? {}) as Record<string, unknown>;
-        return {
-          backstory:
-            typeof j.speculative_backstory === "string"
-              ? j.speculative_backstory.trim()
-              : "",
-          conf:
-            typeof j.projection_confidence === "number"
-              ? j.projection_confidence
-              : 0,
-        };
-      })
-      .filter((p) => p.backstory && p.conf > 0.5);
-    if (projections.length >= 2) {
-      out.push({
-        kind: "projection",
-        text: `AI 在文本之外补了一些 backstory：${projections[0].backstory.slice(0, 100)}。这是 AI 的猜测，不是你写的。如果你的故事和这个猜测一致——说明你的暗示成立。如果不一致——你的细节误导了暗示，可以调。`,
-      });
-    }
-  }
-
-  // 8. Intent realization
-  if (realization) {
-    const verdicts = Object.values(realization.by_provider)
-      .map((c) => {
-        const j = (c?.judgment ?? {}) as Record<string, unknown>;
-        return typeof j.verdict === "string" ? j.verdict : "";
-      })
-      .filter(Boolean);
-    const partialCount = verdicts.filter(
-      (v) => v === "intent_partial",
-    ).length;
-    const unimpCount = verdicts.filter(
-      (v) => v === "intent_unimplemented",
-    ).length;
-    if (partialCount + unimpCount >= verdicts.length / 2) {
-      const cell = Object.values(realization.by_provider).find((c) => {
-        const j = (c?.judgment ?? {}) as Record<string, unknown>;
-        return (
-          typeof j.unrealized === "string" && j.unrealized.trim().length > 0
-        );
-      });
-      if (cell) {
-        const j = (cell.judgment ?? {}) as Record<string, unknown>;
-        const unrealized =
-          typeof j.unrealized === "string" ? j.unrealized.trim() : "";
-        out.push({
-          kind: "missing",
-          text: `你前面填了你想做什么。AI 比较了一下，prose 里这部分还没出来：${unrealized.slice(0, 120)}`,
-        });
-      }
-    }
-  }
-
-  if (out.length === 0) {
-    out.push({
-      kind: "working",
-      text: "AI 没找到明显问题，也没找到特别突出的支点。你这段是稳定的中性写作——可以接着写，也可以等有具体方向再回来。",
-    });
-  }
-
-  return out;
-}
-
-function ObservationBox({ observation: o }: { observation: Observation }) {
-  const palette: Record<
-    Observation["kind"],
-    { bg: string; border: string; label: string; emoji: string }
-  > = {
-    working: {
-      bg: "#f3f7ed",
-      border: "#5e8a4a",
-      label: "在场",
-      emoji: "✓",
-    },
-    missing: {
-      bg: "#faf0e9",
-      border: "#a04040",
-      label: "缺失",
-      emoji: "✗",
-    },
-    consider: {
-      bg: "#faf5e9",
-      border: "#a07a30",
-      label: "考虑",
-      emoji: "○",
-    },
-    projection: {
-      bg: "#f0f3f8",
-      border: "#5b6f8a",
-      label: "AI 猜测",
-      emoji: "⚠",
-    },
-  };
-  const p = palette[o.kind];
-  return (
-    <div
-      style={{
-        background: p.bg,
-        borderLeft: `3px solid ${p.border}`,
-        padding: "10px 14px",
-        borderRadius: 3,
-        display: "flex",
-        gap: 10,
-        alignItems: "flex-start",
-      }}
-    >
-      <span
-        style={{
-          color: p.border,
-          fontWeight: 700,
-          fontSize: 16,
-          lineHeight: 1.4,
-          minWidth: 18,
-        }}
-      >
-        {p.emoji}
-      </span>
-      <div style={{ flex: 1 }}>
-        <div
-          style={{
-            fontSize: 10,
-            color: p.border,
-            fontWeight: 700,
-            letterSpacing: 0.4,
-            textTransform: "uppercase",
-            marginBottom: 3,
-          }}
-        >
-          {p.label}
-        </div>
-        <div
-          style={{
-            fontSize: 14,
-            color: "#1a1a1a",
-            lineHeight: 1.6,
-            fontFamily: 'Georgia, "Times New Roman", serif',
-          }}
-        >
-          {o.text}
-        </div>
-      </div>
-    </div>
-  );
-}
 
 // ─── Progress indicator ────────────────────────────────────────────────────
 

@@ -5,6 +5,8 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useEffect, useMemo, useRef, useState } from "react";
 
+import { InlineAIPanel } from "@/components/coach/inline-ai-panel";
+
 /**
  * Review & Submit — final pre-handoff page (Slice 4 multi-location
  * version).
@@ -302,6 +304,18 @@ export function ReviewAndSubmit({
           );
         })}
       </section>
+
+      <InlineAIPanel
+        text={sections
+          .map((s) => {
+            const c = (s.content ?? "").trim();
+            return c ? `[${s.label}]\n${c}` : "";
+          })
+          .filter(Boolean)
+          .join("\n\n")}
+        minWords={300}
+        hint="提交前看一眼。AI 不评分，只告诉你它从你的文字里读到什么。"
+      />
 
       {isStaff && (
         <StaffCoachButton sections={sections} title={title} />

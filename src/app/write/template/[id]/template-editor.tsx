@@ -4,6 +4,7 @@ import Link from "next/link";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
 import { StoryBibleSidebar } from "@/components/bible/StoryBibleSidebar";
+import { InlineAIPanel } from "@/components/coach/inline-ai-panel";
 import { Section1Hooks } from "@/components/template/Section1Hooks";
 import { SectionLocationPicker } from "@/components/template/SectionLocationPicker";
 import type { DraftSection, SupportedLanguage } from "@/db/schema";
@@ -523,6 +524,19 @@ export function TemplateEditor({
           we&rsquo;ll show the assembled draft, ask where it&rsquo;s
           set, and send it to the editorial pipeline.
         </p>
+        <InlineAIPanel
+          text={sections
+            .map((s, i) => {
+              const label = tradition.sections[i]?.label ?? s.section_id;
+              const c = (s.content ?? "").trim();
+              return c ? `[${label}]\n${c}` : "";
+            })
+            .filter(Boolean)
+            .join("\n\n")}
+          minWords={300}
+          hint="任何阶段都能用。AI 不替你写——只告诉你它从你的文字里读到了什么。"
+        />
+
         <Link
           href={`/write/template/${draftId}/review`}
           style={
