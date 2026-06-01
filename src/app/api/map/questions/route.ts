@@ -68,9 +68,23 @@ export async function POST(req: NextRequest) {
 
     try {
       const callResult = await generateAngles(parsed.material, parsed.provider);
+      const result = callResult.result;
+      // The model occasionally emits a shape that isn't our schema (questions
+      // as an object, or truncated→repaired JSON). Validate before returning
+      // so the client gets a clean error + the raw shape, not a 200 it crashes on.
+      if (!result || !Array.isArray(result.questions)) {
+        return NextResponse.json(
+          {
+            error: "angle generation returned a malformed shape",
+            detail: `questions is not an array. raw result: ${JSON.stringify(result)?.slice(0, 1500)}`,
+            meta: callResult.meta,
+          },
+          { status: 502 },
+        );
+      }
       return NextResponse.json({
-        questions: callResult.result.questions,
-        selection_note: callResult.result.selection_note,
+        questions: result.questions,
+        selection_note: result.selection_note,
         meta: callResult.meta,
       });
     } catch (err) {

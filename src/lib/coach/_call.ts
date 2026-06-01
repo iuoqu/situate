@@ -21,10 +21,11 @@ import { DEFAULT_PROVIDER_ID } from "@/lib/skeleton-diagnostic/providers/registr
  * lifted into the Provider interface proper.
  */
 
-// Bumped from 1500 → 3000 after inferred_intent gained the L1/L2/L3
-// schema (14 fields, some with long descriptions). 1500 was truncating
-// the output mid-JSON, which fails parsing and shows up as per-call errors.
-const MAX_TOKENS = 3000;
+// Bumped 1500 → 3000 when inferred_intent gained the L1/L2/L3 schema, then
+// 3000 → 4096 when situate.map questions gained 2–3 openers each (6 questions
+// × question + up to 3 openers + selection_note). Truncation mid-JSON fails
+// parsing / yields a malformed shape, so we keep generous headroom.
+const MAX_TOKENS = 4096;
 const TIMEOUT_MS = 60_000;
 
 export interface FocusedCallResult<T> {
