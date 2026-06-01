@@ -122,36 +122,33 @@ async function callAnthropic<T>(
   const ctrl = new AbortController();
   const timer = setTimeout(() => ctrl.abort(), TIMEOUT_MS);
   const startedAt = Date.now();
-  let response: Awaited<ReturnType<typeof anthropicClient>["messages"]["create"]>;
-  try {
-    response = await anthropicClient().messages.create(
-      {
-        model,
-        max_tokens: MAX_TOKENS,
-        ...(opts.temperature !== undefined ? { temperature: opts.temperature } : {}),
-        // Sonnet 4.6 defaults to effort:"high" (adaptive thinking on). For
-        // focused tool-use extraction calls we want fast, deterministic
-        // responses — low effort disables thinking and matches Sonnet 4.5
-        // latency. Callers that need reasoning can override via opts.effort.
-        output_config: { effort: opts.effort ?? "low" },
-        system: [
-          {
-            type: "text",
-            text: opts.systemPrompt,
-            cache_control: { type: "ephemeral" },
-          },
-        ],
-        tools: [tool],
-        tool_choice: { type: "tool", name: opts.toolName },
-        messages: [
-          { role: "user", content: composeUserMessage(opts.text, opts.intent) },
-        ],
-      },
-      { signal: ctrl.signal },
-    );
-  } finally {
-    clearTimeout(timer);
-  }
+  // Use .finally() to clear the timer so TypeScript can infer the response
+  // type from the call directly (avoids the broken let-declaration pattern).
+  const response = await anthropicClient().messages.create(
+    {
+      model,
+      max_tokens: MAX_TOKENS,
+      ...(opts.temperature !== undefined ? { temperature: opts.temperature } : {}),
+      // Sonnet 4.6 defaults to effort:"high" (adaptive thinking on). For
+      // focused tool-use extraction calls we want fast, deterministic
+      // responses — low effort disables thinking and matches Sonnet 4.5
+      // latency. Callers that need reasoning can override via opts.effort.
+      output_config: { effort: opts.effort ?? "low" },
+      system: [
+        {
+          type: "text",
+          text: opts.systemPrompt,
+          cache_control: { type: "ephemeral" },
+        },
+      ],
+      tools: [tool],
+      tool_choice: { type: "tool", name: opts.toolName },
+      messages: [
+        { role: "user", content: composeUserMessage(opts.text, opts.intent) },
+      ],
+    },
+    { signal: ctrl.signal },
+  ).finally(() => clearTimeout(timer));
 
   const toolUse = response.content.find(
     (b): b is Extract<typeof b, { type: "tool_use" }> => b.type === "tool_use",
