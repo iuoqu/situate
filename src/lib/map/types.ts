@@ -16,10 +16,10 @@ export interface AngleQuestion {
   /** Instantiated in the language of the material, using names/details
    *  from the material. Never suggests a center. Plain spoken register. */
   question: string;
-  /** A short lead-in that helps the writer start writing — a concrete
-   *  entry point or a half-sentence to continue. Never suggests an
-   *  answer; UI scaffolding only, not sent to synthesis. */
-  opener: string;
+  /** 2–3 lead-ins that help the writer start, deliberately pointing in
+   *  different directions so the writer isn't funneled toward one answer.
+   *  Never decides the answer; UI scaffolding only, not sent to synthesis. */
+  openers: string[];
 }
 
 export interface QuestionsResult {

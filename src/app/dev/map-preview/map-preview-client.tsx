@@ -458,11 +458,15 @@ function QuestionCard({
         fontFamily: 'Georgia, "Times New Roman", serif' }}>
         {question.question}
       </p>
-      {question.opener && (
-        <p style={{ margin: "0 0 10px 30px", fontSize: 13, lineHeight: 1.55,
-          color: "#8a7a55", fontStyle: "italic" }}>
-          💡 {question.opener}
-        </p>
+      {question.openers?.length > 0 && (
+        <div style={{ margin: "0 0 10px 30px" }}>
+          {question.openers.map((op, i) => (
+            <p key={i} style={{ margin: "0 0 4px 0", fontSize: 13, lineHeight: 1.55,
+              color: "#8a7a55", fontStyle: "italic" }}>
+              💡 {op}
+            </p>
+          ))}
+        </div>
       )}
       <textarea
         value={answer}
