@@ -1,17 +1,26 @@
-# Missing Modules — Comprehensive Inventory v1
+# Missing Modules — Comprehensive Inventory
 
 Status: captured end of May 2026, after PRs #31-#32 closed the path-B core loop. This is a living TODO covering all known module gaps across pre-writing, mid-writing, post-writing, methodology, production, and long-term writer development.
 
 Updated to include user-raised additions: 架空设定一致性 / 故事活力预测 / 人物-情节冗余压缩.
 
-**Update after METHODOLOGY v1.0**: items P1.1, P1.2, P1.3, P1.4, P1.5, P1.7, P1.8, P1.9, P1.10, P1.12 are **not atoms** — they are parts of the situate.map module. See `situate-map-spec-v1.md` for the consolidated spec and 7-phase implementation TODO. Cross-references retained below for traceability.
+**Update after METHODOLOGY v1.0**: items P1.1, P1.2, P1.3, P1.4, P1.5, P1.7, P1.8, P1.9, P1.10, P1.12 are **not atoms** — they are parts of the situate.map module. See `situate-map-spec-v1.md` for the consolidated spec and implementation TODO. Cross-references retained below for traceability.
 
-**Update after METHODOLOGY v2.0 (Drive and Goal, Aesthetic Neutrality)**: see top of this file's new sections:
-- §A — situate.act (new third architectural layer)
-- §B — Pending v2.0 audit + post-canonization work
+**Update after METHODOLOGY v2.0 (canonized at `/docs/METHODOLOGY.md`)**: see top sections:
+- §A — situate.act (third architectural layer, NOW BIFURCATED into one-act + multi-act sub-modules)
+- §B — Post-canonization v2.0 work (drive selection entry, schema, frame-aware lay-translator, drive detection infra, the_thing_arrived diagnoser, etc.)
+- §C — Intent Growth module (NEW from v2.0 §10)
+- §D — Retrospective Revision module (NEW from v2.0 §11)
+- §E — 7-category feedback expansion (NEW from v2.0 §6)
+- §F — One-act vs multi-act situate.at variants (NEW from v2.0 §6 mode-dependent feedback)
 
-These represent the next two major bodies of work, both blocked on
-methodology v2 canonization.
+§C through §F are major new module-level bodies of work that v2.0
+introduces. They were not in the v1 inventory because v1's methodology
+treated intent as static and writing as linear.
+
+Total v2.0 work estimate: ~200h across all phases, single dev.
+Calendar: 4-6 months part-time to complete v2.0 fully. Several
+sub-phases can ship incrementally.
 
 ---
 
@@ -47,12 +56,61 @@ maintenance**:
 - AI never says one shape is better than another
 - Estimate can be revised anytime; revision triggers re-survey of completed scenes
 
-### A.2 The four estimate questions
+### A.2 BIFURCATION: one-act vs multi-act sub-modules (METHODOLOGY v2.0 §5 + §12 invariant 9)
 
-1. **Time span**: 几天 / 几周 / 几个月 / 1-2 年 / 2-5 年 / 10+ 年 / 非线性
-2. **Target length**: 短篇 / 中篇 / 短长篇 / 标准长篇 / 长长篇
-3. **Segment count**: how many functionally-distinct "段" (NOT "幕" — avoid scaring non-dramaturgy writers). Free-text including "我不知道".
-4. **Structural template**: 三幕 / 倒叙 / U形 / 平铺 / 环形 / 多视角 / 单一意识延展 / 自由描述 / 我不知道
+**This is the largest architectural change introduced by METHODOLOGY
+v2.0.** situate.act is NOT a single 4-question wizard. It bifurcates at
+the very first question into two structurally distinct sub-modules:
+
+```
+situate.act entry
+  ↓
+"How many acts?"
+  ○ One act—everything happens in one space-time
+  ○ Two acts—two segments
+  ○ Three or more acts—multi-segment structure
+  ○ I don't know yet
+  ↓
+  ├── One act → one-act sub-module (separately designed flow)
+  ├── Two or three+ acts → multi-act sub-module
+  └── I don't know → defer; prompt again later
+```
+
+Per §12 Invariant 9: **mode-dependent UI components are real, not
+flags.** One-act situate.act and multi-act situate.act share roughly
+60% of components; the remaining 40% is structurally different.
+Implementation must reflect this — not just hide/show branches of one
+shared form.
+
+#### One-act sub-module asks:
+- Duration (single moment / day / season / longer)
+- Shape (gradient / reverse / dual-track / reflective / frozen)
+- Weight-bearing moment (the structural pivot)
+
+#### Multi-act sub-module asks:
+- Segment count
+- Segment time windows
+- Per-segment function
+- Structural template (three-act, U-shape, ⎻⎯⎯⎯ uneven, ring, parallel, spiral, etc.)
+
+#### What is FORBIDDEN here per Scale Neutrality (§9):
+- No default radio selection on "how many acts"
+- No "recommended" path
+- No language implying one-act is "easier" or multi-act is "more ambitious"
+- The one-act sub-module is NOT a stripped-down version of multi-act; it has its OWN downstream questions optimized for one-act craft
+- Canon references for one-act may appear per §9 carve-out (legitimacy demonstration), but never to validate the user's choice
+
+### A.2.legacy Original 4 estimate questions (DEPRECATED by §A.2 bifurcation)
+
+The original spec described 4 estimate questions as a single shared flow:
+1. Time span / 2. Target length / 3. Segment count / 4. Structural template.
+
+This unified flow is REPLACED by the bifurcated structure above. Time
+span and target length are still asked, but the downstream questions
+(segments, shape, weight-bearing) differ structurally between modes.
+
+These four questions are retained here for reference but should NOT be
+implemented as a unified wizard.
 
 ### A.3 Triggers
 
@@ -110,23 +168,26 @@ ALTER TABLE projects ADD COLUMN act_last_updated TIMESTAMPTZ;
 ALTER TABLE story_drafts ADD COLUMN act_segment_index INT NULL;
 ```
 
-### A.7 Implementation TODO
+### A.7 Implementation TODO (REVISED for v2.0 bifurcation)
 
-Sized like situate.map spec. Blocked on methodology v2.0 canonization.
-
-- [ ] **A.7.1** Spec authoring: `situate-act-spec-v1.md` modelled on `situate-map-spec-v1.md` (~4h, expanded scope)
-- [ ] **A.7.2** DB schema additions (~1h)
-- [ ] **A.7.3** Routes `/act/[projectId]/*` and API (~3h)
-- [ ] **A.7.4** 4-question wizard UI + AI consequence panel + Commitment Confirmation primitive (§A.10) (~6h, expanded)
-- [ ] **A.7.5** Bird's-eye view component reused in `/write/guided` + per-scene segment-function strip (§A.11) (~4h, expanded)
-- [ ] **A.7.6** Per-draft segment assignment UI (~2h)
+- [ ] **A.7.1** Spec authoring: `situate-act-spec-v1.md` covering both one-act and multi-act sub-modules (~6h, expanded for bifurcation)
+- [ ] **A.7.2** DB schema additions: includes `act_mode` enum (one-act / multi-act) (~1h)
+- [ ] **A.7.3** Routes `/act/[projectId]/*` with mode-aware downstream routing (~4h)
+- [ ] **A.7.4a** SHARED entry: "how many acts" question + AI consequence panel + Commitment Confirmation primitive (§A.10) (~3h)
+- [ ] **A.7.4b** ONE-ACT sub-module: duration / shape / weight-bearing wizard (~5h, NEW)
+- [ ] **A.7.4c** MULTI-ACT sub-module: segments / time windows / functions / template wizard (~5h)
+- [ ] **A.7.4d** Scale-neutral §9 canon references for one-act mode legitimacy (per §12 invariant 10 carve-out) (~2h, NEW)
+- [ ] **A.7.5a** Bird's-eye view: multi-act variant (segments timeline) (~3h)
+- [ ] **A.7.5b** Bird's-eye view: one-act variant (time-axis position + weight-bearing marker) — STRUCTURALLY DIFFERENT, not a hide-segments version (~3h, NEW per §12 invariant 9)
+- [ ] **A.7.6** Per-draft segment assignment UI (multi-act only) (~2h)
 - [ ] **A.7.7** Deferred-ask trigger after 3 completed scenes (~2h)
-- [ ] **A.7.8** Estimate revision behavior (AQ2 RESOLVED: preserve old segment assignments; new segment blank; user manually drags any drafts that should move) (~2h)
-- [ ] **A.7.9** Late-invocation acknowledgment + forced retroactive check flow (§A.3 / §A.9) (~4h, NEW)
-- [ ] **A.7.10** Honest-pacing UX strings: "40-60 会话 / 2-4 年" framing wherever total scenes/length is shown (§A.12) (~1h, NEW)
-- [ ] **A.7.11** Hand-test with 蒋某 project worked example (§A.13) (~3h)
+- [ ] **A.7.8** Estimate revision behavior (AQ2 RESOLVED: preserve old segment assignments) (~2h)
+- [ ] **A.7.9** Late-invocation acknowledgment + forced retroactive check flow (§A.3 / §A.9) (~4h)
+- [ ] **A.7.10** Honest-pacing UX strings (§A.12) (~1h)
+- [ ] **A.7.11** Hand-test with bifurcated worked examples: one-act case (Chekhov-form short story) + multi-act case (Jiang) (~4h)
+- [ ] **A.7.12** Scale Neutrality compliance audit of all UI text (~2h, NEW)
 
-Total: ~32h focused work (expanded from 24h after worked-example simulation revealed more required surface). Blocked on §B.0 (methodology canon).
+Total: ~50h focused work (expanded from 32h after v2.0 bifurcation requirement). Blocked on §B.0 (methodology canon — DONE).
 
 ### A.8 Open design questions
 
@@ -563,10 +624,151 @@ Current corpus is all literary. Add:
 
 ---
 
+## §C — Intent Growth module (NEW v2.0 §10)
+
+Intent is layered, append-only, with five relations to previous layers
+(叠加 / 修正 / 替代 / 压缩 / 揭示). The tool must support all five forms.
+
+### C.1 Data model
+- [ ] **C.1.1** `project.intent_layers` JSONB column on `projects` table
+- [ ] **C.1.2** Type definitions: `IntentLayer` interface with version / added_at / fields / status / relation_to_previous
+- [ ] **C.1.3** Migration: existing single-intent projects → array form with version=1, status="active"
+- [ ] **C.1.4** §12 Invariant 6: append-only enforcement at DB layer (no DELETE, only status update)
+
+### C.2 Triggers
+- [ ] **C.2.1** "Add intent layer" button persistent across situate.at / situate.act views (not prominent, always available)
+- [ ] **C.2.2** Observed-trigger: pattern detector across recent scenes that surfaces "you may be writing toward an unmentioned layer X"
+  - 3 offered interpretations: (a) incidental detail, (b) intent growth, (c) AI miss
+  - Per §3 Declaration-vs-behavior carve-out: requires strong cumulative evidence, surfaces once per detected pattern
+  - Cross-draft analyzer in `src/lib/coach/cross-draft/`
+
+### C.3 Five-relation declaration UI
+- [ ] **C.3.1** When user adds new layer, requires explicit relation choice (radio): 叠加 / 修正 / 替代 / 压缩 / 揭示
+- [ ] **C.3.2** Each relation triggers different downstream behavior (especially 揭示 triggers §11 intensity-4 review)
+- [ ] **C.3.3** Status mutations: 叠加→old stays active; 修正→old becomes superseded; 替代→old becomes superseded; 压缩→old becomes compressed; 揭示→old becomes disguised
+
+### C.4 Multi-layer feedback in situate.at mirror
+- [ ] **C.4.1** ◎ "Serves intent" expands from single-axis to per-layer-axis
+- [ ] **C.4.2** Cross-layer tension detection
+- [ ] **C.4.3** "Phantom intent" detection: layer N not served by recent K scenes → flag
+
+Total: ~20h. Dependencies: B.8 schema must precede.
+
+---
+
+## §D — Retrospective Revision module (NEW v2.0 §11)
+
+Four intensities of audit when new intent layers are added.
+
+### D.1 Intensity 1: Inventory (background task)
+- [ ] **D.1.1** Background job: re-read all completed scenes against new layer; rate ● ◑ ◐ ⚫ ✗
+- [ ] **D.1.2** `scenes.intent_service_audit` JSONB column: per-layer ratings + audit_notes + user_resolution
+- [ ] **D.1.3** Inventory view: list of scenes + ratings + cited prose evidence
+- [ ] **D.1.4** Notification system: user notified when inventory done
+- [ ] **D.1.5** Pending inventory persists as UI indicator until user acknowledges
+- [ ] **D.1.6** Auto-trigger on every intent layer addition
+
+### D.2 Intensity 2: Suggestions (for ◐ Weak scenes)
+- [ ] **D.2.1** Per-scene revision-direction generator
+- [ ] **D.2.2** Suggestions are DIRECTIONS, never prose — strict §3.1 + §3.3 compliance
+- [ ] **D.2.3** Examples: "Add touch at paragraph X showing Y" / "Let character Z say one more thing about W"
+
+### D.3 Intensity 3: Conflict resolution (for ✗ Conflict scenes)
+- [ ] **D.3.1** Three structural choices presented: Preserve / Rewrite / Reposition
+- [ ] **D.3.2** Each option shows its cost (preserve = layer absent here; rewrite = N days work; reposition = book length grows)
+- [ ] **D.3.3** AI does NOT recommend which choice — user picks
+
+### D.4 Intensity 4: Regeneration (for 揭示-type or fundamental reframes)
+- [ ] **D.4.1** Trigger conditions: layer relation = 揭示 OR span shift ≥5x OR protagonist count shift OR user explicit invocation
+- [ ] **D.4.2** Honest cost surface: "12-24 months additional work"
+- [ ] **D.4.3** Three paths: regenerate now / pause / reconsider whether layer is actually 揭示
+- [ ] **D.4.4** If proceed: returns to /map and /act under new intent
+
+Total: ~30h. Dependencies: §C must precede.
+
+---
+
+## §E — 7-category feedback expansion (NEW v2.0 §6)
+
+v1 had 4 mirror categories: ✓ ✗ ○ ⚠. v2.0 adds 3 more: ◎ ✦ ✨.
+
+### E.1 The three new categories
+- [ ] **E.1.1** ◎ Serves intent — per-active-intent-layer (depends on §C)
+- [ ] **E.1.2** ✦ Serves structure — segment fit (multi-act) or weight-bearing fit (one-act) (depends on §A bifurcation)
+- [ ] **E.1.3** ✨ Scene consistency — cross-scene narrator position / time-axis coverage / cross-segment continuity (depends on B.5 cross-draft infra)
+
+### E.2 Context gating
+- [ ] **E.2.1** Each of the 3 new categories appears only when its required context exists
+  - ◎ requires intent_layers
+  - ✦ requires act_estimates
+  - ✨ requires N≥2 completed scenes in same project
+- [ ] **E.2.2** lay-translator + observation-list components handle 7 kinds (currently handle 4)
+
+### E.3 Mode-dependent weighting
+- [ ] **E.3.1** Per METHODOLOGY §6 table: each category emphasizes different things in one-act vs multi-act
+- [ ] **E.3.2** Implementation: feedback rendering switches on `project.act_mode`
+
+Total: ~15h. Dependencies: §A bifurcation + §C intent layers + B.5 cross-draft.
+
+---
+
+## §F — One-act vs multi-act situate.at variants (NEW v2.0 §6)
+
+Per §12 Invariant 9: one-act and multi-act situate.at share ~60%
+components, differ structurally in the other ~40%. This is not a flag.
+
+### F.1 Mode detection
+- [ ] **F.1.1** situate.at route reads `project.act_mode` from project context
+- [ ] **F.1.2** Renders one of two top-level layouts based on mode
+
+### F.2 One-act variant (NEW component tree)
+- [ ] **F.2.1** Five-senses + temporal density + body-detail focus in Missing feedback
+- [ ] **F.2.2** Narrative-position decisions in Consider feedback
+- [ ] **F.2.3** Time-axis position display (where on the single time-stream is this scene?)
+- [ ] **F.2.4** Weight-bearing marker (does this scene bear the structural pivot?)
+
+### F.3 Multi-act variant (existing flow, extended)
+- [ ] **F.3.1** Segment function fit in Present feedback
+- [ ] **F.3.2** Required-elements in Missing feedback
+- [ ] **F.3.3** Segment positioning in ✦ Serves structure
+- [ ] **F.3.4** Cross-segment continuity in ✨ Scene consistency
+
+Total: ~20h. Dependencies: §A bifurcation + §E categories.
+
+---
+
+## v2.0 work order summary
+
+| Phase | Work | Hours | Blocked on |
+|---|---|---|---|
+| 0 | METHODOLOGY canonization | DONE | — |
+| 1 | B.8 schema (projects + drive_type + intent_layers + act_mode) | ~5h | None |
+| 2 | B.3 /write entry with drive selection | ~5h | Phase 1 |
+| 3 | C.1 intent_layers data model | ~5h | Phase 1 |
+| 4 | A.7.x situate.act (bifurcated) | ~50h | Phase 1 |
+| 5 | B.5 cross-draft infra (k_carrier + recurrent_image) | ~5h | Phase 1 |
+| 6 | C.2-C.4 intent growth flows | ~15h | Phase 3 |
+| 7 | D.1 retrospective inventory | ~12h | Phase 3 + 6 |
+| 8 | E.x feedback expansion | ~15h | Phase 4 + 6 + 5 |
+| 9 | F.x situate.at variants | ~20h | Phase 4 + 8 |
+| 10 | D.2-D.4 retrospective intensities | ~18h | Phase 7 + 8 |
+| 11 | B.6 the_thing_arrived diagnoser | ~6h | Phase 5 |
+| 12 | B.7 canonical-validation extension | ~4h | All above |
+
+Total: ~160h (focused). Calendar: 4-6 months part-time.
+
+Critical path: schema → drive entry → intent layers → act bifurcation
+(longest single phase) → feedback expansion → at variants.
+
+---
+
 ## See also
 
+- `/docs/METHODOLOGY.md` — CANONICAL methodology v2.0
 - `transformational-v0.md` — original framework spec
-- `methodology-v1.md` — current state
+- `methodology-v1.md` — diagnoser bank methodology (separate doc)
+- `methodology-v2-draft.md` — pre-canonization v2 draft (now superseded by /docs/METHODOLOGY.md)
+- `situate-map-spec-v1.md` — situate.map spec (v2.0-audited)
 - `next-steps-after-pdr.md` — older planning (mostly obsolete)
 - `canonical-validation-v1.md` — multi-language validation
 - `long-form-handling.md` — long-form architecture
