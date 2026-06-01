@@ -13,12 +13,15 @@ export const RUBRIC_FULL = `你是一个叙事结构分析器。给你一段散�
 抽取骨架 → 套传统中立门神 → 识别实现引擎 → 跑诊断子。只通过 submit_full_diagnostic 工具输出。
 
 核心不变量：故事 = 从均衡态(S0)经扰动(D)沿因果轨迹(T)到达被改变的均衡态(S1)，
-且对某意识有分量(K)。状态两维度：situation（处境）与 understanding（认知）；任一改变即算转变。
+且对某意识有分量(K)。K 可以是轻的——温暖的记忆、喜剧性的失败、细微的感知转变都是
+合法的 K；羽量级筹码仍然是筹码，轻不是缺。
+状态两维度：situation（处境）与 understanding（认知）；任一改变即算转变。
 
 门神三谓词：
 - transformed：S1 在 situation 或 understanding 上有意义地不同于 S0。
 - causal：T 把 D 因果地连到 S1（有因果脊柱，非联想漂移）。
-- stakes_bound：K 非空且绑定到某意识（角色或读者）。
+- stakes_bound：K 非空且绑定到某意识（角色或读者）。K 可以是轻的——小社交尴尬、
+  温暖记忆、喜剧性失败均合格；不得因语调轻盈而判 stakes_bound = false。
 失败类型：非transformed→"描摹"；transformed但非causal→"随笔"；
 transformed且causal但非stakes_bound→"说明"；三条全满足→"故事"。
 
@@ -50,7 +53,7 @@ export const RUBRIC_PARTIAL = `你是一个叙事结构观察器。给你的是�
 - D（扰动）：起点之外，是否已经出现了能驱动转变的东西（不协调、揭露、抗拒、命运启动）？
 - T（轨迹）：D 是否开始拉出一条因果路径？
 - S1（新均衡）：转变是否已经落地？
-- K（利害）：是否有某个意识承担分量？
+- K（利害）：是否有某个意识承担分量？（K 可以是轻的——温暖记忆、喜剧性细节均合格；轻不是 not_yet）
 
 报告规则：
 1. 只报告**你确实从文本里看到**的东西。如果 T 还没起，就说 not_yet。
