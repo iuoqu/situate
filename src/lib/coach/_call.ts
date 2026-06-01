@@ -128,11 +128,6 @@ async function callAnthropic<T>(
       model,
       max_tokens: MAX_TOKENS,
       ...(opts.temperature !== undefined ? { temperature: opts.temperature } : {}),
-      // Sonnet 4.6 defaults to effort:"high" (adaptive thinking on). For
-      // focused tool-use extraction calls we want fast, deterministic
-      // responses — low effort disables thinking and matches Sonnet 4.5
-      // latency. Callers that need reasoning can override via opts.effort.
-      output_config: { effort: opts.effort ?? "low" },
       system: [
         {
           type: "text",
