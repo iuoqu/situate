@@ -374,6 +374,21 @@ thing, and the user names it. A work whose true subject is a system
 still anchors to the coordinate where that system is most itself
 (§17, §18).
 
+**When the center is a place or a system, the person-shaped angles
+re-voice.** Angles 2, 4, 5, 7 are phrased for a person ("whose," "who").
+They are not dropped — they re-instantiate to fit the center the writer
+is circling:
+
+| # | Person center asks | Place / system center asks |
+|---|---|---|
+| 2 Resonance | Whose situation does the writer recognize as their own? | Which place or system does the writer feel caught inside? |
+| 4 Ungrabbable | Who resists hero/villain/victim? | Which place or system resists being flattened to backdrop or villain? |
+| 5 World-Bearing | Whose daily existence carries the world? | What ordinary workings of this place or system carry the period/world? |
+| 7 Difficulty as Depth | Whose interiority would be hardest? | What inner logic of this place or system would be hardest to render? |
+
+Angles 1, 3, 6, 8 are already center-neutral. Only the question voice
+changes to match the center type.
+
 ### The Synthesis Algorithm (归纳)
 
 After Socratic questions, AI performs synthesis:
@@ -385,9 +400,25 @@ After Socratic questions, AI performs synthesis:
    chosen. You just haven't said the name."
 5. Empty input field. User types the name.
 
-**Failure mode**: If user's answers don't converge: AI says honestly
-"Your answers don't yet point to one thing. Want to answer more, or
-just tell me directly?"—and returns control. AI does not guess.
+**Higher-abstraction convergence**: Sometimes the recurring element is
+not one person but a *frame* several people share — the same system, the
+same place, the same institution they are all caught inside. When the
+phrases scatter across multiple people yet name one shared system/place,
+AI surfaces it **as a question, never a verdict**: "These answers name
+different people, but they share ___. Is your center one of these
+people, or the ___ they're all inside?" The user decides. AI offers the
+shared frame as a candidate center (per the center typology above); it
+does not declare it. This is the branch that lets genuinely multi-center
+material — a multi-party case, an ensemble — converge on the system or
+place at its core instead of failing. It fires only when the shared
+frame genuinely recurs in the user's own phrases; AI never invents one
+to force convergence.
+
+**Failure mode**: If user's answers don't converge — and no shared frame
+genuinely recurs — AI says honestly "Your answers don't yet point to one
+thing. Want to answer more, or just tell me directly?"—and returns
+control. AI does not guess, and does not impose a frame to manufacture a
+center.
 
 ---
 
@@ -1029,6 +1060,13 @@ iterates with deliberation.
   decided per scene rather than declared once)
 - §7: the center of gravity may be a place, an institution, or a system,
   not only a person
+- §7: the four person-shaped angles (2/4/5/7) gain place/system
+  re-voicings, so the questions — not just the prose — admit a non-person
+  center
+- §7: the synthesis algorithm gains a higher-abstraction convergence
+  branch — when answers scatter across people who share one system or
+  place, the shared frame is offered as a candidate center (as a
+  question, per §3), rather than forced into failure
 - §5: a place-shape (one coordinate / several / a route) joins the
   time-shape; §9 scale neutrality extends to place neutrality
 - §6: ✧ Serves place joins situate.at feedback (eight categories, was
