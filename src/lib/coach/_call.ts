@@ -119,11 +119,10 @@ async function callAnthropic<T>(
     input_schema: opts.inputSchema as unknown as Anthropic.Tool.InputSchema,
   };
 
-  const ctrl = new AbortController();
-  const timer = setTimeout(() => ctrl.abort(), TIMEOUT_MS);
   const startedAt = Date.now();
-  // Use .finally() to clear the timer so TypeScript can infer the response
-  // type from the call directly (avoids the broken let-declaration pattern).
+  // Use SDK-native timeout rather than AbortController: the Anthropic SDK
+  // translates this into a per-request timeout that throws APIConnectionTimeoutError
+  // on expiry — reliably caught by the caller's try-catch.
   const response = await anthropicClient().messages.create(
     {
       model,
@@ -147,8 +146,8 @@ async function callAnthropic<T>(
         { role: "user", content: composeUserMessage(opts.text, opts.intent) },
       ],
     },
-    { signal: ctrl.signal },
-  ).finally(() => clearTimeout(timer));
+    { timeout: TIMEOUT_MS },
+  );
 
   const toolUse = response.content.find(
     (b): b is Extract<typeof b, { type: "tool_use" }> => b.type === "tool_use",
