@@ -77,6 +77,21 @@ const SAMPLES: Sample[] = [
   },
 ];
 
+// ─── Providers ────────────────────────────────────────────────────────────
+
+interface ProviderOption {
+  id: string;
+  label: string;
+}
+
+const PROVIDERS: ProviderOption[] = [
+  { id: "anthropic:claude-sonnet-4-6", label: "Claude Sonnet" },
+  { id: "deepseek:deepseek-chat", label: "DeepSeek Chat" },
+  { id: "deepseek:deepseek-v4-flash", label: "DeepSeek V4 Flash" },
+  { id: "alibaba:qwen-flash", label: "Qwen Flash" },
+  { id: "alibaba:qwen-plus", label: "Qwen Plus" },
+];
+
 // ─── Types ────────────────────────────────────────────────────────────────
 
 interface QuestionsResponse {
@@ -96,11 +111,13 @@ type Stage = "material" | "answering" | "synthesis";
 export function MapPreviewClient() {
   const [stage, setStage] = useState<Stage>("material");
   const [material, setMaterial] = useState(SAMPLES[0].material);
+  const [provider, setProvider] = useState(PROVIDERS[0].id);
   const [questionsResp, setQuestionsResp] = useState<QuestionsResponse | null>(null);
   const [answers, setAnswers] = useState<string[]>([]);
   const [synthesisResp, setSynthesisResp] = useState<SynthesisResponse | null>(null);
   const [running, setRunning] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [pingResult, setPingResult] = useState<string | null>(null);
 
   async function apiFetch(url: string, body: unknown): Promise<Response> {
     const resp = await fetch(url, {
@@ -131,7 +148,7 @@ export function MapPreviewClient() {
     setSynthesisResp(null);
     setRunning(true);
     try {
-      const resp = await apiFetch("/api/map/questions", { material });
+      const resp = await apiFetch("/api/map/questions", { material, provider });
       if (resp.status === 401) {
         setError("Not logged in. Open /auth/login, then come back.");
         return;
@@ -173,7 +190,7 @@ export function MapPreviewClient() {
     setSynthesisResp(null);
     setRunning(true);
     try {
-      const resp = await apiFetch("/api/map/synthesize", { material, answers: answered });
+      const resp = await apiFetch("/api/map/synthesize", { material, answers: answered, provider });
       if (resp.status === 401) {
         setError("Not logged in. Open /auth/login, then come back.");
         return;
@@ -197,6 +214,17 @@ export function MapPreviewClient() {
     }
   }
 
+  async function pingRoute() {
+    setPingResult("pinging…");
+    try {
+      const resp = await fetch("/api/map/ping", { credentials: "same-origin" });
+      const text = await resp.text();
+      setPingResult(`${resp.status} ${text.slice(0, 400)}`);
+    } catch (e) {
+      setPingResult(`连接失败: ${e instanceof Error ? e.message : String(e)}`);
+    }
+  }
+
   function reset() {
     setStage("material");
     setQuestionsResp(null);
@@ -211,6 +239,33 @@ export function MapPreviewClient() {
 
       {/* ── Step 1: Material ── */}
       <section>
+        {/* Provider selector */}
+        <div style={{ display: "flex", flexWrap: "wrap", gap: 6, marginBottom: 10, alignItems: "center" }}>
+          <span style={labelSmall}>provider</span>
+          {PROVIDERS.map((p) => (
+            <button
+              key={p.id}
+              onClick={() => setProvider(p.id)}
+              style={chip(provider === p.id)}
+            >
+              {p.label}
+            </button>
+          ))}
+          <button
+            onClick={pingRoute}
+            style={{ ...btnGhost, fontSize: 11, marginLeft: 8 }}
+            title="GET /api/map/ping — tests if the route loads at all (no AI call, no auth)"
+          >
+            🔍 ping
+          </button>
+          {pingResult && (
+            <span style={{ fontSize: 11, fontFamily: "monospace", color: pingResult.startsWith("2") ? "#3a7a3a" : "#a04040", maxWidth: 400, wordBreak: "break-all" }}>
+              {pingResult}
+            </span>
+          )}
+        </div>
+
+        {/* Sample selector */}
         <div style={{ display: "flex", flexWrap: "wrap", gap: 6, marginBottom: 8, alignItems: "center" }}>
           <span style={labelSmall}>samples</span>
           {SAMPLES.map((s) => (
