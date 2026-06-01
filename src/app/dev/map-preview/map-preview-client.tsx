@@ -214,12 +214,13 @@ export function MapPreviewClient() {
     }
   }
 
-  async function pingRoute() {
-    setPingResult("pinging…");
+  async function pingRoute(testAnthropic = false) {
+    const url = testAnthropic ? "/api/map/ping?test=anthropic" : "/api/map/ping";
+    setPingResult(testAnthropic ? "testing Anthropic API (10s timeout)…" : "pinging…");
     try {
-      const resp = await fetch("/api/map/ping", { credentials: "same-origin" });
+      const resp = await fetch(url, { credentials: "same-origin" });
       const text = await resp.text();
-      setPingResult(`${resp.status} ${text.slice(0, 400)}`);
+      setPingResult(`${resp.status} ${text.slice(0, 500)}`);
     } catch (e) {
       setPingResult(`连接失败: ${e instanceof Error ? e.message : String(e)}`);
     }
@@ -252,11 +253,18 @@ export function MapPreviewClient() {
             </button>
           ))}
           <button
-            onClick={pingRoute}
+            onClick={() => pingRoute(false)}
             style={{ ...btnGhost, fontSize: 11, marginLeft: 8 }}
-            title="GET /api/map/ping — tests if the route loads at all (no AI call, no auth)"
+            title="GET /api/map/ping — env check only, no AI call"
           >
             🔍 ping
+          </button>
+          <button
+            onClick={() => pingRoute(true)}
+            style={{ ...btnGhost, fontSize: 11 }}
+            title="GET /api/map/ping?test=anthropic — bare Anthropic API call, 10s timeout"
+          >
+            🔍 test anthropic
           </button>
           {pingResult && (
             <span style={{ fontSize: 11, fontFamily: "monospace", color: pingResult.startsWith("2") ? "#3a7a3a" : "#a04040", maxWidth: 400, wordBreak: "break-all" }}>
