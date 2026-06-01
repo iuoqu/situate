@@ -4,7 +4,6 @@ import { useRouter } from "next/navigation";
 import { useEffect, useMemo, useState } from "react";
 
 import { ObservationList } from "@/components/coach/observation-list";
-import { VitalityBadge } from "@/components/coach/vitality-badge";
 import {
   type LayObservation,
   type PreviewCellResult,
@@ -12,7 +11,6 @@ import {
   type PreviewResponse as SharedPreviewResponse,
   translateBankToLay,
 } from "@/lib/coach/lay-translator";
-import { computeVitality } from "@/lib/coach/meta/vitality";
 
 import { createGuidedDraft } from "./actions";
 
@@ -305,7 +303,6 @@ export function GuidedWriteClient({ userEmail }: { userEmail: string }) {
             "economy",
             "inferred_intent",
             "center_consensus",
-            "the_turn",
             ...(intent ? ["intent_realization"] : []),
           ],
           ...(intent ? { intent } : {}),
@@ -433,7 +430,6 @@ export function GuidedWriteClient({ userEmail }: { userEmail: string }) {
       {stage === "mirror" && bankResponse && (
         <MirrorStage
           response={bankResponse}
-          intent={formatIntent() || undefined}
           onAddMore={() => setStage("freedump")}
           onRestart={restart}
           onFinish={() => setStage("finish")}
@@ -504,7 +500,7 @@ function ModeStage({ onSelect }: { onSelect: (m: Mode) => void }) {
       id: "blend",
       title: "介于两者之间",
       subtitle:
-        "一部分是真的，一部分是改过 / 想象的——真实素材跟虚构成分混合的写作。",
+        "很多写作都是这样——一部分是真的，一部分是改过/想象的。大多数文学短篇属于这一类。",
     },
   ];
   return (
@@ -916,30 +912,21 @@ function ContextSummary({ anchor, drill }: { anchor: string; drill: Drill }) {
 
 function MirrorStage({
   response,
-  intent,
   onAddMore,
   onRestart,
   onFinish,
 }: {
   response: PreviewResponse;
-  intent?: string;
   onAddMore: () => void;
   onRestart: () => void;
   onFinish: () => void;
 }) {
   const observations = useMemo(() => translateBankToLay(response), [response]);
-  const vitality = useMemo(
-    () => computeVitality(response, intent),
-    [response, intent],
-  );
   const [showRaw, setShowRaw] = useState(false);
   return (
     <section>
       <h2 style={h2Style}>第四步：AI 读了，告诉你它读到什么</h2>
       <div style={{ marginTop: 10 }}>
-        <VitalityBadge result={vitality} />
-      </div>
-      <div style={{ marginTop: 14 }}>
         <ObservationList observations={observations} />
       </div>
 
@@ -1128,7 +1115,7 @@ function assessReadiness(
       label: "节奏适宜，没有大量装饰冗余",
       detail: passed
         ? "每个细节基本都挣到位置"
-        : "AI 标出有些细节未承担明确作用——是有意的留白还是可压缩的部分？",
+        : "AI 觉得有些细节没起作用——可以删，也可以加深让它们承重",
     });
   }
 

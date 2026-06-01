@@ -6,10 +6,8 @@ import {
   type PreviewResponse,
   translateBankToLay,
 } from "@/lib/coach/lay-translator";
-import { computeVitality } from "@/lib/coach/meta/vitality";
 
 import { ObservationList } from "./observation-list";
-import { VitalityBadge } from "./vitality-badge";
 
 /**
  * InlineAIPanel — drop-in coach feedback widget.
@@ -38,7 +36,6 @@ const DEFAULT_DIAGNOSER_IDS = [
   "inferred_intent",
   "center_consensus",
   "place_arc",
-  "the_turn",
 ];
 
 export function InlineAIPanel({
@@ -98,9 +95,6 @@ export function InlineAIPanel({
   }
 
   const observations = response ? translateBankToLay(response) : null;
-  const vitality = response
-    ? computeVitality(response, intent?.trim() || undefined)
-    : null;
 
   return (
     <section
@@ -157,12 +151,6 @@ export function InlineAIPanel({
           }}
         >
           {error}
-        </div>
-      )}
-
-      {vitality && (
-        <div style={{ marginTop: 14 }}>
-          <VitalityBadge result={vitality} />
         </div>
       )}
 
