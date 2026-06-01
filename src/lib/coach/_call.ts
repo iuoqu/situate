@@ -309,6 +309,35 @@ function providerIdToOpenAICompatConfig(id: string): OpenAICompatConfig {
       defaultExtraBody: { thinking: { type: "disabled" } },
     };
   }
+  if (id === "alibaba:qwen3.7-max") {
+    return {
+      baseURL: "https://dashscope.aliyuncs.com/compatible-mode/v1",
+      // Newest flagship (snapshot qwen3.7-max-2026-05-20). The family
+      // alias tracks latest; swap to the dated snapshot if the alias 404s.
+      model: "qwen3.7-max",
+      apiKeyEnv: "DASHSCOPE_API_KEY",
+      // 3.7-Max is agentic/tool-calling focused (a plus for our forced
+      // submit_questions call) and hybrid-thinking. Disable thinking so
+      // forced tool_choice is accepted, matching the other qwen entries.
+      defaultExtraBody: { enable_thinking: false },
+    };
+  }
+  if (id === "alibaba:qwen3.6-plus") {
+    return {
+      baseURL: "https://dashscope.aliyuncs.com/compatible-mode/v1",
+      model: "qwen3.6-plus",
+      apiKeyEnv: "DASHSCOPE_API_KEY",
+      defaultExtraBody: { enable_thinking: false },
+    };
+  }
+  if (id === "alibaba:qwen3.6-flash") {
+    return {
+      baseURL: "https://dashscope.aliyuncs.com/compatible-mode/v1",
+      model: "qwen3.6-flash",
+      apiKeyEnv: "DASHSCOPE_API_KEY",
+      defaultExtraBody: { enable_thinking: false },
+    };
+  }
   if (id === "alibaba:qwen-flash") {
     return {
       baseURL: "https://dashscope.aliyuncs.com/compatible-mode/v1",
