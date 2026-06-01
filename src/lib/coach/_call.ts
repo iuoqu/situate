@@ -113,24 +113,34 @@ async function callAnthropic<T>(
     input_schema: opts.inputSchema as unknown as Anthropic.Tool.InputSchema,
   };
 
+  const ctrl = new AbortController();
+  const timer = setTimeout(() => ctrl.abort(), TIMEOUT_MS);
   const startedAt = Date.now();
-  const response = await anthropicClient().messages.create({
-    model,
-    max_tokens: MAX_TOKENS,
-    ...(opts.temperature !== undefined ? { temperature: opts.temperature } : {}),
-    system: [
+  let response: Awaited<ReturnType<typeof anthropicClient>["messages"]["create"]>;
+  try {
+    response = await anthropicClient().messages.create(
       {
-        type: "text",
-        text: opts.systemPrompt,
-        cache_control: { type: "ephemeral" },
+        model,
+        max_tokens: MAX_TOKENS,
+        ...(opts.temperature !== undefined ? { temperature: opts.temperature } : {}),
+        system: [
+          {
+            type: "text",
+            text: opts.systemPrompt,
+            cache_control: { type: "ephemeral" },
+          },
+        ],
+        tools: [tool],
+        tool_choice: { type: "tool", name: opts.toolName },
+        messages: [
+          { role: "user", content: composeUserMessage(opts.text, opts.intent) },
+        ],
       },
-    ],
-    tools: [tool],
-    tool_choice: { type: "tool", name: opts.toolName },
-    messages: [
-      { role: "user", content: composeUserMessage(opts.text, opts.intent) },
-    ],
-  });
+      { signal: ctrl.signal },
+    );
+  } finally {
+    clearTimeout(timer);
+  }
 
   const toolUse = response.content.find(
     (b): b is Extract<typeof b, { type: "tool_use" }> => b.type === "tool_use",
