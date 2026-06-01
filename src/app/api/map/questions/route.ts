@@ -46,36 +46,44 @@ function parseBody(raw: unknown): Body | string {
 }
 
 export async function POST(req: NextRequest) {
-  const supabase = await getServerSupabase();
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
-  if (!user) {
-    return NextResponse.json({ error: "unauthorized" }, { status: 401 });
-  }
-
-  let raw: unknown;
   try {
-    raw = await req.json();
-  } catch {
-    return NextResponse.json({ error: "invalid JSON" }, { status: 400 });
-  }
-  const parsed = parseBody(raw);
-  if (typeof parsed === "string") {
-    return NextResponse.json({ error: parsed }, { status: 400 });
-  }
+    const supabase = await getServerSupabase();
+    const {
+      data: { user },
+    } = await supabase.auth.getUser();
+    if (!user) {
+      return NextResponse.json({ error: "unauthorized" }, { status: 401 });
+    }
 
-  try {
-    const callResult = await generateAngles(parsed.material, parsed.provider);
-    return NextResponse.json({
-      questions: callResult.result.questions,
-      selection_note: callResult.result.selection_note,
-      meta: callResult.meta,
-    });
+    let raw: unknown;
+    try {
+      raw = await req.json();
+    } catch {
+      return NextResponse.json({ error: "invalid JSON" }, { status: 400 });
+    }
+    const parsed = parseBody(raw);
+    if (typeof parsed === "string") {
+      return NextResponse.json({ error: parsed }, { status: 400 });
+    }
+
+    try {
+      const callResult = await generateAngles(parsed.material, parsed.provider);
+      return NextResponse.json({
+        questions: callResult.result.questions,
+        selection_note: callResult.result.selection_note,
+        meta: callResult.meta,
+      });
+    } catch (err) {
+      const message = err instanceof Error ? err.message : String(err);
+      return NextResponse.json(
+        { error: "angle generation failed", detail: message },
+        { status: 500 },
+      );
+    }
   } catch (err) {
     const message = err instanceof Error ? err.message : String(err);
     return NextResponse.json(
-      { error: "angle generation failed", detail: message },
+      { error: "server error", detail: message },
       { status: 500 },
     );
   }
