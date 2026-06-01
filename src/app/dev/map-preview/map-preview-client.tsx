@@ -134,12 +134,13 @@ export function MapPreviewClient() {
   async function extractError(resp: Response): Promise<string> {
     const text = await resp.text();
     try {
-      const j = JSON.parse(text) as Record<string, unknown>;
-      const detail = typeof j.detail === "string" ? j.detail : null;
-      const base = typeof j.error === "string" ? j.error : "server error";
-      return detail ? `HTTP ${resp.status} ${base}: ${detail}` : `HTTP ${resp.status} ${base}`;
+      // Pretty-print the entire JSON body so nothing is hidden — the
+      // server's `detail` carries the raw upstream error (e.g. the exact
+      // DashScope/Anthropic HTTP message + provider id + model).
+      const j = JSON.parse(text) as unknown;
+      return `HTTP ${resp.status}\n${JSON.stringify(j, null, 2)}`;
     } catch {
-      return `HTTP ${resp.status}: ${text.slice(0, 400)}`;
+      return `HTTP ${resp.status}\n${text.slice(0, 4000)}`;
     }
   }
 
@@ -164,11 +165,15 @@ export function MapPreviewClient() {
       setAnswers(data.questions.map(() => ""));
       setStage("answering");
     } catch (e) {
-      const msg = e instanceof Error ? e.message : String(e);
+      const msg = e instanceof Error ? `${e.name}: ${e.message}` : String(e);
+      const isNetwork =
+        msg.includes("fetch") || msg.includes("network") || msg.includes("Failed");
+      // Always surface the raw error. The hint is appended (not substituted)
+      // so nothing is hidden — a true connection-closed leaves only this.
       setError(
-        msg.includes("fetch") || msg.includes("network") || msg.includes("Failed")
-          ? `连接失败（ERR_CONNECTION_CLOSED）— 服务端无响应。\n可能原因：函数崩溃、ANTHROPIC_API_KEY 未设置、部署未完成。\n\nraw: ${msg}`
-          : msg,
+        isNetwork
+          ? `raw: ${msg}\n\n（连接失败：服务端没返回任何响应就断了。常见原因：函数崩溃/超时、provider 路由回退、部署未完成。)`
+          : `raw: ${msg}`,
       );
     } finally {
       setRunning(false);
@@ -205,11 +210,15 @@ export function MapPreviewClient() {
       setSynthesisResp(data);
       setStage("synthesis");
     } catch (e) {
-      const msg = e instanceof Error ? e.message : String(e);
+      const msg = e instanceof Error ? `${e.name}: ${e.message}` : String(e);
+      const isNetwork =
+        msg.includes("fetch") || msg.includes("network") || msg.includes("Failed");
+      // Always surface the raw error. The hint is appended (not substituted)
+      // so nothing is hidden — a true connection-closed leaves only this.
       setError(
-        msg.includes("fetch") || msg.includes("network") || msg.includes("Failed")
-          ? `连接失败（ERR_CONNECTION_CLOSED）— 服务端无响应。\n可能原因：函数崩溃、ANTHROPIC_API_KEY 未设置、部署未完成。\n\nraw: ${msg}`
-          : msg,
+        isNetwork
+          ? `raw: ${msg}\n\n（连接失败：服务端没返回任何响应就断了。常见原因：函数崩溃/超时、provider 路由回退、部署未完成。)`
+          : `raw: ${msg}`,
       );
     } finally {
       setRunning(false);
