@@ -3,77 +3,52 @@
 import { useState } from "react";
 import type {
   VitalityResult,
-  VitalitySignal,
+  ReadinessSignal,
 } from "@/lib/coach/meta/vitality";
 
 /**
- * Traffic-light vitality badge. Renders the meta-aggregation from
- * `computeVitality`. No LLM call here — pure render of pre-computed
- * signals.
+ * Readiness signals badge. Renders the meta-aggregation from
+ * `computeVitality`. Per METHODOLOGY v2.0:
  *
- * Used in:
- *   - guided/mirror stage (top of the observations panel)
- *   - inline-ai-panel (optional, after observations)
- *   - review page (optional)
+ *   §3 Aggregation ≠ verdict: this is aggregation. NO verdict label,
+ *     NO traffic-light palette, NO good/bad aesthetic.
+ *   §3.4 + §13: no aesthetic ranking, no praise.
+ *   §14: aggregation as copilot view is permitted; the writer reads
+ *     the signal counts as part of their own judgment.
+ *
+ * Single neutral panel; per-signal rows with √/✗/· glyphs (informational,
+ * not aesthetic). No verdict, no overall color, no summary label like
+ * "vital" or "flat".
  */
 export function VitalityBadge({ result }: { result: VitalityResult }) {
   const [open, setOpen] = useState(false);
 
-  const palette = {
-    vital: { bg: "#f3f7ed", border: "#5e8a4a", glyph: "✓", label: "有活力" },
-    borderline: {
-      bg: "#faf5e9",
-      border: "#a07a30",
-      glyph: "◐",
-      label: "边缘",
-    },
-    flat: { bg: "#faf0e9", border: "#a04040", glyph: "✗", label: "活力不足" },
-  } as const;
-  const p = palette[result.verdict];
-
   return (
     <div
       style={{
-        background: p.bg,
-        borderLeft: `3px solid ${p.border}`,
-        padding: "12px 14px",
+        background: "#fbfaf6",
+        border: "1px solid #e0d8c4",
         borderRadius: 3,
+        padding: "12px 14px",
       }}
     >
-      <div
-        style={{
-          display: "flex",
-          gap: 10,
-          alignItems: "flex-start",
-        }}
-      >
-        <span
-          style={{
-            color: p.border,
-            fontWeight: 700,
-            fontSize: 18,
-            lineHeight: 1.4,
-            minWidth: 18,
-          }}
-        >
-          {p.glyph}
-        </span>
+      <div style={{ display: "flex", gap: 10, alignItems: "flex-start" }}>
         <div style={{ flex: 1 }}>
           <div
             style={{
               fontSize: 10,
-              color: p.border,
+              color: "#7a6940",
               fontWeight: 700,
               letterSpacing: 0.4,
               textTransform: "uppercase",
               marginBottom: 3,
             }}
           >
-            故事活力预测 · {p.label}
+            结构信号报告
           </div>
           <div
             style={{
-              fontSize: 14,
+              fontSize: 13,
               color: "#1a1a1a",
               lineHeight: 1.6,
               fontFamily: 'Georgia, "Times New Roman", serif',
@@ -87,15 +62,15 @@ export function VitalityBadge({ result }: { result: VitalityResult }) {
             style={{
               marginTop: 8,
               fontSize: 12,
-              color: p.border,
+              color: "#7a6940",
               background: "transparent",
-              border: `1px solid ${p.border}`,
+              border: "1px solid #c2b594",
               borderRadius: 2,
               padding: "3px 8px",
               cursor: "pointer",
             }}
           >
-            {open ? "收起 5 项指标" : "看 5 项指标明细"}
+            {open ? "收起信号明细" : `查看 ${result.signals.length} 项信号明细`}
           </button>
           {open && (
             <div style={{ marginTop: 10, display: "grid", gap: 6 }}>
@@ -110,14 +85,15 @@ export function VitalityBadge({ result }: { result: VitalityResult }) {
   );
 }
 
-function SignalRow({ signal: s }: { signal: VitalitySignal }) {
-  const glyph =
-    s.state === true ? "✓" : s.state === false ? "✗" : "·";
-  const color =
+function SignalRow({ signal: s }: { signal: ReadinessSignal }) {
+  // Glyphs are informational status markers, not value judgments.
+  // ✓ = signal is firing, ✗ = signal is not firing, · = not evaluated
+  const glyph = s.state === true ? "✓" : s.state === false ? "✗" : "·";
+  const glyphColor =
     s.state === true
       ? "#5e8a4a"
       : s.state === false
-        ? "#a04040"
+        ? "#7a6940"
         : "#888";
   return (
     <div
@@ -131,23 +107,12 @@ function SignalRow({ signal: s }: { signal: VitalitySignal }) {
       }}
     >
       <div style={{ display: "flex", gap: 8, alignItems: "baseline" }}>
-        <span style={{ color, fontWeight: 700, minWidth: 14 }}>{glyph}</span>
+        <span style={{ color: glyphColor, fontWeight: 700, minWidth: 14 }}>
+          {glyph}
+        </span>
         <span style={{ fontWeight: 600, color: "#1a1a1a" }}>{s.label}</span>
-        <span style={{ color: "#666", fontSize: 12 }}>{s.reason}</span>
+        <span style={{ color: "#666", fontSize: 12 }}>{s.fact}</span>
       </div>
-      {s.suggestion && s.state === false && (
-        <div
-          style={{
-            marginTop: 4,
-            paddingLeft: 22,
-            fontSize: 12,
-            color: "#555",
-            fontStyle: "italic",
-          }}
-        >
-          → {s.suggestion}
-        </div>
-      )}
     </div>
   );
 }

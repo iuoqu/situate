@@ -1,52 +1,54 @@
 /**
- * Story vitality prediction — meta-diagnoser.
+ * Story readiness signals — meta-aggregator.
  *
  * Does NOT call an LLM. Aggregates already-run diagnoser signals into a
- * traffic-light verdict that answers the pre-writing question: "is this
- * going to feel alive, or read like a primary-school diary?"
+ * neutral 5-signal report ("readiness signals"). The writer reads the
+ * signal report as a glanceable copilot view — NOT as a quality verdict.
  *
- * The 5 signals (from missing-modules-v1 P1.11):
- *   1. K will move          — stakes_absent finds K + intent declares a transformation
- *   2. causation holds      — causal_spine majority not absent
- *   3. character not flat   — character_consistency present, or intent declares backstory
- *   4. setting specific     — place_arc not absent (place is participant, not backdrop)
- *   5. subtext exists       — inferred_intent finds a subtext pattern
+ * Per METHODOLOGY v2.0:
+ *   §3 Aggregation ≠ verdict: signal counts are aggregation, permitted.
+ *     Quality verdicts (vital / flat) are forbidden.
+ *   §18.9 AI gives categories, user gives specifics: each signal's
+ *     "consequence" copy reports structural fact, not prescription.
  *
- * Verdict:
- *   vital      — 4+ signals firing
- *   borderline — 2-3 signals firing
- *   flat       — 0-1 signals firing
+ * The 5 signals:
+ *   1. K_carrier present       — stakes_absent finds something carrying K
+ *   2. causation holds         — causal_spine majority not absent
+ *   3. character backstory     — character_consistency present, or intent declares backstory
+ *   4. place participates      — place_arc not absent
+ *   5. subtext present         — inferred_intent finds a subtext pattern
  *
- * Pure derivation: latency = O(n) over diagnoser results, zero LLM cost.
+ * Output: 5 per-signal rows + neutral fact count ("3 of 5 signals firing").
+ * NO verdict. NO aesthetic label. NO ranking.
+ *
+ * Future v2.X work (B.1.4): drive-aware signal set — when entangled drive,
+ * swap to the_thing_arrived + recurrent_image axes. Currently runs in
+ * drive-agnostic mode (signals are purposeful-leaning).
  */
 
 import type { PreviewResponse } from "../lay-translator";
 
-export type VitalityVerdict = "vital" | "borderline" | "flat";
-
-export interface VitalitySignal {
+export interface ReadinessSignal {
   id:
-    | "k_will_move"
+    | "k_carrier_present"
     | "causation_holds"
-    | "character_not_flat"
-    | "setting_specific"
-    | "subtext_exists";
+    | "character_backstory"
+    | "place_participates"
+    | "subtext_present";
   label: string;
-  /** true = firing, false = missing, null = no signal available (diagnoser didn't run) */
+  /** true = firing, false = not firing, null = signal not available (diagnoser didn't run) */
   state: boolean | null;
-  /** One-line plain-language reason for the state. */
-  reason: string;
-  /** Concrete suggestion if missing; empty if firing or unavailable. */
-  suggestion: string;
+  /** One-line neutral fact about what's there or not. NOT prescriptive. */
+  fact: string;
 }
 
 export interface VitalityResult {
-  verdict: VitalityVerdict;
-  signals: VitalitySignal[];
-  /** Count of firing signals (state === true). */
+  signals: ReadinessSignal[];
+  /** Count of signals where state === true. */
   firing: number;
-  /** Count of signals with a definitive verdict (state !== null). */
+  /** Count of signals where state !== null. */
   evaluated: number;
+  /** Neutral fact-string. NO verdict, NO aesthetic label. */
   summary: string;
 }
 
@@ -54,95 +56,72 @@ export function computeVitality(
   response: PreviewResponse,
   intentBlock?: string,
 ): VitalityResult {
-  const signals: VitalitySignal[] = [
-    kWillMove(response, intentBlock),
+  const signals: ReadinessSignal[] = [
+    kCarrierPresent(response),
     causationHolds(response),
-    characterNotFlat(response, intentBlock),
-    settingSpecific(response),
-    subtextExists(response),
+    characterBackstory(response, intentBlock),
+    placeParticipates(response),
+    subtextPresent(response),
   ];
 
   const firing = signals.filter((s) => s.state === true).length;
   const evaluated = signals.filter((s) => s.state !== null).length;
 
-  let verdict: VitalityVerdict;
-  if (firing >= 4) verdict = "vital";
-  else if (firing >= 2) verdict = "borderline";
-  else verdict = "flat";
+  const summary =
+    evaluated === 0
+      ? "未跑足够诊断器，无信号可报告。"
+      : `${evaluated} 项已评估，其中 ${firing} 项 firing。`;
 
-  const summary = buildSummary(verdict, firing, evaluated, signals);
-
-  return { verdict, signals, firing, evaluated, summary };
+  return { signals, firing, evaluated, summary };
 }
 
 // ─── individual signal evaluators ───────────────────────────────────────────
 
-function kWillMove(
-  response: PreviewResponse,
-  intentBlock?: string,
-): VitalitySignal {
+function kCarrierPresent(response: PreviewResponse): ReadinessSignal {
   const stakes = response.results.stakes_absent;
-  const intent = response.results.inferred_intent;
-
   if (!stakes) {
     return {
-      id: "k_will_move",
-      label: "K 会动起来",
+      id: "k_carrier_present",
+      label: "K 有承载者",
       state: null,
-      reason: "没跑 stakes_absent，无法判断。",
-      suggestion: "",
+      fact: "未跑 stakes_absent。",
     };
   }
-
   const verdicts = verdictsOf(stakes);
-  const presentCount = verdicts.filter((v) => v === "K_present").length;
   const total = verdicts.length;
-  const kPresent = total > 0 && presentCount > total / 2;
-
-  // Intent transformation: either declared in the intent block, or
-  // surfaced by inferred_intent's transformation field.
-  const intentDeclares =
-    !!intentBlock && /转变|transformation|变化/i.test(intentBlock);
-  const inferredTransformation =
-    intent && fieldOf(intent, "transformation").some((t) => t && t !== "无");
-  const hasTransformation = intentDeclares || inferredTransformation;
-
-  if (kPresent && hasTransformation) {
+  if (total === 0) {
     return {
-      id: "k_will_move",
-      label: "K 会动起来",
-      state: true,
-      reason: "有人在承受 + 故事里有可能的转变。",
-      suggestion: "",
+      id: "k_carrier_present",
+      label: "K 有承载者",
+      state: null,
+      fact: "无判定结果。",
     };
   }
-  if (kPresent && !hasTransformation) {
+  const presentCount = verdicts.filter((v) => v === "K_present").length;
+  if (presentCount > total / 2) {
     return {
-      id: "k_will_move",
-      label: "K 会动起来",
-      state: false,
-      reason: "有人在承受这件事，但还看不到 ta 会怎么动 / 变。",
-      suggestion: "想一下：这件事压在 ta 身上之后，ta 会做什么不同的事？",
+      id: "k_carrier_present",
+      label: "K 有承载者",
+      state: true,
+      fact: "多数读者读到有人在承担这件事。",
     };
   }
   return {
-    id: "k_will_move",
-    label: "K 会动起来",
+    id: "k_carrier_present",
+    label: "K 有承载者",
     state: false,
-    reason: "AI 还感觉不到有人真的承担这件事——更像在描述事件本身。",
-    suggestion: "让某一个具体的人在内心或行动上接住这件事。",
+    fact: "多数读者没读到有人在承担这件事。",
   };
 }
 
-function causationHolds(response: PreviewResponse): VitalitySignal {
+function causationHolds(response: PreviewResponse): ReadinessSignal {
   const causal = response.results.causal_spine;
   if (!causal) {
     return {
       id: "causation_holds",
       label: "因果立得住",
       state: null,
-      reason: "没跑 causal_spine。",
-      suggestion: "",
+      fact: "未跑 causal_spine。",
     };
   }
   const verdicts = verdictsOf(causal);
@@ -152,138 +131,124 @@ function causationHolds(response: PreviewResponse): VitalitySignal {
       id: "causation_holds",
       label: "因果立得住",
       state: null,
-      reason: "无判定结果。",
-      suggestion: "",
+      fact: "无判定结果。",
     };
   }
   const absentCount = verdicts.filter((v) => v === "causal_absent").length;
-  const presentOrImplicit = total - absentCount;
-  // 中文文学传统里 implicit 是主流，所以 implicit 算 holds。只有多数 absent 才算不成立。
-  if (presentOrImplicit > total / 2) {
+  // implicit counts as "holds" — implicit causation is the dominant
+  // register in many prose traditions.
+  const holdsCount = total - absentCount;
+  if (holdsCount > total / 2) {
     return {
       id: "causation_holds",
       label: "因果立得住",
       state: true,
-      reason: "事件之间有「因此」——不是流水账。",
-      suggestion: "",
+      fact: "多数读者读到事件之间的因果链（可显式或隐含）。",
     };
   }
   return {
     id: "causation_holds",
     label: "因果立得住",
     state: false,
-    reason: "事件读起来像「然后再然后」，没有「因此」——容易像日程表。",
-    suggestion: "让某个事件明确是前一个事件造成的，哪怕只是暗示。",
+    fact: "多数读者读到事件平行陈述（可重排）。",
   };
 }
 
-function characterNotFlat(
+function characterBackstory(
   response: PreviewResponse,
   intentBlock?: string,
-): VitalitySignal {
+): ReadinessSignal {
   const charConsistency = response.results.character_consistency;
   const declaresBackstory =
     !!intentBlock &&
-    /backstory|背景|circumstances|前史|身世/i.test(intentBlock);
+    /backstory|背景|given circumstances|前史|身世/i.test(intentBlock);
 
   if (charConsistency) {
     const verdicts = verdictsOf(charConsistency);
-    const present = verdicts.filter(
-      (v) => v === "character_consistency_present",
-    ).length;
     const total = verdicts.length;
-    if (total > 0 && present >= total / 2) {
-      return {
-        id: "character_not_flat",
-        label: "人物不扁",
-        state: true,
-        reason: "你定的角色 backstory 在 prose 里落实了。",
-        suggestion: "",
-      };
-    }
     if (total > 0) {
+      const present = verdicts.filter(
+        (v) => v === "character_consistency_present",
+      ).length;
+      if (present >= total / 2) {
+        return {
+          id: "character_backstory",
+          label: "角色背景在场",
+          state: true,
+          fact: "声明的角色 backstory 在 prose 中得到落实。",
+        };
+      }
       return {
-        id: "character_not_flat",
-        label: "人物不扁",
+        id: "character_backstory",
+        label: "角色背景在场",
         state: false,
-        reason: "你定了 backstory 但 prose 里角色的行为没接住。",
-        suggestion:
-          "让某个动作 / 选择 / 对话能追溯到你定的 backstory，否则 backstory 等于没写。",
+        fact: "声明的角色 backstory 跟 prose 行为不一致。",
       };
     }
   }
 
   if (declaresBackstory) {
     return {
-      id: "character_not_flat",
-      label: "人物不扁",
+      id: "character_backstory",
+      label: "角色背景在场",
       state: true,
-      reason: "intent 里你给了角色具体 backstory（角色已知 given circumstances）。",
-      suggestion: "",
+      fact: "intent 块中包含角色 backstory 声明。",
     };
   }
 
   return {
-    id: "character_not_flat",
-    label: "人物不扁",
+    id: "character_backstory",
+    label: "角色背景在场",
     state: false,
-    reason: "没看到具体 backstory——角色容易停留在角色名 + 动作。",
-    suggestion:
-      "至少给你的核心人物 3 件 ta 来之前发生过的具体事，让 ta 不是「一个被故事推动的人形」。",
+    fact: "未声明角色 backstory，且 prose 未被 character_consistency 跑过。",
   };
 }
 
-function settingSpecific(response: PreviewResponse): VitalitySignal {
+function placeParticipates(response: PreviewResponse): ReadinessSignal {
   const placeArc = response.results.place_arc;
   if (!placeArc) {
     return {
-      id: "setting_specific",
-      label: "设定具体",
+      id: "place_participates",
+      label: "地点参与",
       state: null,
-      reason: "没跑 place_arc。",
-      suggestion: "",
+      fact: "未跑 place_arc。",
     };
   }
   const arcTypes = fieldOf(placeArc, "arc_type");
   const total = arcTypes.length;
   if (total === 0) {
     return {
-      id: "setting_specific",
-      label: "设定具体",
+      id: "place_participates",
+      label: "地点参与",
       state: null,
-      reason: "无判定结果。",
-      suggestion: "",
+      fact: "无判定结果。",
     };
   }
   const absentCount = arcTypes.filter((a) => a === "absent").length;
   if (absentCount >= total / 2) {
     return {
-      id: "setting_specific",
-      label: "设定具体",
+      id: "place_participates",
+      label: "地点参与",
       state: false,
-      reason: "地点是 backdrop，不是参与者——设定可被任何「某个城市某个时代」替换。",
-      suggestion:
-        "找一个具体物件 / 气味 / 声音 / 边界，让这个地点只能是这一个地方。",
+      fact: "多数读者读到地点是 backdrop，未参与叙事变化。",
     };
   }
   return {
-    id: "setting_specific",
-    label: "设定具体",
+    id: "place_participates",
+    label: "地点参与",
     state: true,
-    reason: "地点有自己的存在感，能跟人物互动。",
-    suggestion: "",
+    fact: "多数读者读到地点有自己的弧光或参与互动。",
   };
 }
 
-function subtextExists(response: PreviewResponse): VitalitySignal {
+function subtextPresent(response: PreviewResponse): ReadinessSignal {
   const intent = response.results.inferred_intent;
   if (!intent) {
     return {
-      id: "subtext_exists",
-      label: "subtext 在场",
+      id: "subtext_present",
+      label: "subtext 可读出",
       state: null,
-      reason: "没跑 inferred_intent。",
-      suggestion: "",
+      fact: "未跑 inferred_intent。",
     };
   }
   const subtexts = fieldOf(intent, "subtext_pattern").filter(
@@ -291,20 +256,17 @@ function subtextExists(response: PreviewResponse): VitalitySignal {
   );
   if (subtexts.length >= 2) {
     return {
-      id: "subtext_exists",
-      label: "subtext 在场",
+      id: "subtext_present",
+      label: "subtext 可读出",
       state: true,
-      reason: "AI 读到了一种 pattern——表面之下有另一层。",
-      suggestion: "",
+      fact: "多个读者识别出一致的 subtext pattern。",
     };
   }
   return {
-    id: "subtext_exists",
-    label: "subtext 在场",
+    id: "subtext_present",
+    label: "subtext 可读出",
     state: false,
-    reason: "AI 没读出「表面之下还有一层」——目前文本只在说它字面说的事。",
-    suggestion:
-      "想一下：除了字面发生的事，你想让读者顺便感觉到什么？让一个细节同时做两件事。",
+    fact: "读者未识别出明确的 subtext pattern。",
   };
 }
 
@@ -331,26 +293,4 @@ function fieldOf(
       return typeof j[field] === "string" ? (j[field] as string).trim() : "";
     })
     .filter(Boolean);
-}
-
-function buildSummary(
-  verdict: VitalityVerdict,
-  firing: number,
-  evaluated: number,
-  signals: VitalitySignal[],
-): string {
-  if (evaluated === 0) {
-    return "还没有跑足够的诊断，无法预测。";
-  }
-  if (verdict === "vital") {
-    return `${firing}/${evaluated} 项指标命中——故事有活力，可以接着写。`;
-  }
-  const missing = signals
-    .filter((s) => s.state === false)
-    .map((s) => s.label)
-    .join(" / ");
-  if (verdict === "borderline") {
-    return `${firing}/${evaluated} 项指标命中——边缘。缺：${missing}。先把缺的补上再写下去会更扎实。`;
-  }
-  return `${firing}/${evaluated} 项指标命中——目前像一篇小学生日记。缺：${missing}。`;
 }
