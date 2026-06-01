@@ -32,7 +32,7 @@ import type { AnsweredQuestion } from "@/lib/map/types";
  */
 
 export const runtime = "nodejs";
-export const maxDuration = 120;
+export const maxDuration = 300;
 export const dynamic = "force-dynamic";
 
 function isAnsweredQuestion(v: unknown): v is AnsweredQuestion {
@@ -71,43 +71,51 @@ function parseBody(raw: unknown): Body | string {
 }
 
 export async function POST(req: NextRequest) {
-  const supabase = await getServerSupabase();
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
-  if (!user) {
-    return NextResponse.json({ error: "unauthorized" }, { status: 401 });
-  }
-
-  let raw: unknown;
   try {
-    raw = await req.json();
-  } catch {
-    return NextResponse.json({ error: "invalid JSON" }, { status: 400 });
-  }
-  const parsed = parseBody(raw);
-  if (typeof parsed === "string") {
-    return NextResponse.json({ error: parsed }, { status: 400 });
-  }
+    const supabase = await getServerSupabase();
+    const {
+      data: { user },
+    } = await supabase.auth.getUser();
+    if (!user) {
+      return NextResponse.json({ error: "unauthorized" }, { status: 401 });
+    }
 
-  try {
-    const callResult = await synthesize(
-      parsed.material,
-      parsed.answers,
-      parsed.provider,
-    );
-    return NextResponse.json({
-      branch: callResult.result.branch,
-      recurring: callResult.result.recurring,
-      shared_frame: callResult.result.shared_frame,
-      message: callResult.result.message,
-      extracted_phrases: callResult.result.extracted_phrases,
-      meta: callResult.meta,
-    });
+    let raw: unknown;
+    try {
+      raw = await req.json();
+    } catch {
+      return NextResponse.json({ error: "invalid JSON" }, { status: 400 });
+    }
+    const parsed = parseBody(raw);
+    if (typeof parsed === "string") {
+      return NextResponse.json({ error: parsed }, { status: 400 });
+    }
+
+    try {
+      const callResult = await synthesize(
+        parsed.material,
+        parsed.answers,
+        parsed.provider,
+      );
+      return NextResponse.json({
+        branch: callResult.result.branch,
+        recurring: callResult.result.recurring,
+        shared_frame: callResult.result.shared_frame,
+        message: callResult.result.message,
+        extracted_phrases: callResult.result.extracted_phrases,
+        meta: callResult.meta,
+      });
+    } catch (err) {
+      const message = err instanceof Error ? err.message : String(err);
+      return NextResponse.json(
+        { error: "synthesis failed", detail: message },
+        { status: 500 },
+      );
+    }
   } catch (err) {
     const message = err instanceof Error ? err.message : String(err);
     return NextResponse.json(
-      { error: "synthesis failed", detail: message },
+      { error: "server error", detail: message },
       { status: 500 },
     );
   }

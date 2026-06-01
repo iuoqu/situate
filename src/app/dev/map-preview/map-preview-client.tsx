@@ -102,6 +102,28 @@ export function MapPreviewClient() {
   const [running, setRunning] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
+  async function apiFetch(url: string, body: unknown): Promise<Response> {
+    const resp = await fetch(url, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      credentials: "same-origin",
+      body: JSON.stringify(body),
+    });
+    return resp;
+  }
+
+  async function extractError(resp: Response): Promise<string> {
+    const text = await resp.text();
+    try {
+      const j = JSON.parse(text) as Record<string, unknown>;
+      const detail = typeof j.detail === "string" ? j.detail : null;
+      const base = typeof j.error === "string" ? j.error : "server error";
+      return detail ? `HTTP ${resp.status} ${base}: ${detail}` : `HTTP ${resp.status} ${base}`;
+    } catch {
+      return `HTTP ${resp.status}: ${text.slice(0, 400)}`;
+    }
+  }
+
   async function generateQuestions() {
     if (!material.trim()) { setError("Paste some source material first."); return; }
     setError(null);
@@ -109,26 +131,26 @@ export function MapPreviewClient() {
     setSynthesisResp(null);
     setRunning(true);
     try {
-      const resp = await fetch("/api/map/questions", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        credentials: "same-origin",
-        body: JSON.stringify({ material }),
-      });
+      const resp = await apiFetch("/api/map/questions", { material });
       if (resp.status === 401) {
         setError("Not logged in. Open /auth/login, then come back.");
         return;
       }
       if (!resp.ok) {
-        const body = await resp.text();
-        throw new Error(`HTTP ${resp.status}: ${body.slice(0, 280)}`);
+        setError(await extractError(resp));
+        return;
       }
       const data = (await resp.json()) as QuestionsResponse;
       setQuestionsResp(data);
       setAnswers(data.questions.map(() => ""));
       setStage("answering");
     } catch (e) {
-      setError(e instanceof Error ? e.message : String(e));
+      const msg = e instanceof Error ? e.message : String(e);
+      setError(
+        msg.includes("fetch") || msg.includes("network") || msg.includes("Failed")
+          ? `连接失败（ERR_CONNECTION_CLOSED）— 服务端无响应。\n可能原因：函数崩溃、ANTHROPIC_API_KEY 未设置、部署未完成。\n\nraw: ${msg}`
+          : msg,
+      );
     } finally {
       setRunning(false);
     }
@@ -151,25 +173,25 @@ export function MapPreviewClient() {
     setSynthesisResp(null);
     setRunning(true);
     try {
-      const resp = await fetch("/api/map/synthesize", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        credentials: "same-origin",
-        body: JSON.stringify({ material, answers: answered }),
-      });
+      const resp = await apiFetch("/api/map/synthesize", { material, answers: answered });
       if (resp.status === 401) {
         setError("Not logged in. Open /auth/login, then come back.");
         return;
       }
       if (!resp.ok) {
-        const body = await resp.text();
-        throw new Error(`HTTP ${resp.status}: ${body.slice(0, 280)}`);
+        setError(await extractError(resp));
+        return;
       }
       const data = (await resp.json()) as SynthesisResponse;
       setSynthesisResp(data);
       setStage("synthesis");
     } catch (e) {
-      setError(e instanceof Error ? e.message : String(e));
+      const msg = e instanceof Error ? e.message : String(e);
+      setError(
+        msg.includes("fetch") || msg.includes("network") || msg.includes("Failed")
+          ? `连接失败（ERR_CONNECTION_CLOSED）— 服务端无响应。\n可能原因：函数崩溃、ANTHROPIC_API_KEY 未设置、部署未完成。\n\nraw: ${msg}`
+          : msg,
+      );
     } finally {
       setRunning(false);
     }
@@ -212,7 +234,7 @@ export function MapPreviewClient() {
           rows={14}
           style={textareaStyle}
         />
-        <div style={{ display: "flex", alignItems: "center", gap: 12, marginTop: 10 }}>
+        <div style={{ marginTop: 10 }}>
           <button
             onClick={generateQuestions}
             disabled={running}
@@ -220,7 +242,7 @@ export function MapPreviewClient() {
           >
             {running && stage === "material" ? "生成问题中…" : "① 生成角度问题"}
           </button>
-          {error && <span style={errorStyle}>{error}</span>}
+          {error && <pre style={errorStyle}>{error}</pre>}
         </div>
         {questionsResp && (
           <MetaBadge meta={questionsResp.meta} note={`selection: ${questionsResp.selection_note}`} />
@@ -249,7 +271,7 @@ export function MapPreviewClient() {
               />
             ))}
           </div>
-          <div style={{ display: "flex", alignItems: "center", gap: 12, marginTop: 20 }}>
+          <div style={{ marginTop: 20 }}>
             <button
               onClick={runSynthesis}
               disabled={running}
@@ -257,7 +279,7 @@ export function MapPreviewClient() {
             >
               {running && stage === "answering" ? "归纳中…" : "③ 运行归纳算法"}
             </button>
-            {error && <span style={errorStyle}>{error}</span>}
+            {error && <pre style={errorStyle}>{error}</pre>}
           </div>
         </section>
       )}
@@ -542,8 +564,21 @@ const btnGhost: React.CSSProperties = {
 };
 
 const errorStyle: React.CSSProperties = {
-  color: "#a04040",
-  fontSize: 13,
+  color: "#8a2a2a",
+  fontSize: 12,
+  fontFamily: "monospace",
+  background: "#fff5f5",
+  border: "1px solid #f0cccc",
+  borderRadius: 4,
+  padding: "10px 14px",
+  whiteSpace: "pre-wrap",
+  wordBreak: "break-all",
+  maxHeight: 220,
+  overflow: "auto",
+  display: "block",
+  marginTop: 10,
+  width: "100%",
+  boxSizing: "border-box",
 };
 
 const labelSmall: React.CSSProperties = {
