@@ -85,11 +85,12 @@ interface ProviderOption {
 }
 
 const PROVIDERS: ProviderOption[] = [
-  { id: "anthropic:claude-sonnet-4-6", label: "Claude Sonnet" },
+  { id: "alibaba:qwen-plus", label: "Qwen Plus" },
+  { id: "alibaba:qwen3-max", label: "Qwen3 Max" },
+  { id: "alibaba:qwen-flash", label: "Qwen Flash" },
   { id: "deepseek:deepseek-chat", label: "DeepSeek Chat" },
   { id: "deepseek:deepseek-v4-flash", label: "DeepSeek V4 Flash" },
-  { id: "alibaba:qwen-flash", label: "Qwen Flash" },
-  { id: "alibaba:qwen-plus", label: "Qwen Plus" },
+  { id: "anthropic:claude-sonnet-4-6", label: "Claude Sonnet" },
 ];
 
 // ─── Types ────────────────────────────────────────────────────────────────
