@@ -161,6 +161,15 @@ export function MapPreviewClient() {
         return;
       }
       const data = (await resp.json()) as QuestionsResponse;
+      // Guard before .map — if the model emitted a malformed shape (questions
+      // as an object, truncated/repaired JSON, etc.), show the raw payload
+      // instead of crashing the render with "questions.map is not a function".
+      if (!data || !Array.isArray(data.questions)) {
+        setError(
+          `返回结构异常：questions 不是数组。原始返回：\n\n${JSON.stringify(data, null, 2).slice(0, 4000)}`,
+        );
+        return;
+      }
       setQuestionsResp(data);
       setAnswers(data.questions.map(() => ""));
       setStage("answering");
