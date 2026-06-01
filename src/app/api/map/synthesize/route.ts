@@ -32,7 +32,7 @@ import type { AnsweredQuestion } from "@/lib/map/types";
  */
 
 export const runtime = "nodejs";
-export const maxDuration = 120;
+export const maxDuration = 300;
 export const dynamic = "force-dynamic";
 
 function isAnsweredQuestion(v: unknown): v is AnsweredQuestion {

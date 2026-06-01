@@ -24,7 +24,7 @@ import { getServerSupabase } from "@/lib/supabase/server";
  */
 
 export const runtime = "nodejs";
-export const maxDuration = 120;
+export const maxDuration = 300;
 export const dynamic = "force-dynamic";
 
 interface Body {
