@@ -85,11 +85,12 @@ interface ProviderOption {
 }
 
 const PROVIDERS: ProviderOption[] = [
-  { id: "anthropic:claude-sonnet-4-6", label: "Claude Sonnet" },
+  { id: "alibaba:qwen-plus", label: "Qwen Plus" },
+  { id: "alibaba:qwen3-max", label: "Qwen3 Max" },
+  { id: "alibaba:qwen-flash", label: "Qwen Flash" },
   { id: "deepseek:deepseek-chat", label: "DeepSeek Chat" },
   { id: "deepseek:deepseek-v4-flash", label: "DeepSeek V4 Flash" },
-  { id: "alibaba:qwen-flash", label: "Qwen Flash" },
-  { id: "alibaba:qwen-plus", label: "Qwen Plus" },
+  { id: "anthropic:claude-sonnet-4-6", label: "Claude Sonnet" },
 ];
 
 // ─── Types ────────────────────────────────────────────────────────────────
@@ -443,14 +444,20 @@ function QuestionCard({
           {question.angle_name} (角度 {question.angle_id})
         </span>
       </div>
-      <p style={{ margin: "0 0 10px 30px", fontSize: 15, lineHeight: 1.6, color: "#222",
+      <p style={{ margin: "0 0 6px 30px", fontSize: 15, lineHeight: 1.6, color: "#222",
         fontFamily: 'Georgia, "Times New Roman", serif' }}>
         {question.question}
       </p>
+      {question.opener && (
+        <p style={{ margin: "0 0 10px 30px", fontSize: 13, lineHeight: 1.55,
+          color: "#8a7a55", fontStyle: "italic" }}>
+          💡 {question.opener}
+        </p>
+      )}
       <textarea
         value={answer}
         onChange={(e) => onAnswer(e.target.value)}
-        placeholder="你的回答…"
+        placeholder="随便写，写不好也没关系…"
         rows={3}
         style={{
           ...textareaStyle,

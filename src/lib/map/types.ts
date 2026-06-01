@@ -14,8 +14,12 @@ export interface AngleQuestion {
   angle_id: AngleId;
   angle_name: string;
   /** Instantiated in the language of the material, using names/details
-   *  from the material. Never suggests a center. */
+   *  from the material. Never suggests a center. Plain spoken register. */
   question: string;
+  /** A short lead-in that helps the writer start writing — a concrete
+   *  entry point or a half-sentence to continue. Never suggests an
+   *  answer; UI scaffolding only, not sent to synthesis. */
+  opener: string;
 }
 
 export interface QuestionsResult {
