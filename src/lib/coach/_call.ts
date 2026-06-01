@@ -263,6 +263,7 @@ async function callOpenAICompat<T>(
       );
     }
   }
+  parsed = recoverStringStuffedArgs(parsed);
 
   return {
     result: parsed as T,
@@ -275,6 +276,44 @@ async function callOpenAICompat<T>(
       output_tokens: data.usage?.completion_tokens ?? 0,
     },
   };
+}
+
+/**
+ * Recover from a model that emitted the whole arguments object as a string
+ * stuffed into its first property. Observed on qwen3.7-max under forced
+ * tool_choice: instead of
+ *   { "questions": [ ... ], "selection_note": "..." }
+ * it returns
+ *   { "questions": "\n[ ... ], \"selection_note\": \"...\"" }
+ * — i.e. everything after the first key got captured as one string value.
+ *
+ * The string is literally `<value>, "<rest of keys>": ...`, so wrapping it
+ * back as `{"<key>":<value>}` reconstructs the intended object. We only act
+ * when the parse yielded a single-key object whose string value looks like
+ * JSON (starts with `[` or `{`), and we keep jsonrepair as a backstop. If
+ * recovery fails we return the original untouched and let downstream shape
+ * validation surface a clean error.
+ */
+function recoverStringStuffedArgs(parsed: unknown): unknown {
+  if (typeof parsed !== "object" || parsed === null) return parsed;
+  const keys = Object.keys(parsed as Record<string, unknown>);
+  if (keys.length !== 1) return parsed;
+  const key = keys[0];
+  const value = (parsed as Record<string, unknown>)[key];
+  if (typeof value !== "string") return parsed;
+  const head = value.trimStart()[0];
+  if (head !== "[" && head !== "{") return parsed;
+
+  const candidate = `{${JSON.stringify(key)}:${value}}`;
+  try {
+    return JSON.parse(candidate);
+  } catch {
+    try {
+      return JSON.parse(jsonrepair(candidate));
+    } catch {
+      return parsed;
+    }
+  }
 }
 
 function providerIdToAnthropicModel(id: string): string {
