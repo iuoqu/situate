@@ -1,8 +1,18 @@
-# situate Methodology v2.1
+# situate Methodology v2.2
 
 > The principles behind situate.map, situate.act, and situate.at.
 > Read this before contributing code. The technical choices follow from
 > these principles—not the other way around.
+>
+> **v2.2 changelog**: Added Register Neutrality (§9). The tool has no
+> preference for register. A comedy whose craft is deliberate lightness
+> is as legitimate as a tragedy whose craft is gravity. K can be light;
+> stakes_bound accepts featherweight stakes; deliberate lightness is not
+> a structural defect. AI must not reframe light work as heavier or
+> treat bodily comedy as structural absence. Surfaced during a
+> stress-test that ran a rural comedy (deliberately featherweight stakes,
+> warmth as K-carrier) through the methodology and found systematic
+> heavy-register bias across §4, §6, §7, §9, §17, and §20.
 >
 > **v2.1 changelog**: Added place generativity (§17) and the Situate
 > disclosure preview (§18). These wire the publication's deepest
@@ -224,6 +234,11 @@ different initialization flow optimized for its actual creative logic.
 | Haunting             | Premature articulation       | Track whether the thing has arrived    |
 | Unknown              | Endless drift                | Re-prompt after scene 3                |
 
+Note: for **haunting drive (缠绕型)**, the thing that won't leave can
+be a delightful memory, a comic absurdity, a warmth, or a bodily
+sensation — not only a wound or a grief. The drive type marks
+attachment, not weight.
+
 Critically: AI must never suggest one drive type is more serious than
 another. See §13 for the full ethical statement.
 
@@ -334,7 +349,7 @@ mode:
 | Dimension           | Multi-act              | One-act                                  |
 |---------------------|------------------------|------------------------------------------|
 | Present             | Segment function fit   | Weight-bearing capacity                  |
-| Missing             | Required elements      | Five senses + temporal density + body detail to extremes |
+| Missing             | Required elements      | Five senses + temporal density + body detail to the register's demand |
 | Consider            | Internal inconsistency | Narrative position decisions             |
 | Serves intent       | Same                   | Same                                     |
 | Serves structure    | Segment positioning    | Position on time-axis + weight-bearing for whole act |
@@ -360,11 +375,18 @@ language specific to the user's material.
 | 4 | Ungrabbable        | Who resists hero/villain/victim categorization?       |
 | 5 | World-Bearing      | Whose daily existence most carries the period/world?  |
 | 6 | Hidden in Periphery| Is the real center off the obvious stage?             |
-| 7 | Difficulty as Depth| Whose interiority would be hardest, therefore most worth writing? |
+| 7 | Difficulty as Depth| Whose interiority would be hardest to get right? (Hardest ≠ heaviest — the craft demand of a convincing comedy can exceed that of a sincere tragedy) |
 | 8 | Irreducibility     | If only one name remained in the book, whose? (the "name" may be a place, an institution, or a system — not only a person) |
 
 Angles 2, 4, and 8 are nearly always fertile. The others are selected
 based on material density. AI picks 5-6 angles per session.
+
+**Angles 5 and 7 for light or comic material**: both angles remain
+valid, but AI must not let "world-bearing" (angle 5) default to weight
+or gravity, and must not let "hardest to get right" (angle 7) point
+implicitly toward heavier themes. Comedy, farce, and warmth have their
+own craft demands. When the material's register is light, AI must not
+use these angles to nudge the writer toward seriousness.
 
 **The center of gravity is not always a person.** It may be a place
 (Constitution P1: place is inhabited space), an institution, or a
@@ -461,7 +483,7 @@ should." Then drop it.
 
 ---
 
-## 9. Scale Neutrality
+## 9. Scale & Register Neutrality
 
 The tool has **no preference for scale**.
 
@@ -495,29 +517,6 @@ toward "more = more serious." A truly literature-serving tool must
 counter this bias deliberately. A 5,000-word condensation is not a
 smaller work than a 350,000-word saga. They are different works.
 
-### Carve-out: canon for legitimacy, not validation
-
-§9 requires showing canonical one-act references to counter the
-AI-systematic bias toward "longer = more serious." This is a deliberate
-exception to §12 Invariant 10 (no canon names in user-facing surfaces).
-
-The distinction:
-- **Canon to validate a user's specific choice** ("this is like Munro" /
-  "your work resembles Chekhov") → FORBIDDEN by §12 Invariant 10 + §13.
-  Using canon to grade or rank a particular user choice violates the
-  tool's neutrality and reintroduces literary hierarchy.
-- **Canon to demonstrate that a form/scale is legitimate** ("the
-  one-act form has been used to write fully realized works at this
-  length") → ALLOWED by §9. The function here is to counter AI's
-  built-in length bias, not to grade the user's work.
-
-When showing canonical references for §9 purposes:
-- Use them as a neutral list of "the form exists at this scale", not as
-  comparison points
-- Do not characterize what makes them "good" — only that they exist
-- Never rank one against another
-- Never imply the user's work should resemble any of them
-
 ### Place neutrality
 
 Scale neutrality extends to **place**. A single-coordinate work is not a
@@ -526,6 +525,68 @@ place-shape (§5), AI must not default a coordinate count, must not imply
 that more places = more scope, and must not suggest that a material
 "needs" to move across places. One coordinate, deeply inhabited, is a
 first-class form.
+
+### Register Neutrality
+
+**The tool has no preference for register.**
+
+A comedy whose craft is deliberate lightness — featherweight stakes,
+warmth, bodily absurdity, seasonal rhythm — is as legitimate as a
+tragedy whose craft is gravity. Register is a dimension of craft, not a
+scale of literary worth.
+
+**The K-carrier and stakes_bound rules read register-neutral:**
+
+- K can be light. A warm memory, a comic absurdity, a delightful
+  failure — these are genuine carriers of consciousness. They require no
+  reframing as "deeper" concerns to qualify.
+- stakes_bound accepts featherweight stakes. A story whose outcome turns
+  on a minor social embarrassment or a seasonal rhythm is a structurally
+  complete story if K is present. Low stakes ≠ absent K.
+- **✗ Missing** must not flag deliberate lightness as a structural
+  defect. When lightness is the work's chosen craft mode, it is
+  present — not missing. The diagnoser reports what is absent from what
+  the work is trying to do, not what is absent relative to a heavier
+  default.
+
+**AI must never:**
+
+- Imply that a serious subject is more literary than a comic one
+- Reframe light, warm, or playful work as "actually about" something
+  heavier — this is register correction, which violates §3
+- Treat bodily comedy, farce, or playfulness as symptoms of
+  underdeveloped K — these are K-carrier modes
+- Apply heavy-register vocabulary (gravity, wound, grief, urgency) as
+  neutral default language when the work's declared register is light
+
+### Carve-out: canon for legitimacy, not validation
+
+§9 requires showing canonical one-act references to counter the
+AI-systematic bias toward "longer = more serious." This is a deliberate
+exception to §12 Invariant 10 (no canon names in user-facing surfaces).
+
+The same carve-out extends to **register**. Canonical works may be
+cited to demonstrate that a register (e.g., rural comedy with
+featherweight stakes) is a legitimate craft mode that has produced fully
+realized literary work.
+
+The distinction in both cases:
+- **Canon to validate a user's specific choice** ("this is like Munro" /
+  "your work resembles Chekhov") → FORBIDDEN by §12 Invariant 10 + §13.
+  Using canon to grade or rank a particular user choice violates the
+  tool's neutrality and reintroduces literary hierarchy.
+- **Canon to demonstrate that a form, scale, or register is legitimate**
+  ("the one-act form has produced fully realized works at this length" /
+  "the featherweight-stakes comedy is a first-class literary mode") →
+  ALLOWED by §9. The function here is to counter AI's built-in biases,
+  not to grade the user's work.
+
+When showing canonical references for §9 purposes:
+- Use them as a neutral list of "the form/register exists," not as
+  comparison points
+- Do not characterize what makes them "good" — only that they exist
+- Never rank one against another
+- Never imply the user's work should resemble any of them
 
 ---
 
@@ -800,6 +861,10 @@ To make the boundary unambiguous for contributors:
   "this is like Munro") — see §12 Invariant 10 + §9 carve-out
 - ❌ AI defaults any scale-related field (always preserves user freedom)
 - ❌ AI suggests one drive type is more serious than another
+- ❌ AI implies a serious subject is more literary than a comic one
+- ❌ AI reframes light/warm/playful work as "actually about" something
+  heavier (register correction — §9 Register Neutrality)
+- ❌ AI flags deliberate lightness as a structural defect or missing K
 - ❌ AI rewrites scenes (only suggests revision directions for the user
   to write)
 - ❌ AI auto-discards intent layers (all layers are append-only with
@@ -836,6 +901,10 @@ should be rejected even if it improves engagement metrics.
 - ✅ AI offers retrospective inventory when intent layers change
 - ✅ AI distinguishes between scale modes (one-act / multi-act) with
   separately designed flows
+- ✅ AI treats light/comic/featherweight work as structurally equivalent
+  to heavy/tragic work (§9 Register Neutrality)
+- ✅ AI reads deliberate lightness as a craft mode, not a deficiency;
+  K can be warm, comic, or bodily without requiring reframing
 - ✅ AI surfaces aggregated signal counts as copilot view (per §3
   "Aggregation is not verdict")
 - ✅ AI provides category-level scaffolding that the user instantiates
@@ -924,6 +993,14 @@ the pale hills shaped like a thing no one wants, the dry slope against
 the fertile one, the two sets of rails — is the story's only way of
 saying what the dialogue refuses to. The place does not decorate the
 subtext. It carries it.
+
+The second route is equally available in lighter registers. A rural
+village whose seasonal textures — camellia-littered ground, mountain
+smell in early spring, the ordinary rhythm of field and market — can
+carry the story's sense of what living here feels like even when the
+stakes are featherweight and the tone is warmth and comedy. The place
+carries the work's consciousness regardless of register. Carrier ≠
+gravity.
 
 ### Place as a carrier of K
 
@@ -1041,13 +1118,35 @@ this work belongs somewhere other than Situate.
 
 ## 19. Versioning the Methodology
 
-This document is METHODOLOGY.md v2.1. Significant changes—especially
-to §3 (Ethical Bottom Line), §7 (Socratic Discipline), §9 (Scale
-Neutrality), §10 (Intent Growth), §13/§14, or §17 (Place
+This document is METHODOLOGY.md v2.2. Significant changes—especially
+to §3 (Ethical Bottom Line), §7 (Socratic Discipline), §9 (Scale &
+Register Neutrality), §10 (Intent Growth), §13/§14, or §17 (Place
 Generativity)—require explicit version bumps and changelog entries.
 
 The technical implementation can iterate freely. The methodology
 iterates with deliberation.
+
+### v2.2 changelog (from v2.1)
+
+- §9 expanded to "Scale & Register Neutrality": added **Register
+  Neutrality** subsection. The tool has no preference for register.
+  K can be light; stakes_bound accepts featherweight stakes; deliberate
+  lightness is not a structural defect; AI must not reframe light work
+  as heavier or treat bodily comedy as structural absence. Canon carve-
+  out extended to cover register legitimacy alongside scale legitimacy.
+- §4 haunting drive: the "thing that won't leave" (缠绕型) can be a
+  delightful memory, comic absurdity, or warmth — not only a wound
+- §6 one-act feedback: "body detail to extremes" → "to the register's
+  demand"
+- §7 angle 7: "hardest to get right" replaces implied "most worth
+  writing"; hard ≠ heavy; note added that angles 5 and 7 must not nudge
+  light material toward seriousness
+- §13: added three register-neutrality forbidden items
+- §14: added two register-neutrality permitted items
+- §17 carrier examples: second route now includes lighter registers —
+  rural comedy, warmth, seasonal texture — alongside heavy subtext
+- §20 Real Test: added "Comic work whose craft is deliberate lightness"
+  and "Minor-key work with deliberately small stakes"
 
 ### v2.1 changelog (from v2.0)
 
@@ -1111,11 +1210,13 @@ A truly literature-serving tool must be able to host:
 - Multi-perspective ensemble work
 - Single-perspective deeply interior work
 - Place-bound work where the coordinate, not the plot, carries the meaning
+- Comic work whose craft is deliberate lightness
+- Minor-key work with deliberately small stakes
 
 If the tool only hosts one of these well, it has not yet become a
 literature-serving tool. It has become a tool for one kind of literature.
 
-v2.1 hosts most of these. Future versions should host the rest.
+v2.2 hosts most of these. Future versions should host the rest.
 
 The test for any future addition:
 **Can this addition help a writer working in a tradition the tool
@@ -1141,4 +1242,4 @@ Build what passes. Cut what doesn't.
 
 ---
 
-*End of METHODOLOGY.md v2.1*
+*End of METHODOLOGY.md v2.2*
