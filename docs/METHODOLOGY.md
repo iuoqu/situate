@@ -1,8 +1,19 @@
-# situate Methodology v2.0
+# situate Methodology v2.1
 
 > The principles behind situate.map, situate.act, and situate.at.
 > Read this before contributing code. The technical choices follow from
 > these principles—not the other way around.
+>
+> **v2.1 changelog**: Added place generativity (§17) and the Situate
+> disclosure preview (§18). These wire the publication's deepest
+> editorial commitment — a story must owe its existence to its
+> coordinates (Editorial Constitution P3) — into the pre-writing flow,
+> so a writer meets that gate at the start, not as a rejection at the
+> end. Surfaced during a stress-test that ran a place-independent legal
+> case through the methodology. Also: the center of gravity may now be a
+> place, an institution, or a system, not only a person (§7); a
+> place-shape joins the time-shape in situate.act (§5); a ✧ Serves place
+> axis joins situate.at feedback (§6).
 >
 > **v2.0 changelog**: Added scale neutrality (§9), intent growth (§10),
 > retrospective revision (§11), and the corresponding tool layer
@@ -113,7 +124,7 @@ Examples of the principle in action:
 | situate.map step 4 | 5 conflict slots (internal/structural/relational/alliance/temporal) | Specific conflicts in this project |
 | situate.act commitment confirmation | "10+ year scope opens: physical change / perspective change / relationship change" | Specific events (if any) the writer plans |
 | situate.act candidate earlier scenes | "Functional categories: initial state / routine / early hint" | Specific moments from this writer's materials |
-| situate.at mirror | "K is character/image/place/narrator" carrier type | Which one this draft uses |
+| situate.at mirror | "K is character/image/place/narrator" carrier type | Which one this draft uses (when the carrier is **place**, see §17) |
 
 **NOT permitted:**
 - AI listing specific scene candidates ("2011.04 入职第一天 / 2011.夏 加班晚上")
@@ -262,6 +273,24 @@ different tools.
 
 Scale neutrality is non-negotiable. See §9 for the full statement.
 
+### The place-shape (parallel to the time-shape)
+
+After the time-shape, situate.act asks the **place-shape**: how does the
+work sit on the map?
+
+```
+○ One coordinate—the whole work happens at a single place
+○ Several coordinates—distinct pinned scenes
+○ A route—movement traced across places
+○ I don't know yet
+```
+
+**No default. No recommendation.** A single-coordinate work is as
+legitimate as a route (scale neutrality extends to place — §9). This
+maps to the publication's narrative_blocks model (1–6 pinned scenes).
+situate.act records the coordinate(s); whether the place *carries* the
+work is built later, in situate.at, and governed by §17.
+
 ---
 
 ## 6. situate.at — The Cultivation Layer
@@ -270,7 +299,7 @@ Where individual scenes are written. Five steps:
 
 | Step | Action                                          |
 |------|-------------------------------------------------|
-| 1    | Select writing mode (real/imagined/in-between)  |
+| 1    | Select writing mode (real/imagined/in-between) — reads the project-level truth declaration from §18, not re-asked per scene |
 | 2    | The thing that won't leave (anchor)             |
 | 3    | Five specific questions (who/when/where/what changed/why remembered) |
 | 4    | Write the prose                                 |
@@ -278,7 +307,7 @@ Where individual scenes are written. Five steps:
 
 ### Feedback categories
 
-For each scene, AI provides up to seven categories of feedback:
+For each scene, AI provides up to eight categories of feedback:
 
 - **✓ Present**: What the prose successfully evoked
 - **✗ Missing**: What's structurally absent
@@ -287,10 +316,15 @@ For each scene, AI provides up to seven categories of feedback:
 - **◎ Serves intent**: How this scene serves each declared intent layer
 - **✦ Serves structure**: How this scene serves the act/segment it belongs to
 - **✨ Scene consistency**: How this scene relates to previously written scenes
+- **✧ Serves place**: Whether the scene's place-rendering carries the
+  work or sits as backdrop (§17). Reports present / hinted / absent.
+  Like `inferred_intent`'s L1, it must **quote the actual place-rendering
+  it read** and say whether, at this point, that rendering carries K or
+  is wallpaper. It reports; it never grades place-generativity (§13).
 
-The last three (◎, ✦, ✨) require project context (intent declared,
-act structure set, prior scenes written). They appear only when context
-exists.
+The last four (◎, ✦, ✨, ✧) require project context (intent declared,
+act structure set, prior scenes written, a coordinate claimed). They
+appear only when context exists.
 
 ### Mode-dependent feedback
 
@@ -327,10 +361,18 @@ language specific to the user's material.
 | 5 | World-Bearing      | Whose daily existence most carries the period/world?  |
 | 6 | Hidden in Periphery| Is the real center off the obvious stage?             |
 | 7 | Difficulty as Depth| Whose interiority would be hardest, therefore most worth writing? |
-| 8 | Irreducibility     | If only one name remained in the book, whose?         |
+| 8 | Irreducibility     | If only one name remained in the book, whose? (the "name" may be a place, an institution, or a system — not only a person) |
 
 Angles 2, 4, and 8 are nearly always fertile. The others are selected
 based on material density. AI picks 5-6 angles per session.
+
+**The center of gravity is not always a person.** It may be a place
+(Constitution P1: place is inhabited space), an institution, or a
+system. The synthesis algorithm converges on a place or a system exactly
+as it converges on a person — recurring descriptions point to the same
+thing, and the user names it. A work whose true subject is a system
+still anchors to the coordinate where that system is most itself
+(§17, §18).
 
 ### The Synthesis Algorithm (归纳)
 
@@ -444,6 +486,15 @@ When showing canonical references for §9 purposes:
 - Do not characterize what makes them "good" — only that they exist
 - Never rank one against another
 - Never imply the user's work should resemble any of them
+
+### Place neutrality
+
+Scale neutrality extends to **place**. A single-coordinate work is not a
+smaller work than one traced across a continent. When asking about the
+place-shape (§5), AI must not default a coordinate count, must not imply
+that more places = more scope, and must not suggest that a material
+"needs" to move across places. One coordinate, deeply inhabited, is a
+first-class form.
 
 ---
 
@@ -693,6 +744,14 @@ Non-negotiable in code:
     is honest internal record; it does not become an authority claim
     toward users.
 
+11. **Place-generativity is surfaced, never gated by the tool.** The
+    tool reports whether the place carries the work (§17, the ✧ axis); it
+    never issues the verdict that a work does or does not "owe its
+    existence to its place." That verdict belongs to the editor at
+    submission (Constitution P3). The Situate disclosure preview (§18) is
+    a preview, never an attestation — the binding signature is at
+    submission, not in the tool.
+
 ---
 
 ## 13. What This Methodology Forbids
@@ -719,6 +778,9 @@ To make the boundary unambiguous for contributors:
   interpretations) and §11 auto-trigger (user themselves changed intent)
 - ❌ AI issues quality verdicts on aggregated signals (e.g., "your work
   is vital" / "your work is flat") — see §3 "Aggregation is not verdict"
+- ❌ AI judges whether a work is place-generative / "owes its existence
+  to its place" — that verdict is the editor's at submission (§17). The
+  tool reports whether place currently carries K; it does not grade.
 
 If a PR introduces any of these, it is methodologically out of scope and
 should be rejected even if it improves engagement metrics.
@@ -749,6 +811,12 @@ should be rejected even if it improves engagement metrics.
   with material-specific content (per §3 "Categories not specifics")
 - ✅ AI shows canonical references in UI strictly to demonstrate form
   legitimacy (per §9 carve-out + §12 Invariant 10 carve-out)
+- ✅ AI reports whether a scene's place-rendering carries the work or
+  sits as backdrop, quoting the rendering it read (§6 ✧, §17)
+- ✅ AI points the writer to the place workshop (place_interview) when
+  the place is not yet carrying the work — a path, not a verdict (§17)
+- ✅ AI surfaces the Situate disclosure preview so downstream editorial
+  gates (P3 / P5 / P8 / P11) are met at the start, not at rejection (§18)
 
 ---
 
@@ -793,15 +861,183 @@ That is what we build.
 
 ---
 
-## 17. Versioning the Methodology
+## 17. Place Generativity
 
-This document is METHODOLOGY.md v2.0. Significant changes—especially
+Situate Editions publishes only stories that owe their existence to
+their coordinates (Editorial Constitution P3). A published story could
+not be moved to another place without breaking. This is the
+publication's deepest commitment and its hardest gate.
+
+The methodology's job is **not to enforce P3**. Enforcement lives at
+submission — the AI editor flags, the human editor decides. The
+methodology's job is to **surface the demand early**, so a writer does
+not complete a structurally place-independent draft and meet P3 only as
+a rejection. This is §16 applied to place: lowering the early-decision
+failure rate.
+
+### Two routes to place
+
+A work earns its place by **either** route. Either suffices.
+
+- **Explicit — plot-dependence.** The central event requires this
+  coordinate: a specific architectural feature, a local custom, a
+  geography-determined turn. Move the pin and the events break.
+- **Implicit — rendering-as-carrier.** The events might be imaginable
+  elsewhere, but the meaning lives in how *this* place is rendered.
+  Strip the place-rendering and the meaning-layer collapses.
+
+Most literary work travels the second route. A couple circling a
+decision they will not name could be imagined at any waiting-place; what
+makes the canonical example only-here is that the rendered landscape —
+the pale hills shaped like a thing no one wants, the dry slope against
+the fertile one, the two sets of rails — is the story's only way of
+saying what the dialogue refuses to. The place does not decorate the
+subtext. It carries it.
+
+### Place as a carrier of K
+
+The methodology already admits this. The K-carrier typology (§3,
+Categories not specifics) names the carriers as *character / image /
+**place** / narrator*. When the place is the carrier of K — when the
+weight of what occurs is borne by how the place is rendered — the work
+is place-generative in the implicit sense.
+
+The operative question is therefore **"does the place carry K"** — not
+"could the events move." The second question is the plot test; it
+under-detects exactly the most place-bound literary work, the work whose
+dependence is sensory and structural rather than mechanical. (Compare
+the RUBRIC's warning that a Western conflict template mis-judges
+Chekhovian work; a plot-only place test makes the same error in
+geography.)
+
+### Carrier, not wallpaper
+
+The door must not become a loophole. Rendering that **carries** meaning
+is not rendering that **decorates**.
+
+The test: strip the place-rendering from the prose.
+
+- The meaning-layer collapses → the place was a **carrier**.
+  Place-generative.
+- The scenery is poorer but the meaning survives intact → the place was
+  **wallpaper**. Decorative — and decoration is what P3 exists to
+  decline.
+
+### Where the test lives
+
+Place-as-carrier is **constructed, not pre-given**. A writer does not
+discover at the outline stage that their place carries K; they build it,
+sentence by sentence, in the prose. So the test lives at **situate.at**,
+not situate.map.
+
+- **situate.map / situate.act** name only that the work is
+  place-anchored and which coordinate(s) it claims (§5, §18).
+- **situate.at** reports whether the carrier is built yet — the **✧
+  Serves place** axis (§6). ✧ reports like §3's L1: it quotes the actual
+  place-rendering it read and says whether, at this point in the draft,
+  that rendering carries K or sits as backdrop. It reports what is on the
+  page. It does not grade place-generativity — that is the editor's
+  verdict (§13).
+
+### Divergence from P3 v0.2.1, disclosed
+
+This is deliberately **more generous** than the Constitution's current
+guardrail. P3 v0.2.1 says: "If the story's meaning would survive
+transplant to another setting — even if the surface description loses
+something — the dependence is decorative, not structural."
+
+That guardrail assumes meaning is separable from rendering, so that one
+can transplant the meaning and test whether it survives. For
+pure-subtext work this is false: there is no meaning floating above the
+rendering to transplant; the rendering is the only place the meaning
+exists. Applied literally, the guardrail mis-declines the most
+subtextual literary work — the work most worth protecting.
+
+The methodology adopts the **"does place carry K"** test internally and
+flags this as a candidate **P3 v0.2.2** refinement. Until the
+constitution moves, the divergence stands openly: at submission,
+P3-as-written governs (the editor's verdict); inside the tool, the
+writer is told where the two tests part, so the gap is a known risk and
+not a surprise.
+
+---
+
+## 18. The Situate Disclosure Preview
+
+The Editorial Constitution asks every author for seven disclosures at
+submission. By then the work is finished. A writer who learns at
+submission that their fiction/reality status, or their relationship to
+the place, raises a gate has learned it too late to write differently.
+
+situate.map gains a lightweight **preview** of those fields. A preview,
+**not** the attestation — the binding legal signature is at submission,
+where it belongs. The purpose is §16: meet the downstream gates at the
+start, not as a rejection at the end. The tool shows the writer the
+shape of the door. The constitution is the door.
+
+The preview surfaces four things. Each is a question the writer answers
+or a flag the writer acknowledges; the tool **reflects**, and **judges
+none of them** (§3).
+
+| Previewed | Constitution | Note |
+|---|---|---|
+| Coordinate(s) + generativity route | P3 | Routes in §17; the carrier is built later, in situate.at |
+| Fiction / based-on-reality | P11 | Declared **once, at project level** — not re-decided scene by scene |
+| Real, identifiable persons | P5 | A flag the writer acknowledges; consent is the writer's legal responsibility at submission |
+| Place is real, not a private address | P8 | A flag; private homes / schools / clinics / places of worship are the constitution's hard line |
+
+Two consequences worth stating:
+
+- **The fiction/reality status is a project-level declaration.**
+  situate.at's writing mode (real / imagined / in-between, §6) *reads*
+  this declaration rather than re-asking per scene. A whole work has one
+  relationship to the truth; the methodology records it once. This closes
+  the gap where truth-status was emergent across scenes rather than
+  declared.
+- **The center of gravity may be a place, an institution, or a system**
+  — not only a person (§7). A work whose true subject is a system still
+  anchors to the coordinate where that system is most itself. The preview
+  asks for that coordinate; situate.at builds the rendering that makes it
+  carry (§17).
+
+The preview never blocks. A writer may proceed with a place-independent
+central question, a real-person story, or an undecided truth-status. The
+tool's only job is that the writer sees the gate now, while there is
+still time to write toward it — or to decide, with full information, that
+this work belongs somewhere other than Situate.
+
+---
+
+## 19. Versioning the Methodology
+
+This document is METHODOLOGY.md v2.1. Significant changes—especially
 to §3 (Ethical Bottom Line), §7 (Socratic Discipline), §9 (Scale
-Neutrality), §10 (Intent Growth), or §13/§14—require explicit version
-bumps and changelog entries.
+Neutrality), §10 (Intent Growth), §13/§14, or §17 (Place
+Generativity)—require explicit version bumps and changelog entries.
 
 The technical implementation can iterate freely. The methodology
 iterates with deliberation.
+
+### v2.1 changelog (from v2.0)
+
+- Added §17: Place Generativity (two routes — plot-dependence and
+  rendering-as-carrier; place as a carrier of K; carrier vs wallpaper;
+  the test lives at situate.at; disclosed divergence from Constitution
+  P3 v0.2.1, flagged as a candidate P3 v0.2.2 refinement)
+- Added §18: The Situate Disclosure Preview (project-level preview of the
+  constitution's seven fields; closes the gap where truth-status was
+  decided per scene rather than declared once)
+- §7: the center of gravity may be a place, an institution, or a system,
+  not only a person
+- §5: a place-shape (one coordinate / several / a route) joins the
+  time-shape; §9 scale neutrality extends to place neutrality
+- §6: ✧ Serves place joins situate.at feedback (eight categories, was
+  seven)
+- §12: Invariant 11 — place-generativity is surfaced, never gated by the
+  tool; the disclosure preview is preview, not attestation
+- §13/§14 updated: the tool reports whether place carries the work and
+  points to the place workshop, but never issues the place-generativity
+  verdict (the editor's, at submission)
 
 ### v2.0 changelog (from v1.0)
 
@@ -822,7 +1058,7 @@ iterates with deliberation.
 
 ---
 
-## 18. The Real Test
+## 20. The Real Test
 
 A truly literature-serving tool must be able to host:
 
@@ -836,11 +1072,12 @@ A truly literature-serving tool must be able to host:
 - Pure inner-consciousness work with no external action
 - Multi-perspective ensemble work
 - Single-perspective deeply interior work
+- Place-bound work where the coordinate, not the plot, carries the meaning
 
 If the tool only hosts one of these well, it has not yet become a
 literature-serving tool. It has become a tool for one kind of literature.
 
-v2.0 hosts most of these. Future versions should host the rest.
+v2.1 hosts most of these. Future versions should host the rest.
 
 The test for any future addition:
 **Can this addition help a writer working in a tradition the tool
@@ -851,7 +1088,7 @@ a methodology change.
 
 ---
 
-## 19. The Promise (Updated)
+## 21. The Promise (Updated)
 
 When a user finishes a book that originated in this tool, they should be
 able to honestly say:
@@ -866,4 +1103,4 @@ Build what passes. Cut what doesn't.
 
 ---
 
-*End of METHODOLOGY.md v2.0*
+*End of METHODOLOGY.md v2.1*
