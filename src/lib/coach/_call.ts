@@ -2,7 +2,7 @@ import type Anthropic from "@anthropic-ai/sdk";
 import { jsonrepair } from "jsonrepair";
 
 import { anthropicClient } from "@/lib/ai-editor/client";
-import { getProviderOrDefault } from "@/lib/skeleton-diagnostic/providers/registry";
+import { DEFAULT_PROVIDER_ID } from "@/lib/skeleton-diagnostic/providers/registry";
 
 /**
  * Generic "structured Claude call with a custom prompt + tool schema."
@@ -86,16 +86,21 @@ export interface FocusedCallOpts {
 export async function focusedCall<T>(
   opts: FocusedCallOpts,
 ): Promise<FocusedCallResult<T>> {
-  const provider = getProviderOrDefault(opts.providerId);
-  // The provider object only exposes diagnose(). We sneak around it by
-  // looking at the id and routing manually. Brittle but contained.
-  if (provider.id.startsWith("anthropic:")) {
-    return callAnthropic<T>(opts, provider.id);
+  // Route by the requested id's family prefix — deliberately NOT through
+  // the registry. Resolving via getProviderOrDefault() meant any id the
+  // registry didn't happen to list (e.g. a newly wired Qwen model) silently
+  // fell back to the Anthropic default and hit the wrong API — which surfaced
+  // as ERR_CONNECTION_CLOSED. Prefix routing keeps providerIdToOpenAICompat-
+  // Config (below) the single source of truth for these calls; an unknown
+  // family throws loudly instead of misrouting.
+  const id = opts.providerId ?? DEFAULT_PROVIDER_ID;
+  if (id.startsWith("anthropic:")) {
+    return callAnthropic<T>(opts, id);
   }
-  if (provider.id.startsWith("deepseek:") || provider.id.startsWith("alibaba:")) {
-    return callOpenAICompat<T>(opts, provider.id);
+  if (id.startsWith("deepseek:") || id.startsWith("alibaba:")) {
+    return callOpenAICompat<T>(opts, id);
   }
-  throw new Error(`focusedCall: unknown provider family ${provider.id}`);
+  throw new Error(`focusedCall: unknown provider family ${id}`);
 }
 
 /**
