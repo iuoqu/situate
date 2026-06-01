@@ -47,6 +47,11 @@ K_absent
 
 注意：很多 prose 处于 K_implicit 和 K_present 之间。**诚实判 K_implicit**，不要把 K_implicit 误升为 K_present。
 
+音区中立（重要）：K 可以是轻的。温暖的记忆、喜剧性的失败、日常细节的发现、小社交尴尬——
+这些都是合法的 K_present 或 K_implicit。**不得因语调轻盈、幽默或筹码看似微小而将判定降为
+K_implicit 或 K_absent**。轻盈的语调 ≠ K 缺席。只有真正的事件流（无观察判断、无任何意识的
+选择性记录）才判 K_absent。
+
 通过 submit_judgment 工具输出。`;
 
 export const TOOL_NAME = "submit_judgment";
