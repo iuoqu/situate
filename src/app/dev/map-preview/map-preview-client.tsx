@@ -214,9 +214,20 @@ export function MapPreviewClient() {
     }
   }
 
-  async function pingRoute(testAnthropic = false) {
-    const url = testAnthropic ? "/api/map/ping?test=anthropic" : "/api/map/ping";
-    setPingResult(testAnthropic ? "testing Anthropic API (10s timeout)…" : "pinging…");
+  async function pingRoute(mode: "env" | "anthropic" | "tool" = "env") {
+    const url =
+      mode === "anthropic"
+        ? "/api/map/ping?test=anthropic"
+        : mode === "tool"
+          ? "/api/map/ping?test=tool"
+          : "/api/map/ping";
+    const label =
+      mode === "anthropic"
+        ? "testing bare Anthropic call…"
+        : mode === "tool"
+          ? "testing tool_use call (25s timeout)…"
+          : "pinging…";
+    setPingResult(label);
     try {
       const resp = await fetch(url, { credentials: "same-origin" });
       const text = await resp.text();
@@ -253,18 +264,25 @@ export function MapPreviewClient() {
             </button>
           ))}
           <button
-            onClick={() => pingRoute(false)}
+            onClick={() => pingRoute("env")}
             style={{ ...btnGhost, fontSize: 11, marginLeft: 8 }}
             title="GET /api/map/ping — env check only, no AI call"
           >
             🔍 ping
           </button>
           <button
-            onClick={() => pingRoute(true)}
+            onClick={() => pingRoute("anthropic")}
             style={{ ...btnGhost, fontSize: 11 }}
-            title="GET /api/map/ping?test=anthropic — bare Anthropic API call, 10s timeout"
+            title="GET /api/map/ping?test=anthropic — bare Anthropic API call, no tools"
           >
-            🔍 test anthropic
+            🔍 bare call
+          </button>
+          <button
+            onClick={() => pingRoute("tool")}
+            style={{ ...btnGhost, fontSize: 11 }}
+            title="GET /api/map/ping?test=tool — Anthropic call WITH tool_choice + cache_control"
+          >
+            🔍 tool call
           </button>
           {pingResult && (
             <span style={{ fontSize: 11, fontFamily: "monospace", color: pingResult.startsWith("2") ? "#3a7a3a" : "#a04040", maxWidth: 400, wordBreak: "break-all" }}>
