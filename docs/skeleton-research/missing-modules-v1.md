@@ -298,23 +298,23 @@ Blocked on user approval of `methodology-v2-draft.md`. Once canonized:
 - [x] **B.0.7** RESOLVED: §18.9 "AI gives categories, user gives specifics" principle
 - [x] **B.0.8** RESOLVED: §17 promise extension "Tool promises clarity, not results"
 
-### B.1 L1.1 — vitality readiness-signal refactor (~3h)
+### B.1 L1.1 — vitality readiness-signal refactor (~3h) — DONE (commit abe9422)
 The current `vitality` module ranks prose with "vital/borderline/flat" verdicts — methodologically forbidden (§3.4 + §13). After §18 canonized:
-- [x] **B.1.1** RESOLVED: Option B — readiness signals report. Keep 5-signal aggregation UI; remove verdict label. Per "Aggregation is not verdict" clarification, the writer reads signal counts as copilot data, not as a quality grade.
-- [ ] **B.1.2** Rewrite `computeVitality()` to return signal report without verdict
+- [x] **B.1.1** RESOLVED: Option B — readiness signals report. Keep 5-signal aggregation UI; remove verdict label.
+- [x] **B.1.2** Rewrite `computeVitality()` to return signal report without verdict — DONE
   - Drop `verdict: "vital" | "borderline" | "flat"` from `VitalityResult`
   - Drop `summary` aesthetic phrasing ("有活力" / "活力不足" / "像小学生日记")
-  - Keep `signals[]` structure showing each per-signal status (firing / missing / unavailable)
-  - Replace `summary` with neutral fact-string: "5 项就绪信号中，3 项当前 firing" or similar
-- [ ] **B.1.3** Rewrite `VitalityBadge` UI:
+  - Keep `signals[]` structure showing each per-signal status (firing / not firing / unavailable)
+  - Replace `summary` with neutral fact-string: "5 项已评估，其中 3 项 firing"
+- [x] **B.1.3** Rewrite `VitalityBadge` UI — DONE
   - Drop verdict color palette (vital green / flat red)
-  - Single neutral panel header: "结构就绪信号" (5/5 firing) or similar
-  - Per-signal rows with √/✗/· glyphs and one-line reason
-  - No "好/坏" implication anywhere
-- [ ] **B.1.4** Drive-aware: under entangled drive, swap signal set
-  - Purposeful: K / 因果 / 人物 / 设定 / subtext (current 5)
+  - Single neutral panel
+  - Per-signal rows with √/✗/· glyphs (status markers, not value)
+  - No good/bad implication
+- [ ] **B.1.4** Drive-aware: swap signal set for entangled drive — DEFERRED until the_thing_arrived + recurrent_image diagnosers exist (B.5/B.6 prerequisites)
+  - Purposeful: K_carrier / causation / character backstory / place participates / subtext (current 5)
   - Entangled: K_carrier=image-or-narrator / recurrent_image_strength / haunting_image_presence (the_thing_arrived axes)
-- [ ] **B.1.5** Test wording with first internal user — does it read as "tool reports state" not "tool grades me"?
+- [ ] **B.1.5** Test wording with first internal user — pending real user testing
 
 ### B.2 L1.2 (post-canon) — frame-aware lay-translator (~5h)
 After L1.2 partial cleanup (already done), still need:
