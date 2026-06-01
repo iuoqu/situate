@@ -444,14 +444,20 @@ function QuestionCard({
           {question.angle_name} (角度 {question.angle_id})
         </span>
       </div>
-      <p style={{ margin: "0 0 10px 30px", fontSize: 15, lineHeight: 1.6, color: "#222",
+      <p style={{ margin: "0 0 6px 30px", fontSize: 15, lineHeight: 1.6, color: "#222",
         fontFamily: 'Georgia, "Times New Roman", serif' }}>
         {question.question}
       </p>
+      {question.opener && (
+        <p style={{ margin: "0 0 10px 30px", fontSize: 13, lineHeight: 1.55,
+          color: "#8a7a55", fontStyle: "italic" }}>
+          💡 {question.opener}
+        </p>
+      )}
       <textarea
         value={answer}
         onChange={(e) => onAnswer(e.target.value)}
-        placeholder="你的回答…"
+        placeholder="随便写，写不好也没关系…"
         rows={3}
         style={{
           ...textareaStyle,
