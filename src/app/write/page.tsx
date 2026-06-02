@@ -3,7 +3,7 @@ import Link from "next/link";
 import { redirect } from "next/navigation";
 
 import { db } from "@/db";
-import { storyDrafts, type DraftSection } from "@/db/schema";
+import { storyDrafts, type DraftSection, type MapData } from "@/db/schema";
 import { DEFAULT_TEMPLATE_ID } from "@/lib/templates/registry";
 import { getServerSupabase } from "@/lib/supabase/server";
 
@@ -62,14 +62,29 @@ export default async function WritePage() {
       )
     : 0;
 
-  // Separate in-progress drafts: Path B projects (have map_data) vs Path A
-  const isPathB = lastDraft &&
+  // Where does "Continue →" send the writer? The key signal is templateId:
+  // once it's set, writing has begun (always for Path A; for Path B after
+  // begin-writing assigns the scaffold) so we resume in the editor — the
+  // center card banner travels there anyway. Otherwise the draft is still
+  // in the guided pre-writing flow: route to act if the center is named,
+  // else back to map to keep finding it.
+  const mapData =
+    lastDraft &&
     typeof lastDraft.mapData === "object" &&
-    lastDraft.mapData !== null &&
-    Object.keys(lastDraft.mapData as object).length > 0;
-  const resumeHref = isPathB
-    ? `/write/project/${lastDraft!.id}/map`
-    : `/write/template/${lastDraft!.id}`;
+    lastDraft.mapData !== null
+      ? (lastDraft.mapData as MapData)
+      : null;
+  const hasMap = mapData !== null && Object.keys(mapData).length > 0;
+
+  let resumeHref = lastDraft ? `/write/template/${lastDraft.id}` : "/write";
+  let inGuidedFlow = false;
+  if (lastDraft && !lastDraft.templateId && hasMap) {
+    inGuidedFlow = true;
+    resumeHref =
+      mapData!.phase === "complete"
+        ? `/write/project/${lastDraft.id}/act`
+        : `/write/project/${lastDraft.id}/map`;
+  }
 
   return (
     <main style={mainStyle}>
@@ -82,7 +97,7 @@ export default async function WritePage() {
         <section style={resumePanelStyle} aria-label="Continue your draft">
           <div style={resumeMainStyle}>
             <p style={resumeKickerStyle}>
-              {isPathB ? "Guided project in progress" : "Draft in progress"}
+              {inGuidedFlow ? "Guided project in progress" : "Draft in progress"}
             </p>
             <h2 style={resumeTitleStyle}>
               {lastDraft.title?.trim() || "Untitled"}
