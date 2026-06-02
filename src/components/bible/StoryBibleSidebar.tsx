@@ -2,6 +2,10 @@
 
 import { useCallback, useEffect, useState } from "react";
 
+import type { EntityProfile } from "@/db/schema";
+
+import { EntityProfilePanel } from "./EntityProfilePanel";
+
 /**
  * StoryBibleSidebar — manual-fill UI for the Story Bible (Milestone B.2).
  *
@@ -240,6 +244,7 @@ function EntityRow({
   draftId: string;
 }) {
   const [editing, setEditing] = useState(false);
+  const [profileOpen, setProfileOpen] = useState(false);
   if (editing) {
     return (
       <li style={rowStyle}>
@@ -255,6 +260,12 @@ function EntityRow({
       </li>
     );
   }
+  // A profile is "started" if any attribute key holds a non-empty value —
+  // surfaces a subtle marker so the writer can see which entities they've
+  // already enriched.
+  const hasProfile = Object.values(entity.attributes ?? {}).some(
+    (v) => typeof v === "string" && v.trim().length > 0,
+  );
   return (
     <li style={rowStyle}>
       <div style={rowMainStyle}>
@@ -263,6 +274,7 @@ function EntityRow({
         {entity.isRealPerson === true && (
           <span style={realPersonChipStyle}>real person</span>
         )}
+        {hasProfile && <span style={profileDotStyle} title="有档案">●</span>}
       </div>
       {entity.aliases.length > 0 && (
         <div style={aliasesStyle}>
@@ -270,6 +282,13 @@ function EntityRow({
         </div>
       )}
       <div style={rowActionsStyle}>
+        <button
+          type="button"
+          onClick={() => setProfileOpen((v) => !v)}
+          style={inlineActionStyle}
+        >
+          {profileOpen ? "收起档案" : "档案"}
+        </button>
         <button
           type="button"
           onClick={() => setEditing(true)}
@@ -297,6 +316,14 @@ function EntityRow({
           delete
         </button>
       </div>
+      {profileOpen && (
+        <EntityProfilePanel
+          draftId={draftId}
+          entityId={entity.id}
+          entityType={entity.entityType}
+          initial={(entity.attributes ?? {}) as EntityProfile}
+        />
+      )}
     </li>
   );
 }
@@ -718,6 +745,11 @@ const realPersonChipStyle: React.CSSProperties = {
   border: "1px solid #d97706",
   color: "#7c2d12",
   letterSpacing: 0.3,
+};
+const profileDotStyle: React.CSSProperties = {
+  fontSize: 8,
+  color: "#9b8a6b",
+  alignSelf: "center",
 };
 const aliasesStyle: React.CSSProperties = {
   fontSize: 11,

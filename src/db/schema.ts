@@ -1066,6 +1066,26 @@ export type PublicationSection = (typeof publicationSection.enumValues)[number];
 // ─── Story Bible types (0012) ─────────────────────────────────────────────
 export type Entity = typeof entities.$inferSelect;
 export type NewEntity = typeof entities.$inferInsert;
+
+// Shape of the `entities.attributes` jsonb when used as a Path B character /
+// place profile (档案). Every field is optional — the writer fills in what
+// they have, when they have it. AI scene feedback reads only what's declared
+// here (§3 Declaration vs behavior); it never infers from writing behaviour.
+//
+// For places, the same fields are reused with place-appropriate labels in
+// the UI (biography → 历史/背景, personality → 氛围/特征, etc.).
+export interface EntityProfile {
+  // Functional role around the center (§2c): witness / contrast / challenger
+  // / bearer. Open string so traditions can extend the vocabulary.
+  function_role?: "witness" | "contrast" | "challenger" | "bearer" | string;
+  biography?: string;       // 生平 / 背景 — life before the work's timeframe
+  personality?: string;     // 性格 / 行为方式 — recurring patterns, habits
+  author_relation?: string; // 作者和这个人的关系 — how the writer knows them
+  hardest_part?: string;    // 最难写准确的 — character-level version of center card's
+  arc_start?: string;       // 弧光：作品开头的状态
+  arc_end?: string;         // 弧光：作品结尾的状态
+}
+
 export type EntityNameRendering = typeof entityNameRenderings.$inferSelect;
 export type NewEntityNameRendering = typeof entityNameRenderings.$inferInsert;
 export type Relationship = typeof relationships.$inferSelect;
