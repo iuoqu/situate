@@ -129,8 +129,26 @@ export function ActClient({ draftId, mapData, initialActData }: Props) {
     setPlaceCoords((prev) => prev.filter((_, idx) => idx !== i));
   }
 
-  function goToWrite() {
-    router.push(`/write/template/${draftId}`);
+  async function goToWrite() {
+    setSaving(true);
+    setError(null);
+    try {
+      // begin-writing assigns the template scaffold (Path B drafts have no
+      // templateId yet) and 303-redirects to the editor.
+      const resp = await fetch(`/api/write/project/${draftId}/begin-writing`, {
+        method: "POST",
+        redirect: "manual",
+      });
+      if (resp.type === "opaqueredirect" || resp.redirected) {
+        router.push(resp.url || `/write/template/${draftId}`);
+        return;
+      }
+      const location = resp.headers.get("location");
+      router.push(location || `/write/template/${draftId}`);
+    } catch (e) {
+      setError(e instanceof Error ? e.message : String(e));
+      setSaving(false);
+    }
   }
 
   // ── Render ────────────────────────────────────────────────────────────────
@@ -332,8 +350,10 @@ export function ActClient({ draftId, mapData, initialActData }: Props) {
             )}
           </div>
 
-          <button onClick={goToWrite} style={buttonStyle}>
-            开始写作 →
+          {error && <p style={errorStyle}>{error}</p>}
+
+          <button onClick={goToWrite} disabled={saving} style={buttonStyle}>
+            {saving ? "准备中…" : "开始写作 →"}
           </button>
         </div>
       )}

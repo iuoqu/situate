@@ -382,7 +382,13 @@ export function TemplateEditor({
         </div>
       </header>
 
-      {centerCard && <CenterCardBanner card={centerCard} />}
+      {centerCard ? (
+        <CenterCardBanner card={centerCard} />
+      ) : (
+        <Link href={`/write/project/${draftId}/map`} style={findCenterStyle}>
+          卡住了？让 situate 帮你找到这篇的中心 →
+        </Link>
+      )}
 
       <ol style={sectionListStyle}>
         {sections.map((data, idx) => {
@@ -994,6 +1000,20 @@ const retryButtonStyle: React.CSSProperties = {
   textDecoration: "underline",
   cursor: "pointer",
   fontSize: 12,
+};
+
+// "Find my center" escape hatch (Path A → B), shown when no center card yet.
+const findCenterStyle: React.CSSProperties = {
+  display: "block",
+  padding: "12px 16px",
+  marginBottom: 28,
+  background: "#faf8f2",
+  border: "1px dashed #d4cfc2",
+  borderRadius: 4,
+  fontSize: 13,
+  color: "#8a7450",
+  textDecoration: "none",
+  letterSpacing: 0.2,
 };
 
 // Center card banner styles

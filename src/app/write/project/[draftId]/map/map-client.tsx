@@ -165,6 +165,27 @@ export function MapClient({ draftId, initialMapData }: Props) {
     }
   }
 
+  // ── Skip structure, go straight to writing ──────────────────────────────
+  async function beginWriting() {
+    setLoading(true);
+    setError(null);
+    try {
+      const resp = await fetch(`/api/write/project/${draftId}/begin-writing`, {
+        method: "POST",
+        redirect: "manual",
+      });
+      if (resp.type === "opaqueredirect" || resp.redirected) {
+        router.push(resp.url || `/write/template/${draftId}`);
+        return;
+      }
+      const location = resp.headers.get("location");
+      router.push(location || `/write/template/${draftId}`);
+    } catch (e) {
+      setError(e instanceof Error ? e.message : String(e));
+      setLoading(false);
+    }
+  }
+
   // ── Render ───────────────────────────────────────────────────────────────
   return (
     <main style={mainStyle}>
@@ -352,12 +373,21 @@ export function MapClient({ draftId, initialMapData }: Props) {
               </div>
             )}
           </div>
-          <button
-            style={primaryBtn}
-            onClick={() => router.push(`/write/project/${draftId}/act`)}
-          >
-            定结构 →
-          </button>
+          <div style={{ display: "flex", gap: 12, flexWrap: "wrap" }}>
+            <button
+              style={primaryBtn}
+              onClick={() => router.push(`/write/project/${draftId}/act`)}
+            >
+              定结构 →
+            </button>
+            <button
+              style={{ ...secondaryBtn, opacity: loading ? 0.5 : 1 }}
+              disabled={loading}
+              onClick={beginWriting}
+            >
+              {loading ? "准备中…" : "直接开始写 →"}
+            </button>
+          </div>
         </section>
       )}
     </main>
