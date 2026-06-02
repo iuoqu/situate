@@ -3,12 +3,30 @@
 Working notes for Situate Editions. Lives in the repo so it survives
 between sessions and can be checked in PR diffs.
 
-Last refresh: end-of-session after Milestone A+ (template-write path,
-per-section locations, author dashboard).
+Last refresh: end-of-session after Milestone C (Path B guided write —
+full flow shipped: project setup → situate.map → situate.act → editor
+handoff, with character/place profiles and Path A↔B bridge).
 
 Design doc added: `docs/path-b-design.md` — full Path B (guided write
 for uncertain authors) from project setup through situate.map →
 situate.act → situate.at, including character/place profile design.
+
+Milestone C (Path B) — SHIPPED:
+- C.1 schema: drive_type, truth_declaration, map_data, act_data columns
+  (drizzle/0014_path_b.sql) + EntityProfile type on entities.attributes
+- C.2 situate.map flow: /write/project/[id]/map — material → questions →
+  answers → synthesis → center → center card
+- C.3 situate.act layer: /write/project/[id]/act — time shape + place shape
+  with per-combination structural-consequence notes
+- C.4 center card banner + 2-question scene-entry prompts in template editor
+- C.5 character/place profiles (档案) in StoryBibleSidebar → entities.attributes
+- C.6 Path A↔B bridge: begin-writing endpoint assigns template scaffold to
+  Path B drafts; escape hatches both directions; resume routing keyed off
+  templateId
+Remaining Path B polish (deferred): LLM-generated core_question /
+hardest_part / not_center for the center card (currently synthesis.message
++ blanks); arc generation for supporting characters; scene-level
+consistency feedback (§3 phase 3).
 
 ---
 
@@ -21,11 +39,14 @@ section below with the detailed scope.
    The next major direction: a structured "brain" captured during
    writing that drives translation, diagnostics, and growth. Includes
    the Pearls (遗珠) carveout for non-place-anchored fiction.
-1a. **Path B — Guided write for uncertain authors** ([design doc](path-b-design.md))
-    Full methodology path: project setup → situate.map → situate.act →
-    situate.at. Prerequisite: situate.map out of /dev/map-preview and
-    into a real project flow. Character/place profiles (2c) are the
-    UX-facing precursor to Milestone B's Story Bible entities.
+1a. **Path B — Guided write for uncertain authors** ✅ SHIPPED (Milestone C)
+    ([design doc](path-b-design.md)) Full methodology path is live:
+    project setup → situate.map → situate.act → editor handoff, with
+    character/place profiles wired into Story Bible entities and a
+    Path A↔B bridge. See the "Milestone C — SHIPPED" note at the top.
+    Deferred polish: LLM-generated center-card fields (core_question,
+    hardest_part, not_center), supporting-character arc generation, and
+    scene-level consistency feedback (§3 phase 3).
 2. **DisclosureChat** — folded INTO Milestone B (the Story Bible
    replaces the chat as the disclosure-capture mechanism). Kept here
    as a name for reference.
