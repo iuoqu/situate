@@ -2,7 +2,7 @@ import { and, eq } from "drizzle-orm";
 import { notFound, redirect } from "next/navigation";
 
 import { db } from "@/db";
-import { storyDrafts, type DraftSection } from "@/db/schema";
+import { storyDrafts, type DraftSection, type MapData } from "@/db/schema";
 import {
   DEFAULT_TRADITION_ID,
   getTradition,
@@ -116,6 +116,7 @@ export default async function TemplateWritePage({
   return (
     <TemplateEditor
       draftId={draft.id}
+      centerCard={(draft.mapData as MapData | null)?.center_card ?? null}
       tradition={{
         id: tradition.id,
         name: tradition.name,

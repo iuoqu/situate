@@ -7,7 +7,7 @@ import { StoryBibleSidebar } from "@/components/bible/StoryBibleSidebar";
 import { InlineAIPanel } from "@/components/coach/inline-ai-panel";
 import { Section1Hooks } from "@/components/template/Section1Hooks";
 import { SectionLocationPicker } from "@/components/template/SectionLocationPicker";
-import type { DraftSection, SupportedLanguage } from "@/db/schema";
+import type { DraftSection, MapData, SupportedLanguage } from "@/db/schema";
 
 /**
  * TemplateEditor — the multi-section guided write surface (Year 1
@@ -72,6 +72,7 @@ interface Props {
   initialTitle: string;
   initialSections: DraftSection[];
   language: SupportedLanguage;
+  centerCard?: MapData["center_card"] | null;
 }
 
 type SaveState = "idle" | "saving" | "saved" | "error";
@@ -89,6 +90,7 @@ export function TemplateEditor({
   initialTitle,
   initialSections,
   language,
+  centerCard = null,
 }: Props) {
   const [title, setTitle] = useState(initialTitle);
   const [sections, setSections] = useState<DraftSection[]>(initialSections);
@@ -380,6 +382,8 @@ export function TemplateEditor({
         </div>
       </header>
 
+      {centerCard && <CenterCardBanner card={centerCard} />}
+
       <ol style={sectionListStyle}>
         {sections.map((data, idx) => {
           // Section definitions live in the tradition; the draft only
@@ -486,6 +490,7 @@ export function TemplateEditor({
                   }}
                 />
               )}
+              {centerCard && <SceneEntryPrompts sectionId={sectionDef.id} />}
               <textarea
                 value={data?.content ?? ""}
                 onChange={(e) =>
@@ -644,6 +649,90 @@ function SaveIndicator({
     return <span style={indicatorMutedStyle}>Saved · {human} ago</span>;
   }
   return <span style={indicatorMutedStyle}>Draft loaded.</span>;
+}
+
+// ── Path B: center card banner ────────────────────────────────────────────
+
+function CenterCardBanner({ card }: { card: NonNullable<MapData["center_card"]> }) {
+  const [expanded, setExpanded] = useState(false);
+  return (
+    <div style={ccBannerStyle}>
+      <div style={ccTopRowStyle}>
+        <div>
+          <span style={ccLabelStyle}>中心</span>
+          <span style={ccNameStyle}>{card.center}</span>
+        </div>
+        <button
+          type="button"
+          onClick={() => setExpanded((v) => !v)}
+          style={ccToggleStyle}
+          aria-label={expanded ? "收起" : "展开"}
+        >
+          {expanded ? "收起" : "展开"}
+        </button>
+      </div>
+      {expanded && (
+        <div style={ccExpandedStyle}>
+          {card.core_question && (
+            <div style={ccRowStyle}>
+              <span style={ccFieldLabel}>核心问题</span>
+              <span>{card.core_question}</span>
+            </div>
+          )}
+          {card.phrases.length > 0 && (
+            <div style={ccRowStyle}>
+              <span style={ccFieldLabel}>你反复出现的词</span>
+              <span>{card.phrases.join("、")}</span>
+            </div>
+          )}
+          {card.hardest_part && (
+            <div style={ccRowStyle}>
+              <span style={ccFieldLabel}>最难的地方</span>
+              <span>{card.hardest_part}</span>
+            </div>
+          )}
+          {card.not_center.length > 0 && (
+            <div style={ccRowStyle}>
+              <span style={ccFieldLabel}>不是中心的</span>
+              <span style={{ color: "#888" }}>{card.not_center.join("、")}</span>
+            </div>
+          )}
+        </div>
+      )}
+    </div>
+  );
+}
+
+// ── Path B: scene-entry prompts ───────────────────────────────────────────
+
+function SceneEntryPrompts({ sectionId }: { sectionId: string }) {
+  const [dismissed, setDismissed] = useState(false);
+  if (dismissed) return null;
+  return (
+    <div style={scenePromptsStyle}>
+      <div style={scenePromptsHeaderStyle}>
+        <span style={scenePromptsLabelStyle}>场景定位</span>
+        <button
+          type="button"
+          onClick={() => setDismissed(true)}
+          style={scenePromptsDismissStyle}
+          aria-label="Dismiss"
+        >
+          ×
+        </button>
+      </div>
+      <div style={scenePromptsBodyStyle}>
+        <div style={sceneQStyle}>
+          <span style={sceneQNumStyle}>1</span>
+          <span>谁在这个场景里？在哪个空间？</span>
+        </div>
+        <div style={sceneQStyle}>
+          <span style={sceneQNumStyle}>2</span>
+          <span>这个场景里第一个具体的细节是什么？（画面、声音、气味、动作）</span>
+        </div>
+      </div>
+    </div>
+  );
 }
 
 function countWords(s: string): number {
@@ -905,4 +994,109 @@ const retryButtonStyle: React.CSSProperties = {
   textDecoration: "underline",
   cursor: "pointer",
   fontSize: 12,
+};
+
+// Center card banner styles
+const ccBannerStyle: React.CSSProperties = {
+  background: "#1a1a1a",
+  color: "white",
+  borderRadius: 4,
+  padding: "14px 18px",
+  marginBottom: 28,
+};
+const ccTopRowStyle: React.CSSProperties = {
+  display: "flex",
+  alignItems: "baseline",
+  justifyContent: "space-between",
+  gap: 12,
+};
+const ccLabelStyle: React.CSSProperties = {
+  fontSize: 10,
+  letterSpacing: 2,
+  textTransform: "uppercase",
+  color: "#666",
+  marginRight: 10,
+};
+const ccNameStyle: React.CSSProperties = {
+  fontFamily: 'Georgia, "Times New Roman", serif',
+  fontSize: 17,
+};
+const ccToggleStyle: React.CSSProperties = {
+  background: "none",
+  border: "none",
+  color: "#888",
+  fontSize: 11,
+  letterSpacing: 0.5,
+  cursor: "pointer",
+  flexShrink: 0,
+};
+const ccExpandedStyle: React.CSSProperties = {
+  marginTop: 12,
+  display: "flex",
+  flexDirection: "column",
+  gap: 8,
+  borderTop: "1px solid #333",
+  paddingTop: 12,
+};
+const ccRowStyle: React.CSSProperties = {
+  display: "flex",
+  gap: 10,
+  fontSize: 13,
+  lineHeight: 1.5,
+};
+const ccFieldLabel: React.CSSProperties = {
+  color: "#666",
+  flexShrink: 0,
+  fontSize: 11,
+  letterSpacing: 0.5,
+  paddingTop: 1,
+  minWidth: 100,
+};
+
+// Scene-entry prompts styles
+const scenePromptsStyle: React.CSSProperties = {
+  background: "#f5f2eb",
+  border: "1px solid #e0d9c8",
+  borderRadius: 3,
+  padding: "10px 14px",
+};
+const scenePromptsHeaderStyle: React.CSSProperties = {
+  display: "flex",
+  justifyContent: "space-between",
+  alignItems: "center",
+  marginBottom: 8,
+};
+const scenePromptsLabelStyle: React.CSSProperties = {
+  fontSize: 10,
+  letterSpacing: 2,
+  textTransform: "uppercase",
+  color: "#9b8a6b",
+};
+const scenePromptsDismissStyle: React.CSSProperties = {
+  background: "none",
+  border: "none",
+  color: "#aaa",
+  fontSize: 16,
+  cursor: "pointer",
+  lineHeight: 1,
+  padding: 0,
+};
+const scenePromptsBodyStyle: React.CSSProperties = {
+  display: "flex",
+  flexDirection: "column",
+  gap: 6,
+};
+const sceneQStyle: React.CSSProperties = {
+  display: "flex",
+  gap: 10,
+  fontSize: 13,
+  color: "#444",
+  lineHeight: 1.5,
+};
+const sceneQNumStyle: React.CSSProperties = {
+  color: "#9b8a6b",
+  fontFamily: 'Georgia, "Times New Roman", serif',
+  fontSize: 14,
+  flexShrink: 0,
+  paddingTop: 1,
 };
