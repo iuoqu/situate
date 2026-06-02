@@ -684,6 +684,11 @@ export const storyDrafts = pgTable(
     language: supportedLanguage("language").notNull().default("en"),
     title: text("title"),
     stage: draftStage("stage").notNull().default("editing"),
+    // Path B (guided write) fields — NULL on Path A drafts.
+    driveType: text("drive_type"),
+    truthDeclaration: jsonb("truth_declaration").notNull().default(sql`'{}'::jsonb`),
+    mapData: jsonb("map_data").notNull().default(sql`'{}'::jsonb`),
+    actData: jsonb("act_data").notNull().default(sql`'{}'::jsonb`),
     createdAt: timestamp("created_at", { withTimezone: true })
       .notNull()
       .default(sql`now()`),
@@ -971,6 +976,70 @@ export type NewWaitlistRequest = typeof waitlistRequests.$inferInsert;
 export type StoryDraft = typeof storyDrafts.$inferSelect;
 export type NewStoryDraft = typeof storyDrafts.$inferInsert;
 export type DraftStage = (typeof draftStage.enumValues)[number];
+
+// ─── Path B JSONB shapes ───────────────────────────────────────────────────
+// Stored in story_drafts.truth_declaration / map_data / act_data.
+// Drizzle infers these as `unknown` from the jsonb columns; cast via these
+// types at the API / server-action boundary.
+
+export type DriveType =
+  | "purposive_art"        // §4: 给某种读者讲某件事（文学/艺术）
+  | "purposive_commercial" // §4: 具备特定延伸潜力（商业/媒介）
+  | "haunting"             // §4: 有个东西缠住我
+  | "unknown";             // §4: 现在不知道
+
+export interface TruthDeclaration {
+  status: "real" | "fiction" | "blend" | null;
+  has_real_persons: boolean | null;
+  place_is_public: boolean | null;
+}
+
+// map_data phases: 'material' → 'questions' → 'answers' → 'synthesis' → 'center' → 'complete'
+export interface MapData {
+  phase?: "material" | "questions" | "answers" | "synthesis" | "center" | "complete";
+  material?: string;
+  questions?: Array<{
+    angle_id: number;
+    angle_name: string;
+    question: string;
+    openers: string[];
+  }>;
+  answers?: Array<{
+    angle_id: number;
+    angle_name: string;
+    question: string;
+    answer: string;
+  }>;
+  synthesis?: {
+    branch: "convergent" | "higher_abstraction" | "divergent";
+    recurring: string[];
+    shared_frame: string | null;
+    message: string;
+  };
+  center?: string;
+  center_card?: {
+    center: string;
+    phrases: string[];      // writer's own recurring words, verbatim
+    core_question: string;  // what this piece is actually asking
+    hardest_part: string;   // what's hardest + approach implication
+    not_center: string[];   // things writer can treat as background
+  };
+}
+
+// act_data phases: 'time' → 'place' → 'characters' → 'arcs' → 'complete'
+export interface ActData {
+  phase?: "time" | "place" | "characters" | "arcs" | "complete";
+  time_shape?: {
+    span: "moment_day" | "season" | "years" | "decades" | "unknown";
+    acts: "one" | "multi" | "unknown";
+    commitment_note?: string; // system-generated structural consequence
+  };
+  place_shape?: {
+    type: "one" | "several" | "route" | "unknown";
+    coordinates: Array<{ name: string; notes?: string }>;
+  };
+  character_entity_ids?: string[]; // FK → entities.id
+}
 
 // Shape of each entry in `story_drafts.sections` jsonb. Keep in lockstep
 // with the template registry's section definitions and with the migration

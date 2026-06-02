@@ -10,7 +10,7 @@ import { getServerSupabase } from "@/lib/supabase/server";
 export const metadata = {
   title: "Write · Situate Editions",
   description:
-    "Three ways to write for Situate: voice (premium), guided template (free), or the open form.",
+    "Two ways in: write directly if you know your story, or use the guided path to find your center first.",
 };
 
 export const dynamic = "force-dynamic";
@@ -62,152 +62,101 @@ export default async function WritePage() {
       )
     : 0;
 
+  // Separate in-progress drafts: Path B projects (have map_data) vs Path A
+  const isPathB = lastDraft &&
+    typeof lastDraft.mapData === "object" &&
+    lastDraft.mapData !== null &&
+    Object.keys(lastDraft.mapData as object).length > 0;
+  const resumeHref = isPathB
+    ? `/write/project/${lastDraft!.id}/map`
+    : `/write/template/${lastDraft!.id}`;
+
   return (
     <main style={mainStyle}>
-      <header style={{ marginBottom: 36 }}>
+      <header style={{ marginBottom: 40 }}>
         <p style={kickerStyle}>Write for Situate</p>
-        <h1 style={h1Style}>Three ways in.</h1>
-        <p style={leadStyle}>
-          Pick a path. Every path ends at the same editorial pipeline —
-          you choose how to get there.
-        </p>
+        <h1 style={h1Style}>你已经知道你在写什么了吗？</h1>
       </header>
 
       {lastDraft && (
         <section style={resumePanelStyle} aria-label="Continue your draft">
           <div style={resumeMainStyle}>
-            <p style={resumeKickerStyle}>You have a draft in progress</p>
+            <p style={resumeKickerStyle}>
+              {isPathB ? "Guided project in progress" : "Draft in progress"}
+            </p>
             <h2 style={resumeTitleStyle}>
-              {lastDraft.title?.trim() || "Untitled story"}
+              {lastDraft.title?.trim() || "Untitled"}
             </h2>
             <p style={resumeMetaStyle}>
-              {lastDraftWordCount} words · edited{" "}
-              {formatAgo(lastDraft.updatedAt)}
+              {lastDraftWordCount > 0 ? `${lastDraftWordCount} words · ` : ""}
+              edited {formatAgo(lastDraft.updatedAt)}
             </p>
           </div>
-          <Link
-            href={`/write/template/${lastDraft.id}`}
-            style={resumeButtonStyle}
-          >
+          <Link href={resumeHref} style={resumeButtonStyle}>
             Continue →
           </Link>
         </section>
       )}
 
-      {lastDraft && (
-        <p style={startFreshHintStyle}>
-          Or start something new:
-        </p>
-      )}
+      {lastDraft && <p style={startFreshHintStyle}>Or start something new:</p>}
 
-      <ol style={listStyle}>
-        <li style={cardStyle}>
-          <div style={cardKickerStyle}>Recommended · Free</div>
-          <h2 style={cardTitleStyle}>⌨️ Write it</h2>
-          <p style={cardBodyStyle}>
-            A five-section guided path — arrival, inhabitants, incident,
-            aftermath, closing image. The shape most Situate stories
-            take. Auto-saves while you write.
+      <div style={twoColStyle}>
+        {/* ── Path B: not sure yet ─────────────────────────────────── */}
+        <div style={choiceCardPrimaryStyle}>
+          <p style={choiceKickerStyle}>还不确定 · Free</p>
+          <h2 style={choiceTitleStyle}>帮我找到中心</h2>
+          <p style={choiceBodyStyle}>
+            你有素材——人物、经历、事件——但不确定在写谁、写什么形状。
+            先用几个问题把中心找出来，再动笔。
+          </p>
+          <p style={choiceStepsStyle}>
+            找中心 → 定结构 → 写场景
+          </p>
+          <Link href="/write/project/new" style={primaryButtonStyle}>
+            开始找中心 →
+          </Link>
+        </div>
+
+        {/* ── Path A: already know ──────────────────────────────────── */}
+        <div style={choiceCardStyle}>
+          <p style={choiceKickerStyle}>已经想清楚了 · Free</p>
+          <h2 style={choiceTitleStyle}>直接写</h2>
+          <p style={choiceBodyStyle}>
+            你知道在写谁、写什么。五个章节的模板，自动保存。
           </p>
           <form action="/api/write/start-template" method="post" style={{ margin: 0 }}>
             <input type="hidden" name="templateId" value={DEFAULT_TEMPLATE_ID} />
-            {/* Tradition selector lives inside <details> so the default
-                flow stays one-click; advanced authors who want to write
-                under the Pearls (遗珠) tradition opt in deliberately. */}
             <details style={advancedDetailsStyle}>
-              <summary style={advancedSummaryStyle}>
-                Advanced: pick a tradition
-              </summary>
+              <summary style={advancedSummaryStyle}>Advanced: pick a tradition</summary>
               <div style={advancedBodyStyle}>
                 <label style={radioRowStyle}>
-                  <input
-                    type="radio"
-                    name="traditionProfileId"
-                    value="flash_situate_anchored"
-                    defaultChecked
-                  />
-                  <span>
-                    <strong>Situate Spine · anchored</strong> — the default.
-                    Five sections, Section 1 carries a real coordinate.
-                  </span>
+                  <input type="radio" name="traditionProfileId"
+                    value="flash_situate_anchored" defaultChecked />
+                  <span><strong>Situate Spine · anchored</strong> — default.</span>
                 </label>
                 <label style={radioRowStyle}>
-                  <input
-                    type="radio"
-                    name="traditionProfileId"
-                    value="flash_situate_pearls"
-                  />
+                  <input type="radio" name="traditionProfileId"
+                    value="flash_situate_pearls" />
                   <span>
-                    <strong>Situate Spine · Pearls (遗珠)</strong> — for
-                    work whose merit is independent of place anchoring.
-                    Sections are deletable; coordinate is optional.{" "}
-                    <em>
-                      Editor discretion decides whether your piece actually
-                      enters the Pearls section at publication time.
-                    </em>
+                    <strong>Situate Spine · Pearls (遗珠)</strong> — sections
+                    deletable; coordinate optional.
                   </span>
                 </label>
               </div>
             </details>
-            <button type="submit" style={primaryButtonStyle}>
-              Start a guided draft →
+            <button type="submit" style={secondaryButtonStyle}>
+              Start writing →
             </button>
           </form>
-        </li>
-
-        <li style={cardStyle}>
-          <div style={cardKickerStyle}>内测版 · Free</div>
-          <h2 style={cardTitleStyle}>🪞 Guided write</h2>
-          <p style={cardBodyStyle}>
-            For when you have a story in your head but don&rsquo;t know how
-            to start writing it. A 6-stage conversation: anchor → specifics →
-            free write → AI reads back what it sees → finish. AI works as a
-            mirror, not a ghostwriter.
-          </p>
-          <p style={cardComingSoonStyle}>
-            内测版 — feedback welcome. Designed for writers who want
-            structural feedback before submitting.
-          </p>
-          <Link href="/write/guided" style={secondaryButtonStyle}>
-            Try guided write →
-          </Link>
-        </li>
-
-        <li style={cardStyleMuted}>
-          <div style={cardKickerStyle}>Premium · $10/mo</div>
-          <h2 style={cardTitleStyle}>🎤 Speak it</h2>
-          <p style={cardBodyStyle}>
-            Talk for five to ten minutes about a place you know. AI
-            transcribes and structures into a draft you can edit. The
-            fastest path from a place in your head to a publishable
-            piece.
-          </p>
-          <p style={cardComingSoonStyle}>
-            Coming this season. Get on the list — we&rsquo;re finishing
-            the voice pipeline.
-          </p>
-        </li>
-
-        <li style={cardStyle}>
-          <div style={cardKickerStyle}>Advanced · Free</div>
-          <h2 style={cardTitleStyle}>📝 Quick form</h2>
-          <p style={cardBodyStyle}>
-            The full submission form. Drop pins on a map, write scenes
-            directly into each, fill in the disclosures. Best when you
-            already know what you&rsquo;re writing.
-          </p>
-          <Link href="/submit" style={secondaryButtonStyle}>
-            Open the form →
-          </Link>
-        </li>
-      </ol>
+        </div>
+      </div>
 
       <p style={footerNoteStyle}>
-        All three paths land in the same editorial review. Pieces
-        submitted to Situate Editions are considered for the Prize and
-        the anthology under our editorial criteria. The writing tools
-        themselves do not impose these criteria — they help you write
-        clearly, regardless of where you intend to publish.
+        Both paths end at the same editorial review. The tools help you
+        write clearly — they don&rsquo;t impose editorial criteria.
+        {" "}
+        <Link href="/submit" style={inlineLinkStyle}>Quick form →</Link>
+        {" "}if you already have a finished piece.
       </p>
 
       <p style={dashboardLinkStyle}>
@@ -284,35 +233,55 @@ const cardStyle: React.CSSProperties = {
   flexDirection: "column",
   gap: 12,
 };
-const cardStyleMuted: React.CSSProperties = {
-  ...cardStyle,
-  background: "#fbfaf6",
+const twoColStyle: React.CSSProperties = {
+  display: "grid",
+  gridTemplateColumns: "1fr 1fr",
+  gap: 16,
 };
-const cardKickerStyle: React.CSSProperties = {
+const choiceCardPrimaryStyle: React.CSSProperties = {
+  padding: 28,
+  background: "#1a1a1a",
+  color: "white",
+  borderRadius: 4,
+  display: "flex",
+  flexDirection: "column",
+  gap: 14,
+};
+const choiceCardStyle: React.CSSProperties = {
+  padding: 28,
+  background: "white",
+  border: "1px solid #e8e3d8",
+  borderRadius: 4,
+  display: "flex",
+  flexDirection: "column",
+  gap: 14,
+};
+const choiceKickerStyle: React.CSSProperties = {
   fontSize: 11,
   letterSpacing: 1.5,
   textTransform: "uppercase",
   color: "#9b8a6b",
+  margin: 0,
 };
-const cardTitleStyle: React.CSSProperties = {
+const choiceTitleStyle: React.CSSProperties = {
   fontFamily: 'Georgia, "Times New Roman", serif',
-  fontSize: 26,
+  fontSize: 28,
   fontWeight: 400,
-  letterSpacing: -0.4,
+  letterSpacing: -0.5,
   margin: 0,
 };
-const cardBodyStyle: React.CSSProperties = {
+const choiceBodyStyle: React.CSSProperties = {
   fontFamily: 'Georgia, "Times New Roman", serif',
-  fontSize: 16,
-  color: "#555",
-  lineHeight: 1.6,
+  fontSize: 15,
+  lineHeight: 1.65,
   margin: 0,
+  opacity: 0.85,
 };
-const cardComingSoonStyle: React.CSSProperties = {
-  margin: 0,
+const choiceStepsStyle: React.CSSProperties = {
   fontSize: 12,
-  color: "#888",
-  fontStyle: "italic",
+  letterSpacing: 0.5,
+  color: "#9b8a6b",
+  margin: 0,
 };
 const primaryButtonStyle: React.CSSProperties = {
   alignSelf: "flex-start",
