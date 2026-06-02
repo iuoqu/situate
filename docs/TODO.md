@@ -6,6 +6,10 @@ between sessions and can be checked in PR diffs.
 Last refresh: end-of-session after Milestone A+ (template-write path,
 per-section locations, author dashboard).
 
+Design doc added: `docs/path-b-design.md` — full Path B (guided write
+for uncertain authors) from project setup through situate.map →
+situate.act → situate.at, including character/place profile design.
+
 ---
 
 ## Active priorities — pick from here next
@@ -17,6 +21,11 @@ section below with the detailed scope.
    The next major direction: a structured "brain" captured during
    writing that drives translation, diagnostics, and growth. Includes
    the Pearls (遗珠) carveout for non-place-anchored fiction.
+1a. **Path B — Guided write for uncertain authors** ([design doc](path-b-design.md))
+    Full methodology path: project setup → situate.map → situate.act →
+    situate.at. Prerequisite: situate.map out of /dev/map-preview and
+    into a real project flow. Character/place profiles (2c) are the
+    UX-facing precursor to Milestone B's Story Bible entities.
 2. **DisclosureChat** — folded INTO Milestone B (the Story Bible
    replaces the chat as the disclosure-capture mechanism). Kept here
    as a name for reference.
