@@ -31,6 +31,8 @@ export default async function EditionPage({
   if (!data) notFound();
 
   const { edition, pieces } = data;
+  const mainPieces = pieces.filter((p) => p.submission.publicationSection !== "pearls");
+  const pearlsPieces = pieces.filter((p) => p.submission.publicationSection === "pearls");
   const publishDate = edition.publishAt
     ? new Date(edition.publishAt).toLocaleDateString(undefined, {
         year: "numeric",
@@ -159,28 +161,15 @@ export default async function EditionPage({
             No pieces are visible at your access level yet.
           </p>
         ) : (
-          <ol
-            style={{
-              listStyle: "none",
-              padding: 0,
-              margin: 0,
-            }}
-          >
-            {pieces.map(({ submission, firstBlock }, idx) => (
+          <ol style={{ listStyle: "none", padding: 0, margin: 0 }}>
+            {mainPieces.map(({ submission, firstBlock }, idx) => (
               <li
                 key={submission.id}
-                style={{
-                  borderTop: "1px solid #e8e3d8",
-                  padding: "24px 0",
-                }}
+                style={{ borderTop: "1px solid #e8e3d8", padding: "24px 0" }}
               >
                 <Link
                   href={`/stories/${submission.id}?lang=${readerLanguage}`}
-                  style={{
-                    textDecoration: "none",
-                    color: "inherit",
-                    display: "block",
-                  }}
+                  style={{ textDecoration: "none", color: "inherit", display: "block" }}
                 >
                   <div
                     style={{
@@ -212,14 +201,7 @@ export default async function EditionPage({
                     {submission.title ?? "(untitled)"}
                   </h3>
                   {submission.abstract ? (
-                    <p
-                      style={{
-                        fontSize: 16,
-                        color: "#666",
-                        margin: 0,
-                        fontStyle: "italic",
-                      }}
-                    >
+                    <p style={{ fontSize: 16, color: "#666", margin: 0, fontStyle: "italic" }}>
                       {submission.abstract}
                     </p>
                   ) : null}
@@ -239,6 +221,96 @@ export default async function EditionPage({
           </ol>
         )}
       </section>
+
+      {pearlsPieces.length > 0 && (
+        <section style={{ marginTop: 64 }}>
+          <h2
+            style={{
+              fontFamily: "system-ui, sans-serif",
+              fontSize: 11,
+              textTransform: "uppercase",
+              letterSpacing: 2,
+              color: "#9b8a6b",
+              marginBottom: 6,
+              fontWeight: 600,
+            }}
+          >
+            遗珠 · Pearls
+          </h2>
+          <p
+            style={{
+              fontFamily: "system-ui, sans-serif",
+              fontSize: 13,
+              color: "#999",
+              marginTop: 0,
+              marginBottom: 24,
+              lineHeight: 1.5,
+            }}
+          >
+            Stories selected at editorial discretion. Published under all
+            principles except P3 (place-generativity).
+          </p>
+          <ol style={{ listStyle: "none", padding: 0, margin: 0 }}>
+            {pearlsPieces.map(({ submission, firstBlock }) => (
+              <li
+                key={submission.id}
+                style={{ borderTop: "1px solid #e8e3d8", padding: "24px 0" }}
+              >
+                <Link
+                  href={`/stories/${submission.id}?lang=${readerLanguage}`}
+                  style={{ textDecoration: "none", color: "inherit", display: "block" }}
+                >
+                  <div
+                    style={{
+                      fontFamily: "system-ui, sans-serif",
+                      fontSize: 10,
+                      textTransform: "uppercase",
+                      letterSpacing: 1.8,
+                      color: "#9b8a6b",
+                      marginBottom: 6,
+                    }}
+                  >
+                    ◇
+                    {firstBlock &&
+                    (firstBlock.longitude !== 0 || firstBlock.latitude !== 0) ? (
+                      <>
+                        {" · "}
+                        ({firstBlock.longitude.toFixed(2)},{" "}
+                        {firstBlock.latitude.toFixed(2)})
+                      </>
+                    ) : null}
+                  </div>
+                  <h3
+                    style={{
+                      fontWeight: 400,
+                      fontSize: 24,
+                      letterSpacing: -0.3,
+                      margin: "0 0 6px",
+                    }}
+                  >
+                    {submission.title ?? "(untitled)"}
+                  </h3>
+                  {submission.abstract ? (
+                    <p style={{ fontSize: 16, color: "#666", margin: 0, fontStyle: "italic" }}>
+                      {submission.abstract}
+                    </p>
+                  ) : null}
+                  <div
+                    style={{
+                      fontFamily: "system-ui, sans-serif",
+                      fontSize: 11,
+                      color: "#999",
+                      marginTop: 10,
+                    }}
+                  >
+                    by {submission.authorId}
+                  </div>
+                </Link>
+              </li>
+            ))}
+          </ol>
+        </section>
+      )}
 
       <footer
         style={{
