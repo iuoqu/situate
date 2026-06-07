@@ -139,20 +139,52 @@ export function MapClient({ draftId, initialMapData }: Props) {
     setLoading(true);
     setError(null);
     try {
-      // Build center card from synthesis recurring phrases + writer's answers
       const phrases = synthesis.recurring.length > 0
         ? synthesis.recurring
         : (synthesis.extracted_phrases ?? []).flatMap((ep) => ep.phrases).slice(0, 5);
 
-      // Core question: the synthesis message reworded around the center
-      // For now we surface the synthesis message and let the writer see it.
-      // A future pass can generate a more tailored core_question via LLM.
+      const answeredQuestions = questions.map((q, i) => ({
+        angle_id: q.angle_id,
+        angle_name: q.angle_name,
+        question: q.question,
+        answer: answers[i] ?? "",
+      }));
+
+      // LLM-generate core_question, hardest_part, not_center
+      let core_question = synthesis.message;
+      let hardest_part = "";
+      let not_center: string[] = [];
+      try {
+        const resp = await fetch("/api/map/center-card", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            center,
+            material,
+            answers: answeredQuestions,
+            synthesis,
+          }),
+        });
+        if (resp.ok) {
+          const data = await resp.json() as {
+            core_question: string;
+            hardest_part: string;
+            not_center: string[];
+          };
+          core_question = data.core_question;
+          hardest_part = data.hardest_part;
+          not_center = data.not_center;
+        }
+      } catch {
+        // Non-fatal: fall back to synthesis.message
+      }
+
       const card: MapData["center_card"] = {
         center,
         phrases,
-        core_question: synthesis.message,
-        hardest_part: "",   // writer fills this in, or we generate in a later pass
-        not_center: [],     // derived from questions that didn't converge
+        core_question,
+        hardest_part,
+        not_center,
       };
       setCenterCard(card);
       const newPhase: Phase = "complete";
@@ -370,6 +402,20 @@ export function MapClient({ draftId, initialMapData }: Props) {
               <div>
                 <p style={centerCardLabelStyle}>核心问题</p>
                 <p style={centerCardTextStyle}>{centerCard.core_question}</p>
+              </div>
+            )}
+            {centerCard.hardest_part && (
+              <div>
+                <p style={centerCardLabelStyle}>最难的地方</p>
+                <p style={centerCardTextStyle}>{centerCard.hardest_part}</p>
+              </div>
+            )}
+            {centerCard.not_center.length > 0 && (
+              <div>
+                <p style={centerCardLabelStyle}>不是中心</p>
+                <p style={{ ...centerCardTextStyle, opacity: 0.6 }}>
+                  {centerCard.not_center.join("　·　")}
+                </p>
               </div>
             )}
           </div>
