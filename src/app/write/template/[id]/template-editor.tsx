@@ -8,6 +8,7 @@ import { InlineAIPanel } from "@/components/coach/inline-ai-panel";
 import { Section1Hooks } from "@/components/template/Section1Hooks";
 import { SectionLocationPicker } from "@/components/template/SectionLocationPicker";
 import type { DraftSection, MapData, SupportedLanguage } from "@/db/schema";
+import type { StoryUnitResult } from "@/lib/coach/story-unit-gate";
 
 /**
  * TemplateEditor — the multi-section guided write surface (Year 1
@@ -95,6 +96,11 @@ export function TemplateEditor({
   const [title, setTitle] = useState(initialTitle);
   const [sections, setSections] = useState<DraftSection[]>(initialSections);
   const [saveState, setSaveState] = useState<SaveState>("idle");
+
+  // Story unit gate results (B.4): keyed by section_id
+  const [unitResults, setUnitResults] = useState<
+    Record<string, StoryUnitResult | "loading" | null>
+  >({});
   const [lastSavedAt, setLastSavedAt] = useState<number | null>(null);
   const [errorText, setErrorText] = useState<string | null>(null);
 
@@ -150,6 +156,54 @@ export function TemplateEditor({
       // Quota / safe-mode: ignore. We still have the server save.
     }
   }, [draftId, title, sections]);
+
+  // Load existing story unit results on mount
+  useEffect(() => {
+    void fetch(`/api/drafts/${draftId}/story-unit`)
+      .then((r) => r.json())
+      .then((data: { units?: Array<{ sectionId: string; predicates: unknown; failureType: string | null }> }) => {
+        if (!Array.isArray(data.units)) return;
+        const map: Record<string, StoryUnitResult> = {};
+        for (const u of data.units) {
+          if (u.sectionId && u.predicates && typeof u.predicates === "object") {
+            const p = u.predicates as Record<string, unknown>;
+            map[u.sectionId] = {
+              s0: String(p.s0 ?? ""),
+              d: String(p.d ?? ""),
+              t: String(p.t ?? ""),
+              s1: String(p.s1 ?? ""),
+              k_hint: String(p.k_hint ?? ""),
+              transformed: Boolean(p.transformed),
+              causal: Boolean(p.causal),
+              stakes: Boolean(p.stakes),
+              failure_type: (u.failureType as StoryUnitResult["failure_type"]) ?? null,
+              coach_question: typeof p.coach_question === "string" ? p.coach_question : null,
+            };
+          }
+        }
+        setUnitResults(map);
+      })
+      .catch(() => { /* non-fatal */ });
+  }, [draftId]);
+
+  const analyseSection = useCallback(
+    async (sectionId: string, content: string, label: string, prompt: string) => {
+      setUnitResults((prev) => ({ ...prev, [sectionId]: "loading" }));
+      try {
+        const resp = await fetch(`/api/drafts/${draftId}/story-unit`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ sectionId, content, sectionLabel: label, sectionPrompt: prompt }),
+        });
+        if (!resp.ok) throw new Error("analysis failed");
+        const data = await resp.json() as { result: StoryUnitResult };
+        setUnitResults((prev) => ({ ...prev, [sectionId]: data.result }));
+      } catch {
+        setUnitResults((prev) => ({ ...prev, [sectionId]: null }));
+      }
+    },
+    [draftId],
+  );
 
   // Debounced server save.
   const saveTimerRef = useRef<number | null>(null);
@@ -515,7 +569,32 @@ export function TemplateEditor({
                   Suggested: {sectionDef.wordRangeMin}&ndash;
                   {sectionDef.wordRangeMax}
                 </span>
+                {count >= 200 && (
+                  <button
+                    type="button"
+                    style={analyseButtonStyle}
+                    disabled={unitResults[sectionDef.id] === "loading"}
+                    onClick={() =>
+                      void analyseSection(
+                        sectionDef.id,
+                        data.content ?? "",
+                        sectionDef.label,
+                        sectionDef.prompt,
+                      )
+                    }
+                  >
+                    {unitResults[sectionDef.id] === "loading" ? "分析中…" : "分析结构"}
+                  </button>
+                )}
               </div>
+              {unitResults[sectionDef.id] && unitResults[sectionDef.id] !== "loading" && (
+                <StoryUnitCard
+                  result={unitResults[sectionDef.id] as StoryUnitResult}
+                  onDismiss={() =>
+                    setUnitResults((prev) => ({ ...prev, [sectionDef.id]: null }))
+                  }
+                />
+              )}
             </li>
           );
         })}
@@ -1119,4 +1198,159 @@ const sceneQNumStyle: React.CSSProperties = {
   fontSize: 14,
   flexShrink: 0,
   paddingTop: 1,
+};
+const analyseButtonStyle: React.CSSProperties = {
+  marginLeft: "auto",
+  padding: "3px 10px",
+  fontSize: 11,
+  letterSpacing: 0.5,
+  background: "none",
+  border: "1px solid #c8c0b0",
+  borderRadius: 2,
+  color: "#777",
+  cursor: "pointer",
+};
+
+// ── Story Unit Card (B.4) ──────────────────────────────────────────────────
+
+function StoryUnitCard({
+  result,
+  onDismiss,
+}: {
+  result: StoryUnitResult;
+  onDismiss: () => void;
+}) {
+  const slots: Array<{ key: keyof StoryUnitResult; label: string }> = [
+    { key: "s0", label: "S0 初始处境" },
+    { key: "d",  label: "D  打破" },
+    { key: "t",  label: "T  枢轴" },
+    { key: "s1", label: "S1 结束处境" },
+    { key: "k_hint", label: "K  在问什么" },
+  ];
+  const predicates: Array<{ key: keyof StoryUnitResult; label: string }> = [
+    { key: "transformed", label: "转变" },
+    { key: "causal",      label: "因果" },
+    { key: "stakes",      label: "得失" },
+  ];
+  return (
+    <div style={unitCardStyle}>
+      <div style={unitCardHeaderStyle}>
+        <span style={unitCardKickerStyle}>结构分析</span>
+        <button type="button" onClick={onDismiss} style={unitDismissStyle} aria-label="收起">
+          ✕
+        </button>
+      </div>
+      <div style={unitSlotsStyle}>
+        {slots.map(({ key, label }) => (
+          <div key={key} style={unitSlotRowStyle}>
+            <span style={unitSlotLabelStyle}>{label}</span>
+            <span style={unitSlotValueStyle}>{result[key] as string}</span>
+          </div>
+        ))}
+      </div>
+      <div style={unitPredicatesStyle}>
+        {predicates.map(({ key, label }) => (
+          <span key={key} style={unitPredicateStyle}>
+            <span style={{ color: result[key] ? "#5a7a5a" : "#b0a0a0" }}>
+              {result[key] ? "●" : "○"}
+            </span>
+            {" "}{label}
+          </span>
+        ))}
+      </div>
+      {result.failure_type && result.coach_question && (
+        <div style={unitCoachStyle}>
+          <span style={unitCoachLabelStyle}>
+            {result.failure_type === "descriptive" && "场景运动"}
+            {result.failure_type === "essayistic" && "场景事件"}
+            {result.failure_type === "expository" && "场景发生"}
+          </span>
+          <p style={unitCoachQStyle}>{result.coach_question}</p>
+        </div>
+      )}
+    </div>
+  );
+}
+
+const unitCardStyle: React.CSSProperties = {
+  margin: "12px 0 4px",
+  padding: "16px 18px",
+  background: "#f9f7f3",
+  border: "1px solid #e0d8cc",
+  borderRadius: 3,
+  fontSize: 13,
+};
+const unitCardHeaderStyle: React.CSSProperties = {
+  display: "flex",
+  justifyContent: "space-between",
+  alignItems: "center",
+  marginBottom: 12,
+};
+const unitCardKickerStyle: React.CSSProperties = {
+  fontSize: 10,
+  letterSpacing: 2,
+  textTransform: "uppercase",
+  color: "#9b8a6b",
+};
+const unitDismissStyle: React.CSSProperties = {
+  background: "none",
+  border: "none",
+  color: "#aaa",
+  cursor: "pointer",
+  fontSize: 12,
+  padding: 0,
+};
+const unitSlotsStyle: React.CSSProperties = {
+  display: "flex",
+  flexDirection: "column",
+  gap: 7,
+  marginBottom: 12,
+};
+const unitSlotRowStyle: React.CSSProperties = {
+  display: "flex",
+  gap: 12,
+  alignItems: "baseline",
+};
+const unitSlotLabelStyle: React.CSSProperties = {
+  minWidth: 90,
+  fontSize: 10,
+  letterSpacing: 1,
+  color: "#9b8a6b",
+  flexShrink: 0,
+  fontFamily: "system-ui, sans-serif",
+};
+const unitSlotValueStyle: React.CSSProperties = {
+  fontSize: 13,
+  color: "#333",
+  lineHeight: 1.5,
+  fontFamily: 'Georgia, "Times New Roman", serif',
+};
+const unitPredicatesStyle: React.CSSProperties = {
+  display: "flex",
+  gap: 16,
+  marginBottom: 0,
+};
+const unitPredicateStyle: React.CSSProperties = {
+  fontSize: 12,
+  color: "#555",
+};
+const unitCoachStyle: React.CSSProperties = {
+  marginTop: 14,
+  paddingTop: 12,
+  borderTop: "1px solid #e0d8cc",
+};
+const unitCoachLabelStyle: React.CSSProperties = {
+  fontSize: 10,
+  letterSpacing: 1.5,
+  textTransform: "uppercase",
+  color: "#b8784a",
+  display: "block",
+  marginBottom: 6,
+};
+const unitCoachQStyle: React.CSSProperties = {
+  margin: 0,
+  fontSize: 14,
+  fontFamily: 'Georgia, "Times New Roman", serif',
+  color: "#3a3a3a",
+  lineHeight: 1.65,
 };

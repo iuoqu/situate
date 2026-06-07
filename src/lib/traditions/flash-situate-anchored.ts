@@ -76,10 +76,6 @@ export const FLASH_SITUATE_ANCHORED: TraditionProfile = {
       principleAnchors: ["P7"],
     },
   ],
-  // Filled by the AI-coach skeleton window. Empty = coaching layer
-  // surfaces nothing for this tradition yet.
   diagnosers: [],
-  // Filled by the AI-coach skeleton window. Story-unit gate uses these
-  // string ids verbatim against `story_units.unit_type`.
-  unitTypes: [],
+  unitTypes: ["flash_situate_spine"],
 };
