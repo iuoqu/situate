@@ -3,13 +3,18 @@
 Working notes for Situate Editions. Lives in the repo so it survives
 between sessions and can be checked in PR diffs.
 
-Last refresh: end-of-session after Milestone C (Path B guided write —
-full flow shipped: project setup → situate.map → situate.act → editor
-handoff, with character/place profiles and Path A↔B bridge).
+Last refresh: after METHODOLOGY v2.3 (7 reconciliation gaps closed;
+Milestone C fully shipped including Path A↔B bridge).
 
 Design doc added: `docs/path-b-design.md` — full Path B (guided write
 for uncertain authors) from project setup through situate.map →
 situate.act → situate.at, including character/place profile design.
+
+METHODOLOGY v2.3 — SHIPPED:
+- Closed 7 reconciliation gaps between v2.0/v2.1/v2.2 (§5, §6, §7,
+  §10, §11, §17, §18). No new sections; clarifying inserts only.
+  Draft reviewed at docs/skeleton-research/methodology-v23-draft.md
+  before commit.
 
 Milestone C (Path B) — SHIPPED:
 - C.1 schema: drive_type, truth_declaration, map_data, act_data columns
@@ -23,10 +28,16 @@ Milestone C (Path B) — SHIPPED:
 - C.6 Path A↔B bridge: begin-writing endpoint assigns template scaffold to
   Path B drafts; escape hatches both directions; resume routing keyed off
   templateId
-Remaining Path B polish (deferred): LLM-generated core_question /
-hardest_part / not_center for the center card (currently synthesis.message
-+ blanks); arc generation for supporting characters; scene-level
-consistency feedback (§3 phase 3).
+Remaining Path B polish (deferred, absorbed into Milestone B):
+- LLM-generated core_question / hardest_part / not_center for the
+  center card (currently synthesis.message + blanks) → do before B.1,
+  ~2h, quick win
+- Arc generation for supporting characters → B.3/B.5
+- Scene-level consistency feedback (§3 phase 3) → B.5 ✨ diagnoser
+
+NOTE: situate.at feedback loop (8 feedback categories ◎ ✦ ✨ ✧) is
+entirely unbuilt. Users write scenes with no AI response. This is the
+core gap; B.4 + B.5 close it.
 
 ---
 
