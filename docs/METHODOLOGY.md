@@ -1,4 +1,4 @@
-# situate Methodology v2.2
+# situate Methodology v2.3
 
 > The principles behind situate.map, situate.act, and situate.at.
 > Read this before contributing code. The technical choices follow from
@@ -306,6 +306,16 @@ maps to the publication's narrative_blocks model (1–6 pinned scenes).
 situate.act records the coordinate(s); whether the place *carries* the
 work is built later, in situate.at, and governed by §17.
 
+When situate.act is invoked late — after scenes are already written —
+the §A.9 retroactive check bundles all implicitly-made structural
+decisions into a single §A.10 Commitment Confirmation observation:
+segment structure, any ✧-pattern-implied place-shape, and an unseen
+disclosure preview (§18) are surfaced together as "you have been
+making these decisions implicitly; here is what to declare explicitly
+now." Each component preserves its three-option interpretation;
+bundling prevents simultaneous parallel retroactive flows from
+fragmenting the writer's attention.
+
 ---
 
 ## 6. situate.at — The Cultivation Layer
@@ -336,6 +346,12 @@ For each scene, AI provides up to eight categories of feedback:
   Like `inferred_intent`'s L1, it must **quote the actual place-rendering
   it read** and say whether, at this point, that rendering carries K or
   is wallpaper. It reports; it never grades place-generativity (§13).
+  ✧ fires regardless of declared place-shape. When place-shape is
+  undeclared — for entangled and unknown drives, or when the writer
+  chose "I don't know" — the baseline is the prose itself: ✧ reports
+  whether this scene's place-rendering carries K at this point, without
+  referencing a structural plan. The undeclared state is noted as
+  context; it is not penalized and not inferred from.
 
 The last four (◎, ✦, ✨, ✧) require project context (intent declared,
 act structure set, prior scenes written, a coordinate claimed). They
@@ -395,6 +411,12 @@ as it converges on a person — recurring descriptions point to the same
 thing, and the user names it. A work whose true subject is a system
 still anchors to the coordinate where that system is most itself
 (§17, §18).
+
+Drive type (§4) and center type are orthogonal. Any drive type may
+arrive at any center — person, place, institution, or system — and the
+Socratic + 归纳 algorithm handles all combinations via the re-voicing
+table above. Drive type governs the initialization flow only, not
+which center types are available to the writer.
 
 **When the center is a place or a system, the person-shaped angles
 re-voice.** Angles 2, 4, 5, 7 are phrased for a person ("whose," "who").
@@ -650,6 +672,13 @@ behavior": it operates only when the cumulative evidence is strong
 once per detected pattern, and always offers "incidental detail" as a
 first-class interpretation. AI surfaces evidence; user interprets.
 
+The observed-trigger has a place-carrier analog. When multiple scenes'
+✧ reports accumulate rendering on the same coordinate without a
+declared carrier role, AI may surface this once — as a question, never
+a verdict — offering three interpretations: incidental rendering detail,
+an emerging place-carrier, or something AI missed. The same
+single-surface, three-option constraint applies.
+
 ### The five relations to previous layers
 
 When adding a new layer, the user explicitly declares its relationship
@@ -698,6 +727,12 @@ AI re-reads all completed scenes and rates each against the new layer:
 - **◐ Weak**: Touches new layer but doesn't carry it
 - **⚫ None**: Doesn't touch new layer (and may not need to)
 - **✗ Conflict**: Structurally contradicts new layer
+
+The inventory covers all four context-gated categories (◎ ✦ ✨ ✧),
+not only ◎. A new intent layer may shift the structural function a
+scene must serve (✦), alter the carrier relationship of a place (✧),
+or reveal cross-scene inconsistency (✨) that was not visible against
+the prior layer. Auditing ◎ alone silently misses place-carrier drift.
 
 The inventory is displayed as a list. Each scene shows: rating,
 specific reasoning (citing the actual prose), and whether revision is
@@ -1047,6 +1082,13 @@ not situate.map.
   page. It does not grade place-generativity — that is the editor's
   verdict (§13).
 
+Place-carrier evolution follows the §10 mechanism rather than
+introducing a new axis. When the writer's relationship to the carrier
+shifts — the place builds further into K, or an earlier rendering no
+longer holds — this registers as a new intent layer with relation 揭示
+or 修正; §11 retrospective revision then applies to scenes written
+under the prior carrier assumption.
+
 ### Divergence from P3 v0.2.1, disclosed
 
 This is deliberately **more generous** than the Constitution's current
@@ -1114,17 +1156,54 @@ tool's only job is that the writer sees the gate now, while there is
 still time to write toward it — or to decide, with full information, that
 this work belongs somewhere other than Situate.
 
+For drive types that do not pass through situate.map — commercial-
+purposeful, entangled, and unknown — the same four disclosure fields
+are surfaced at project creation, immediately after drive-type
+selection, as a standalone step before any module begins. The preview
+is module-independent; it is the writer's first contact with the
+downstream gates regardless of which path follows.
+
 ---
 
 ## 19. Versioning the Methodology
 
-This document is METHODOLOGY.md v2.2. Significant changes—especially
+This document is METHODOLOGY.md v2.3. Significant changes—especially
 to §3 (Ethical Bottom Line), §7 (Socratic Discipline), §9 (Scale &
 Register Neutrality), §10 (Intent Growth), §13/§14, or §17 (Place
 Generativity)—require explicit version bumps and changelog entries.
 
 The technical implementation can iterate freely. The methodology
 iterates with deliberation.
+
+### v2.3 changelog (from v2.2)
+
+Closes 7 reconciliation gaps between v2.0 (intent growth, retrospective
+revision, categorical principles) and v2.1/v2.2 (place generativity,
+disclosure preview, register neutrality). No new sections; clarifying
+inserts into existing sections only.
+
+- **§17**: Place-carrier evolution registers as a §10 intent layer
+  (relation 揭示 or 修正); §11 retrospective revision applies to scenes
+  written under the prior carrier assumption (Gap 1)
+- **§11**: Retrospective revision inventory covers all four context-gated
+  categories ◎ ✦ ✨ ✧, not only ◎; auditing ◎ alone silently misses
+  place-carrier drift (Gap 2)
+- **§10**: Observed-trigger gains a place-carrier analog — ✧-pattern
+  accumulation on one undeclared coordinate, surfaced once with
+  three-option interpretation (Gap 3)
+- **§18**: Disclosure preview is module-independent; for drives that skip
+  situate.map, the preview runs at project creation immediately after
+  drive-type selection (Gap 4)
+- **§6**: ✧ fires regardless of declared place-shape; baseline is the
+  prose when shape is undeclared; undeclared state noted as context,
+  not penalized or inferred from (Gap 5)
+- **§7**: Center type and drive type are orthogonal; all 16 matrix cells
+  (4 drives × 4 center types) are valid; drive type governs
+  initialization flow only (Gap 6)
+- **§5**: Late-invoked situate.act bundles segment-structure, ✧-implied
+  place-shape, and unseen disclosure preview into a single §A.10
+  Commitment Confirmation observation, each component preserving its
+  three-option interpretation (Gap 7)
 
 ### v2.2 changelog (from v2.1)
 
@@ -1242,4 +1321,4 @@ Build what passes. Cut what doesn't.
 
 ---
 
-*End of METHODOLOGY.md v2.2*
+*End of METHODOLOGY.md v2.3*
