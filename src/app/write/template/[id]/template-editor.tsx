@@ -4,6 +4,7 @@ import Link from "next/link";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
 import { StoryBibleSidebar } from "@/components/bible/StoryBibleSidebar";
+import { CoachingPulse } from "@/components/coach/coaching-pulse";
 import { InlineAIPanel } from "@/components/coach/inline-ai-panel";
 import { Section1Hooks } from "@/components/template/Section1Hooks";
 import { SectionLocationPicker } from "@/components/template/SectionLocationPicker";
@@ -614,6 +615,19 @@ export function TemplateEditor({
           we&rsquo;ll show the assembled draft, ask where it&rsquo;s
           set, and send it to the editorial pipeline.
         </p>
+        <CoachingPulse
+          draftId={draftId}
+          text={sections
+            .map((s, i) => {
+              const label = tradition.sections[i]?.label ?? s.section_id;
+              const c = (s.content ?? "").trim();
+              return c ? `[${label}]\n${c}` : "";
+            })
+            .filter(Boolean)
+            .join("\n\n")}
+          minLength={400}
+        />
+
         <InlineAIPanel
           text={sections
             .map((s, i) => {

@@ -76,6 +76,6 @@ export const FLASH_SITUATE_ANCHORED: TraditionProfile = {
       principleAnchors: ["P7"],
     },
   ],
-  diagnosers: [],
+  diagnosers: ["stakes_absent", "causal_spine", "place_arc", "economy"],
   unitTypes: ["flash_situate_spine"],
 };
