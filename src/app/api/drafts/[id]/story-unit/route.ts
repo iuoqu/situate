@@ -2,10 +2,10 @@ import { and, eq } from "drizzle-orm";
 import { NextResponse, type NextRequest } from "next/server";
 
 import { db } from "@/db";
-import { storyDrafts, storyUnits } from "@/db/schema";
-import { getTradition } from "@/lib/traditions/registry";
+import { coachingEvents, storyDrafts, storyUnits } from "@/db/schema";
 import { analyseStoryUnit } from "@/lib/coach/story-unit-gate";
 import { getServerSupabase } from "@/lib/supabase/server";
+import { getTradition } from "@/lib/traditions/registry";
 
 /**
  * Story unit gate — B.4.
@@ -156,6 +156,32 @@ export async function POST(req: NextRequest, ctx: RouteContext) {
       predicates: predicates as unknown as object,
       failureType: result.failure_type,
     });
+  }
+
+  // Log structural failures to coaching_events (not surfaced; B.5 decides surfacing)
+  if (result.failure_type && result.coach_question) {
+    const severityByFailure: Record<string, number> = {
+      descriptive: 4,
+      essayistic: 2,
+      expository: 2,
+    };
+    const observationByFailure: Record<string, string> = {
+      descriptive: `【${parsed.sectionLabel}】开头和结尾处境相近——场景描写有余，故事运动缺失。`,
+      essayistic: `【${parsed.sectionLabel}】以解释或回顾代替了发生中的场景事件。`,
+      expository: `【${parsed.sectionLabel}】以背景铺垫为主，缺少一个活的场景事件。`,
+    };
+    await db.insert(coachingEvents).values({
+      draftId,
+      sectionId: parsed.sectionId,
+      traditionProfileId: tradition?.id ?? "flash_situate_anchored",
+      diagnoser: "story_unit_gate",
+      scale: result.failure_type,
+      severityScore: severityByFailure[result.failure_type] ?? 2,
+      observation: observationByFailure[result.failure_type] ?? "",
+      socraticQuestion: result.coach_question,
+      surfacedToAuthor: false,
+      payload: predicates as unknown as object,
+    }).catch(() => {});
   }
 
   return NextResponse.json({ result });

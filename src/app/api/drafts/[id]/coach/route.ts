@@ -1,4 +1,4 @@
-import { and, eq } from "drizzle-orm";
+import { and, desc, eq, isNull } from "drizzle-orm";
 import { NextResponse, type NextRequest } from "next/server";
 
 import { db } from "@/db";
@@ -10,11 +10,19 @@ import { getTradition } from "@/lib/traditions/registry";
 /**
  * Coaching engine — B.5.
  *
+ * GET  /api/drafts/[id]/coach
+ *   Returns the latest surfaced + unacknowledged coaching event for
+ *   this draft, so the UI can restore state across page loads.
+ *
  * POST /api/drafts/[id]/coach
  *   Body: { text, sectionId? }
  *   Runs the tradition's enabled diagnosers against the prose text
  *   (default provider, no fanout), severity-ranks findings, logs all
  *   to coaching_events, and returns the single highest-leverage event.
+ *
+ * PATCH /api/drafts/[id]/coach
+ *   Body: { eventId }
+ *   Sets authorResponse="acknowledged" on the given coaching event.
  *
  * Auth: caller must own the draft.
  */
@@ -103,6 +111,92 @@ function extractVerdict(diagnoserId: string, result: unknown): string | null {
   return r.verdict;
 }
 
+// ── Shared auth + draft lookup ────────────────────────────────────────────
+
+async function getAuthedDraft(draftId: string) {
+  const supabase = await getServerSupabase();
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+  if (!user) return { user: null, draft: null };
+
+  const [draft] = await db
+    .select({ id: storyDrafts.id, traditionProfileId: storyDrafts.traditionProfileId })
+    .from(storyDrafts)
+    .where(and(eq(storyDrafts.id, draftId), eq(storyDrafts.userId, user.id)))
+    .limit(1);
+  return { user, draft: draft ?? null };
+}
+
+function rowToFinding(row: typeof coachingEvents.$inferSelect): CoachFinding {
+  return {
+    diagnoser: row.diagnoser,
+    scale: row.scale,
+    severityScore: row.severityScore ?? 0,
+    observation: row.observation ?? "",
+    socraticQuestion: row.socraticQuestion ?? "",
+    eventId: row.id,
+  };
+}
+
+// ── GET ───────────────────────────────────────────────────────────────────
+
+export async function GET(_req: NextRequest, ctx: RouteContext) {
+  const { id: draftId } = await ctx.params;
+  const { user, draft } = await getAuthedDraft(draftId);
+  if (!user) return NextResponse.json({ error: "unauthorized" }, { status: 401 });
+  if (!draft) return NextResponse.json({ error: "not_found" }, { status: 404 });
+
+  const [row] = await db
+    .select()
+    .from(coachingEvents)
+    .where(
+      and(
+        eq(coachingEvents.draftId, draftId),
+        eq(coachingEvents.surfacedToAuthor, true),
+        isNull(coachingEvents.authorResponse),
+      ),
+    )
+    .orderBy(desc(coachingEvents.createdAt))
+    .limit(1);
+
+  return NextResponse.json({ finding: row ? rowToFinding(row) : null });
+}
+
+// ── PATCH ─────────────────────────────────────────────────────────────────
+
+export async function PATCH(req: NextRequest, ctx: RouteContext) {
+  const { id: draftId } = await ctx.params;
+  const { user, draft } = await getAuthedDraft(draftId);
+  if (!user) return NextResponse.json({ error: "unauthorized" }, { status: 401 });
+  if (!draft) return NextResponse.json({ error: "not_found" }, { status: 404 });
+
+  let raw: unknown;
+  try {
+    raw = await req.json();
+  } catch {
+    return NextResponse.json({ error: "invalid JSON" }, { status: 400 });
+  }
+  const obj = raw as Record<string, unknown>;
+  if (typeof obj.eventId !== "string" || !obj.eventId.trim())
+    return NextResponse.json({ error: "eventId required" }, { status: 400 });
+
+  await db
+    .update(coachingEvents)
+    .set({
+      authorResponse: "acknowledged",
+      authorRespondedAt: new Date(),
+    })
+    .where(
+      and(
+        eq(coachingEvents.id, obj.eventId),
+        eq(coachingEvents.draftId, draftId),
+      ),
+    );
+
+  return NextResponse.json({ ok: true });
+}
+
 // ── POST ──────────────────────────────────────────────────────────────────
 
 interface PostBody {
@@ -132,18 +226,8 @@ export interface CoachFinding {
 
 export async function POST(req: NextRequest, ctx: RouteContext) {
   const { id: draftId } = await ctx.params;
-
-  const supabase = await getServerSupabase();
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
+  const { user, draft } = await getAuthedDraft(draftId);
   if (!user) return NextResponse.json({ error: "unauthorized" }, { status: 401 });
-
-  const [draft] = await db
-    .select({ id: storyDrafts.id, traditionProfileId: storyDrafts.traditionProfileId })
-    .from(storyDrafts)
-    .where(and(eq(storyDrafts.id, draftId), eq(storyDrafts.userId, user.id)))
-    .limit(1);
   if (!draft) return NextResponse.json({ error: "not_found" }, { status: 404 });
 
   let raw: unknown;

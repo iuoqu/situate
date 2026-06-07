@@ -1,18 +1,21 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 
 import type { CoachFinding } from "@/app/api/drafts/[id]/coach/route";
 
 /**
  * CoachingPulse — B.5.
  *
- * Surfaces the single highest-leverage coaching finding for a draft.
- * Distinct from InlineAIPanel (which shows all diagnoser results):
- * this shows one observation + one Socratic question, with a dismiss.
+ * On mount: fetches the latest unacknowledged surfaced event from the
+ * DB (GET /api/drafts/[id]/coach). This restores state across page
+ * reloads without re-running the LLM.
  *
- * Usage:
- *   <CoachingPulse draftId={draftId} text={fullText} />
+ * On dismiss: PATCHes the event to authorResponse="acknowledged" so
+ * it doesn't resurface.
+ *
+ * Re-run prompt: when the author edits ≥100 words beyond the last run,
+ * a "重新分析" prompt appears.
  */
 
 interface Props {
@@ -23,10 +26,12 @@ interface Props {
 }
 
 type State =
+  | { status: "booting" }
   | { status: "idle" }
-  | { status: "loading" }
-  | { status: "done"; finding: CoachFinding | null }
-  | { status: "dismissed" }
+  | { status: "running" }
+  | { status: "done"; finding: CoachFinding; wordCountAtRun: number }
+  | { status: "clean"; wordCountAtRun: number }
+  | { status: "dismissed"; wordCountAtRun: number }
   | { status: "error"; message: string };
 
 const SEVERITY_LABEL: Record<number, string> = {
@@ -40,6 +45,10 @@ const SEVERITY_LABEL: Record<number, string> = {
 
 function severityLabel(score: number): string {
   return SEVERITY_LABEL[score] ?? "结构反馈";
+}
+
+function wordCount(text: string): number {
+  return text.trim().split(/\s+/).filter(Boolean).length;
 }
 
 const pulseButtonStyle: React.CSSProperties = {
@@ -103,14 +112,51 @@ const dismissStyle: React.CSSProperties = {
   padding: 0,
 };
 
+const rerunHintStyle: React.CSSProperties = {
+  fontFamily: "system-ui, sans-serif",
+  fontSize: 11,
+  color: "#9b8a6b",
+  marginTop: 8,
+  display: "flex",
+  alignItems: "center",
+  gap: 8,
+};
+
 export function CoachingPulse({ draftId, text, sectionId, minLength = 200 }: Props) {
-  const [state, setState] = useState<State>({ status: "idle" });
+  const [state, setState] = useState<State>({ status: "booting" });
+  const mountedRef = useRef(true);
+
+  const wc = useMemo(() => wordCount(text), [text]);
+
+  // On mount: fetch any existing unacknowledged event
+  useEffect(() => {
+    mountedRef.current = true;
+    if (text.trim().length < minLength) {
+      setState({ status: "idle" });
+      return;
+    }
+    fetch(`/api/drafts/${draftId}/coach`)
+      .then((r) => r.json())
+      .then((data: { finding: CoachFinding | null }) => {
+        if (!mountedRef.current) return;
+        if (data.finding) {
+          setState({ status: "done", finding: data.finding, wordCountAtRun: wc });
+        } else {
+          setState({ status: "idle" });
+        }
+      })
+      .catch(() => {
+        if (mountedRef.current) setState({ status: "idle" });
+      });
+    return () => { mountedRef.current = false; };
+    // Only run on mount — draftId doesn't change
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [draftId]);
 
   if (text.trim().length < minLength) return null;
-  if (state.status === "dismissed") return null;
 
   async function run() {
-    setState({ status: "loading" });
+    setState({ status: "running" });
     try {
       const res = await fetch(`/api/drafts/${draftId}/coach`, {
         method: "POST",
@@ -123,11 +169,34 @@ export function CoachingPulse({ draftId, text, sectionId, minLength = 200 }: Pro
         return;
       }
       const data = await res.json() as { finding: CoachFinding | null };
-      setState({ status: "done", finding: data.finding });
+      if (data.finding) {
+        setState({ status: "done", finding: data.finding, wordCountAtRun: wc });
+      } else {
+        setState({ status: "clean", wordCountAtRun: wc });
+      }
     } catch (e) {
       setState({ status: "error", message: e instanceof Error ? e.message : "网络错误" });
     }
   }
+
+  async function dismiss(eventId: string) {
+    setState((prev) => {
+      const wcr = prev.status === "done" ? prev.wordCountAtRun : wc;
+      return { status: "dismissed", wordCountAtRun: wcr };
+    });
+    await fetch(`/api/drafts/${draftId}/coach`, {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ eventId }),
+    }).catch(() => {});
+  }
+
+  // Re-run prompt: significant edits after a previous run
+  const showRerun =
+    (state.status === "done" || state.status === "clean" || state.status === "dismissed") &&
+    Math.abs(wc - state.wordCountAtRun) >= 100;
+
+  if (state.status === "booting") return null;
 
   if (state.status === "idle") {
     return (
@@ -137,7 +206,7 @@ export function CoachingPulse({ draftId, text, sectionId, minLength = 200 }: Pro
     );
   }
 
-  if (state.status === "loading") {
+  if (state.status === "running") {
     return (
       <span style={{ ...pulseButtonStyle, opacity: 0.5, cursor: "default", border: "none", padding: 0 }}>
         分析中…
@@ -149,33 +218,62 @@ export function CoachingPulse({ draftId, text, sectionId, minLength = 200 }: Pro
     return (
       <span style={{ fontSize: 12, color: "#c00", fontFamily: "system-ui, sans-serif" }}>
         {state.message}
+        {" "}
+        <button style={{ ...dismissStyle, color: "#c00" }} onClick={run}>重试</button>
       </span>
     );
   }
 
-  if (state.status === "done") {
-    if (!state.finding) {
-      return (
+  if (state.status === "clean") {
+    return (
+      <div>
         <span style={{ fontSize: 12, color: "#888", fontFamily: "system-ui, sans-serif" }}>
           结构完整，没有发现需要关注的问题。
         </span>
-      );
-    }
+        {showRerun && (
+          <div style={rerunHintStyle}>
+            <span>已有较多新内容 —</span>
+            <button style={pulseButtonStyle} onClick={run}>重新分析</button>
+          </div>
+        )}
+      </div>
+    );
+  }
+
+  if (state.status === "dismissed") {
+    if (!showRerun) return null;
+    return (
+      <div style={rerunHintStyle}>
+        <span>已有较多新内容 —</span>
+        <button style={pulseButtonStyle} onClick={run}>重新分析</button>
+      </div>
+    );
+  }
+
+  if (state.status === "done") {
     const { finding } = state;
     return (
-      <div style={cardStyle}>
-        <div style={labelStyle}>
-          <span>{severityLabel(finding.severityScore)}</span>
-          <button
-            style={dismissStyle}
-            onClick={() => setState({ status: "dismissed" })}
-            title="忽略"
-          >
-            忽略
-          </button>
+      <div>
+        <div style={cardStyle}>
+          <div style={labelStyle}>
+            <span>{severityLabel(finding.severityScore)}</span>
+            <button
+              style={dismissStyle}
+              onClick={() => dismiss(finding.eventId)}
+              title="忽略"
+            >
+              忽略
+            </button>
+          </div>
+          <p style={observationStyle}>{finding.observation}</p>
+          <p style={questionStyle}>{finding.socraticQuestion}</p>
         </div>
-        <p style={observationStyle}>{finding.observation}</p>
-        <p style={questionStyle}>{finding.socraticQuestion}</p>
+        {showRerun && (
+          <div style={rerunHintStyle}>
+            <span>已有较多新内容 —</span>
+            <button style={pulseButtonStyle} onClick={run}>重新分析</button>
+          </div>
+        )}
       </div>
     );
   }
