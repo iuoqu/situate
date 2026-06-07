@@ -3,8 +3,8 @@
 Working notes for Situate Editions. Lives in the repo so it survives
 between sessions and can be checked in PR diffs.
 
-Last refresh: after METHODOLOGY v2.3 (7 reconciliation gaps closed;
-Milestone C fully shipped including Path A↔B bridge).
+Last refresh: after Milestone B coaching engine (B.4 + B.5 shipped;
+writing coaching loop is now closed for flash_situate_anchored).
 
 Design doc added: `docs/path-b-design.md` — full Path B (guided write
 for uncertain authors) from project setup through situate.map →
@@ -35,9 +35,17 @@ Remaining Path B polish (deferred, absorbed into Milestone B):
 - Arc generation for supporting characters → B.3/B.5
 - Scene-level consistency feedback (§3 phase 3) → B.5 ✨ diagnoser
 
-NOTE: situate.at feedback loop (8 feedback categories ◎ ✦ ✨ ✧) is
-entirely unbuilt. Users write scenes with no AI response. This is the
-core gap; B.4 + B.5 close it.
+Milestone B — partial SHIPPED:
+- B.1: Pearls editions subsection (遗珠 · Pearls in /editions/[slug])
+- B.4: Story unit gate — per-section S0/D/T/S1/K + transformed/causal/
+  stakes predicates + Socratic coach question; "分析结构" button in editor
+- B.5: Coaching engine v1 — POST /api/drafts/[id]/coach runs tradition's
+  4 diagnosers, severity-ranks findings (K_absent=9 … economy_implicit=3),
+  logs all to coaching_events, surfaces one finding via CoachingPulse
+- LLM center card fields (core_question / hardest_part / not_center)
+
+NOTE: situate.at feedback loop is now closed for the write layer.
+B.3 (inline entity capture) and B.6 (bible-driven translation) remain.
 
 ---
 
@@ -46,10 +54,13 @@ core gap; B.4 + B.5 close it.
 Ordered by what most unlocks product value. Each item links to the
 section below with the detailed scope.
 
-1. **Milestone B — Story Bible + Coaching + Pearls** ([details](#1-milestone-b))
-   The next major direction: a structured "brain" captured during
-   writing that drives translation, diagnostics, and growth. Includes
-   the Pearls (遗珠) carveout for non-place-anchored fiction.
+1. **Writing coaching polish** ([details](#1-coaching-polish))
+   B.4 + B.5 are live but have rough edges: dismiss doesn't persist to DB,
+   existing events don't load on mount, section-level attribution is missing,
+   B.4 failures aren't logged to coaching_events. 3-5 targeted improvements.
+1a. **Milestone B remaining** ([details](#1a-milestone-b-remaining))
+   B.3 inline entity capture (~6h) + B.6 bible-driven multilingual
+   rendering (~8h). B.1/B.4/B.5/center-card are shipped.
 1a. **Path B — Guided write for uncertain authors** ✅ SHIPPED (Milestone C)
     ([design doc](path-b-design.md)) Full methodology path is live:
     project setup → situate.map → situate.act → editor handoff, with
@@ -73,7 +84,52 @@ section below with the detailed scope.
 
 ## Detailed scope per priority
 
-### 1. Milestone B
+### 1. Coaching polish
+
+B.4 and B.5 are live. These gaps remain:
+
+- **Dismiss persistence.** CoachingPulse "忽略" currently only hides local
+  UI state. On page reload the same finding re-appears (or the button
+  re-appears requiring a fresh LLM run). Fix: PATCH
+  `/api/drafts/[id]/coach/[eventId]` to set `authorResponse =
+  "acknowledged"`. On mount, load the latest surfaced event from the DB;
+  if it has an authorResponse, show in dismissed/done state.
+- **Load existing event on mount.** Currently CoachingPulse always starts
+  idle. On mount it should GET the latest `surfacedToAuthor=true` event for
+  this draft and show it (skipping the LLM call). Only trigger a new run
+  if no event exists yet, or if the author explicitly re-runs.
+- **Re-run after edit.** After an author significantly edits (word count
+  delta ≥ 100 from last coaching run), surface a "重新分析" prompt. Track
+  the word count at last run in component state.
+- **B.4 failures → coaching_events.** Currently the story unit gate (B.4)
+  shows per-section analysis in the editor but does NOT log to
+  coaching_events. A section with `failure_type != null` is a coaching
+  event and should be logged (surfacedToAuthor=false, lower severity than
+  the draft-level findings — severity 2 for essayistic/expository,
+  severity 4 for descriptive).
+- **Section attribution.** When B.5 surfaces a finding, the card should
+  name the specific weakness area (currently it names the axis but not
+  which section the evidence came from). For multi-section drafts, append
+  the section label(s) where the diagnoser found the failure.
+
+Effort: ~4h total. Can be done incrementally — dismiss persistence is the
+most important (prevents duplicate surfacing).
+
+### 1a. Milestone B remaining
+
+**B.3 — Inline entity capture (~6h)**
+On every autosave, run an async entity + relationship extraction pass
+(Claude tool-call). Surface results as ≤2 suggestion chips in the editor
+margin. Author confirms / edits / rejects → updates `entities` and
+`relationships` tables. Story Bible sidebar reflects live state.
+
+**B.6 — Bible-driven multilingual rendering (~8h)**
+Translation generation reads `entity_name_renderings` and
+`relationships.register_overrides` instead of free-text translating.
+Reader UI surfaces register choices where the Bible has multiple. L1/L2/L3
+tier finalization depends on this.
+
+### 2. Editor queue (was §1 Milestone B)
 
 The next major direction. Frames Situate not just as a publication but
 as a writing platform whose structured data drives three things:
